@@ -60,8 +60,9 @@
   /* ---------- Top-level tabs ---------- */
   .top-tabs{display:flex; background:var(--hull-2);}
   .top-tabs button{
-    flex:1; border:none; background:transparent; color:#A9BBC9; font-weight:700; font-size:12.5px;
-    padding:12px 4px; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;
+    flex:1; border:none; background:transparent; color:#A9BBC9; font-weight:700; font-size:12px;
+    padding:12px 2px; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;
+    letter-spacing:.01em;
   }
   .top-tabs button.active{color:#fff; border-bottom-color:var(--important); background:rgba(255,255,255,.04);}
 
@@ -370,7 +371,17 @@
   }
 
   /* ---------- Ship's particulars ---------- */
-  #shipPasteWrap{padding:14px 20px; background:#fff; border-bottom:1px solid var(--line);}
+  #shipPasteWrap,#extraAddWrap{padding:14px 20px; background:#fff; border-bottom:1px solid var(--line);}
+  #extraListWrap{padding:14px 20px 100px;}
+  .extra-row{
+    display:flex; align-items:flex-start; gap:10px; background:#fff; border:1px solid var(--line);
+    border-left:3px solid var(--steel); border-radius:8px; padding:8px 10px; margin-bottom:6px;
+  }
+  .extra-row .ex-main{flex:1; min-width:0;}
+  .extra-row .ex-date{font-family:ui-monospace,monospace; font-size:10.5px; color:var(--ink-soft);}
+  .extra-row .ex-job{font-size:14px; font-weight:600; margin-top:2px; word-break:break-word;}
+  .extra-row .ex-tags{display:flex; flex-wrap:wrap; gap:5px; margin-top:5px;}
+  .extra-row .ex-rem{font-size:12.5px; color:var(--ink-soft); margin-top:4px; word-break:break-word;}
   #shipPaste{
     width:100%; padding:10px; border:1px solid var(--line); border-radius:8px;
     background:var(--paper); color:var(--ink); font-family:inherit; font-size:14px; resize:vertical;
@@ -475,9 +486,10 @@
 </header>
 
 <div class="top-tabs" id="topTabs">
-  <button data-tab="jobs" class="active">To Do List</button>
-  <button data-tab="crew">Crew List</button>
-  <button data-tab="cargo">Cargo Log</button>
+  <button data-tab="jobs" class="active">To Do</button>
+  <button data-tab="extra">AD-19</button>
+  <button data-tab="crew">Crew</button>
+  <button data-tab="cargo">Cargo</button>
   <button data-tab="ship">Ship</button>
 </div>
 
@@ -660,6 +672,46 @@
     <button class="btn btn-ghost" id="cargoExportBtn">Export CSV</button>
   </div>
   <div id="cargoTableWrap"></div>
+</div>
+
+<div id="extraSection" style="display:none;">
+  <div id="extraAddWrap">
+    <div class="ship-note">
+      One-off jobs for the work planner — a job that comes up on the day and is not
+      on the to do list. These are added to the AD-19 export alongside the jobs
+      ticked AD 19, under the date given here.
+    </div>
+    <div class="addForm">
+      <div class="form-row row-main">
+        <div class="field job-field">
+          <label>Activity</label>
+          <input type="text" id="exJob" placeholder="e.g. Renew galley exhaust gasket" maxlength="300">
+        </div>
+        <div class="field">
+          <label>Date</label>
+          <input type="date" id="exDate">
+        </div>
+        <div class="field">
+          <label>Permit to Work</label>
+          <select id="exPtw"></select>
+        </div>
+        <div class="field remarks-field">
+          <label>Toolbox key points / remarks</label>
+          <input type="text" id="exRemarks" placeholder="Optional" maxlength="500">
+        </div>
+      </div>
+      <div class="form-row flags-row">
+        <button type="button" class="yn-toggle" id="exRA" data-value="no">RA SF-23</button>
+        <button id="exAddBtn" class="btn btn-primary" style="flex:2;">+ Add to AD-19</button>
+      </div>
+    </div>
+  </div>
+  <div class="toolbar crew-toolbar">
+    <div class="spacer"></div>
+    <span class="count-badge" id="extraCount"></span>
+    <button class="btn btn-danger" id="extraClearBtn">Clear all</button>
+  </div>
+  <div id="extraListWrap"></div>
 </div>
 
 <div id="shipSection" style="display:none;">
@@ -1617,6 +1669,103 @@
     if(!on) document.getElementById('inPtwType').value = '';
   }
 
+  // ---------- additional AD-19 jobs ----------
+  // One-off activities that never belonged on the to do list — raised on the
+  // day and wanted on the planner. Kept separate so they do not clutter the
+  // pending list, but merged into the AD-19 export under their own date.
+  var EXTRA_KEY = 'gasplanet_extra_v1';
+  var extras = [];
+
+  function loadExtras(){
+    try{
+      var raw = localStorage.getItem(EXTRA_KEY);
+      extras = raw ? JSON.parse(raw) : [];
+      lastGood[EXTRA_KEY] = JSON.stringify(extras);
+    }catch(e){ extras = []; }
+  }
+  function saveExtras(){
+    return persist(EXTRA_KEY, extras, 'Additional AD-19 Jobs', function(prev){ extras = prev; });
+  }
+
+  function fillExtraPtw(){
+    var sel = document.getElementById('exPtw');
+    sel.innerHTML = PTW_TYPES.map(function(v){
+      return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+    }).join('');
+    sel.value = 'N/A';
+  }
+
+  function addExtra(){
+    var job = document.getElementById('exJob').value.trim();
+    if(!job){ document.getElementById('exJob').focus(); return; }
+    var date = document.getElementById('exDate').value || todayISO();
+    extras.push({
+      id: uid(),
+      job: job,
+      date: date,
+      ra: document.getElementById('exRA').dataset.value === 'yes',
+      ptwType: document.getElementById('exPtw').value || 'N/A',
+      remarks: document.getElementById('exRemarks').value.trim(),
+      created: todayISO()
+    });
+    if(!saveExtras()){ renderExtras(); return; }
+    document.getElementById('exJob').value = '';
+    document.getElementById('exRemarks').value = '';
+    resetYnToggle('exRA');
+    document.getElementById('exPtw').value = 'N/A';
+    renderExtras();
+    document.getElementById('exJob').focus();
+  }
+
+  function deleteExtra(id){
+    if(!confirm('Remove this job from the AD-19 list?')) return;
+    extras = extras.filter(function(x){ return x.id !== id; });
+    saveExtras();
+    renderExtras();
+  }
+
+  function sortedExtras(){
+    return extras.slice().sort(function(a,b){
+      if(a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return (a.created || '') < (b.created || '') ? -1 : 1;
+    });
+  }
+
+  function renderExtras(){
+    var wrap = document.getElementById('extraListWrap');
+    document.getElementById('extraCount').textContent =
+      extras.length + (extras.length === 1 ? ' job' : ' jobs');
+    if(!extras.length){
+      wrap.innerHTML = '<div class="empty"><div class="big">⚓</div>No additional jobs. '
+                     + 'Anything added here joins the AD-19 export for its date.</div>';
+      return;
+    }
+    var html = '';
+    sortedExtras().forEach(function(x){
+      html += '<div class="extra-row">';
+      html += '  <div class="ex-main">';
+      html += '    <div class="ex-date">' + fmtDate(x.date) + '</div>';
+      html += '    <div class="ex-job">' + escapeHtml(x.job) + '</div>';
+      html += '    <div class="ex-tags">';
+      if(x.ra) html += '<span class="flag-tag flag-ra">RA SF-23</span>';
+      if(x.ptwType && x.ptwType !== 'N/A') html += '<span class="flag-tag flag-ptw">' + escapeHtml(x.ptwType) + '</span>';
+      html += '    </div>';
+      if(x.remarks) html += '<div class="ex-rem">' + escapeHtml(x.remarks) + '</div>';
+      html += '  </div>';
+      html += '  <button class="icon-btn" data-extra-action="delete" data-id="' + x.id + '" title="Delete">🗑</button>';
+      html += '</div>';
+    });
+    wrap.innerHTML = html;
+  }
+
+  function clearExtras(){
+    if(!extras.length) return;
+    if(!confirm('Remove all ' + extras.length + ' additional job(s)?\n\nExport the AD-19 planner first if you still need them.')) return;
+    extras = [];
+    saveExtras();
+    renderExtras();
+  }
+
   // ---------- ship's particulars ----------
   // One profile per device. Signing off one ship and joining another means
   // "New ship", then pasting that vessel's particulars in.
@@ -1878,12 +2027,22 @@
   // A job not yet ticked off falls back to its due date.
   function ad19Day(t){ return t.dateCompleted || t.due || ''; }
 
+  // Jobs ticked AD 19 on the to do list, plus the one-off additions, as one
+  // list. Within a day the to do list comes first, then the additions.
   function ad19Jobs(){
-    return tasks.filter(function(t){ return t.ad34Planner === 'yes'; }).sort(function(a,b){
-      var ad = ad19Day(a) || '9999-99-99';
-      var bd = ad19Day(b) || '9999-99-99';
+    var fromList = tasks.filter(function(t){ return t.ad34Planner === 'yes'; }).map(function(t){
+      return { day: ad19Day(t), order: 0, seq: t.serial, job: t.job, ra: t.ra,
+               ptw: t.ptw ? (t.ptwType || 'YES') : 'N/A', remarks: t.remarks || '', done: t.done };
+    });
+    var fromExtras = extras.map(function(x, i){
+      return { day: x.date || '', order: 1, seq: i, job: x.job, ra: x.ra,
+               ptw: x.ptwType || 'N/A', remarks: x.remarks || '', done: true };
+    });
+    return fromList.concat(fromExtras).sort(function(a,b){
+      var ad = a.day || '9999-99-99', bd = b.day || '9999-99-99';
       if(ad !== bd) return ad < bd ? -1 : 1;
-      return a.serial - b.serial;
+      if(a.order !== b.order) return a.order - b.order;
+      return a.seq - b.seq;
     });
   }
 
@@ -1894,8 +2053,8 @@
     row[AD19_COL.RA]           = t.ra ? 'YES' : 'NO';
     row[AD19_COL.TOOLBOX_TIME] = AD19_DEFAULT_TOOLBOX_TIME;
     row[AD19_COL.WORK_REST]    = AD19_DEFAULT_WORK_REST;
-    row[AD19_COL.PTW]          = t.ptw ? (t.ptwType || 'YES') : 'N/A';
-    row[AD19_COL.REMARKS]      = t.remarks || '';
+    row[AD19_COL.PTW]          = t.ptw;
+    row[AD19_COL.REMARKS]      = t.remarks;
     // Not yet ticked off, so the date shown is the plan date rather than the
     // date done — say so instead of letting it pass as completed.
     if(!t.done) row[AD19_COL.REMARKS] = 'NOT YET COMPLETED' + (row[AD19_COL.REMARKS] ? ' — ' + row[AD19_COL.REMARKS] : '');
@@ -1905,14 +2064,14 @@
   function exportAd19CSV(){
     var jobs = ad19Jobs();
     if(!jobs.length){
-      alert('No jobs are ticked AD 19 yet.\n\nTick AD 19 on a job to include it in the work planner export.');
+      alert('Nothing to export yet.\n\nTick AD 19 on a job in the to do list, or add a one-off job on the AD-19 tab.');
       return;
     }
     var rows = [];
     var lastDay = null;
     var sno = 0;
     jobs.forEach(function(t){
-      var day = ad19Day(t);
+      var day = t.day;
       if(day !== lastDay){
         if(lastDay !== null) rows.push([]);          // blank line between days
         rows.push(['WORK PLANNER FOR DATE', day ? fmtDate(day) : '(no date)']);
@@ -2272,6 +2431,7 @@
   loadCrew();
   loadCargo();
   loadShip();
+  loadExtras();
   setDateLine();
   updateStoragePill();
   render();
@@ -2279,6 +2439,9 @@
   renderTankFields();
   renderCargoTable();
   renderShip();
+  fillExtraPtw();
+  renderExtras();
+  document.getElementById('exDate').value = todayISO();
   fillPtwTypes();
   syncPtwTypeRow();
   document.getElementById('cargoDate').value = todayISO();
@@ -2305,6 +2468,14 @@
     var file = e.target.files[0];
     if(file) importCrewCSVFile(file);
     e.target.value = '';
+  });
+
+  document.getElementById('exAddBtn').addEventListener('click', addExtra);
+  document.getElementById('exJob').addEventListener('keydown', function(e){ if(e.key==='Enter') addExtra(); });
+  document.getElementById('extraClearBtn').addEventListener('click', clearExtras);
+  document.getElementById('extraListWrap').addEventListener('click', function(e){
+    var del = e.target.closest('[data-extra-action="delete"]');
+    if(del) deleteExtra(del.dataset.id);
   });
 
   document.getElementById('shipParseBtn').addEventListener('click', applyShipParse);
@@ -2344,7 +2515,8 @@
     if(delBtn){ deleteCargoEntry(delBtn.dataset.id); }
   });
 
-  var tabTitles = { jobs:'To Do List', crew:'Crew List', cargo:'Cargo Log', ship:"Ship's Particulars" };
+  var tabTitles = { jobs:'To Do List', extra:'Additional AD-19 Jobs', crew:'Crew List',
+                    cargo:'Cargo Log', ship:"Ship's Particulars" };
   document.getElementById('topTabs').addEventListener('click', function(e){
     var btn = e.target.closest('button[data-tab]');
     if(!btn) return;
@@ -2354,6 +2526,7 @@
     document.getElementById('crewSection').style.display = activeTab==='crew' ? '' : 'none';
     document.getElementById('cargoSection').style.display = activeTab==='cargo' ? '' : 'none';
     document.getElementById('shipSection').style.display = activeTab==='ship' ? '' : 'none';
+    document.getElementById('extraSection').style.display = activeTab==='extra' ? '' : 'none';
     document.getElementById('pageTitle').textContent = tabTitles[activeTab];
     document.getElementById('fabAdd').style.display = activeTab==='jobs' ? '' : 'none';
   });
