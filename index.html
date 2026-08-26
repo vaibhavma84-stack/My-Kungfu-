@@ -1603,10 +1603,16 @@
   var AD19_DEFAULT_TOOLBOX_TIME = '0800 - 0830';
   var AD19_COL_TOOLBOX_TIME = 7;
 
+  // Work & Rest Hours Compiled — "Yes" is the ordinary case. The sheet's own
+  // list (Sheet4!F5:F7) offers the two exceptions, chosen there when they apply.
+  var AD19_DEFAULT_WORK_REST = 'Yes';
+  var AD19_COL_WORK_REST = 11;
+
   function ad19Row(t, firstOfDay){
     var row = new Array(AD19_COLUMNS.length).fill('');
     if(firstOfDay) row[AD19_COL_MARSEC] = AD19_DEFAULT_MARSEC;
     row[AD19_COL_TOOLBOX_TIME] = AD19_DEFAULT_TOOLBOX_TIME;
+    row[AD19_COL_WORK_REST] = AD19_DEFAULT_WORK_REST;
     row[0]  = t.dateCompleted ? fmtDate(t.dateCompleted) : '';   // Date Completed
     row[1]  = t.job;                                             // Activities
     row[6]  = t.ra ? 'YES' : 'NO';                               // RA Form SF-23 Required
