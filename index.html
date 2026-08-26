@@ -1,0 +1,1836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>To Do List — GAS PLANET</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Deck Log">
+<meta name="theme-color" content="#0B1F2E">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" type="image/png" href="./icon-192.png">
+
+<style>
+  :root{
+    --hull:#0B1F2E;
+    --hull-2:#132C40;
+    --steel:#3A5A78;
+    --paper:#F6F4EF;
+    --paper-2:#EDE9DF;
+    --ink:#1B2530;
+    --ink-soft:#5B6673;
+    --line:#D8D2C4;
+    --urgent:#C7452C;
+    --important:#D6963B;
+    --normal:#3A5A78;
+    --done:#6E8B74;
+    --focus:#1E88C7;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+
+  /* ---------- Header ---------- */
+  header{
+    background:linear-gradient(180deg,var(--hull) 0%, var(--hull-2) 100%);
+    color:var(--paper);
+    padding:calc(18px + env(safe-area-inset-top)) 20px 16px;
+    position:sticky; top:0; z-index:30;
+    box-shadow:0 2px 10px rgba(0,0,0,.25);
+  }
+  .hdr-row{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .hdr-title{display:flex; align-items:baseline; gap:10px;}
+  h1{font-size:20px; margin:0; font-weight:700; letter-spacing:.01em;}
+  .hdr-sub{font-size:12px; color:#A9BBC9; margin-top:2px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
+  .hdr-sub-row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:2px;}
+  .hdr-sub-row .hdr-sub{margin-top:0;}
+  .storage-pill{
+    font-size:11px; padding:5px 10px; border-radius:20px; font-family:ui-monospace,monospace;
+    display:flex; align-items:center; gap:6px; white-space:nowrap;
+  }
+  .storage-ok{background:rgba(110,139,116,.18); color:#9FC2A6; border:1px solid rgba(110,139,116,.4);}
+  .storage-bad{background:rgba(199,69,44,.18); color:#E8998A; border:1px solid rgba(199,69,44,.4);}
+  .dot{width:6px; height:6px; border-radius:50%; background:currentColor; display:inline-block;}
+
+  /* ---------- Top-level tabs ---------- */
+  .top-tabs{display:flex; background:var(--hull-2);}
+  .top-tabs button{
+    flex:1; border:none; background:transparent; color:#A9BBC9; font-weight:700; font-size:13.5px;
+    padding:12px 8px; cursor:pointer; border-bottom:3px solid transparent;
+  }
+  .top-tabs button.active{color:#fff; border-bottom-color:var(--important); background:rgba(255,255,255,.04);}
+
+  /* ---------- Backup reminder ---------- */
+  .backup-banner{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px 20px; background:#FFF7E8; border-bottom:1px solid rgba(214,150,59,.45);
+    font-size:12.5px; color:#6B4E18; line-height:1.35;
+  }
+  .backup-banner .bb-text{flex:1; min-width:150px;}
+  .backup-banner .bb-text b{color:#8A5F12;}
+  .backup-banner button{
+    border-radius:7px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer;
+    font-family:ui-monospace,monospace; letter-spacing:.02em; flex:0 0 auto;
+  }
+  .backup-banner .bb-now{background:var(--hull); color:#fff; border:none;}
+  .backup-banner .bb-later{background:transparent; color:#8A6A28; border:1px solid rgba(214,150,59,.5);}
+
+  /* ---------- Crew list ---------- */
+  #crewAddWrap{padding:14px 20px; background:#fff; border-bottom:1px solid var(--line);}
+  .crew-toolbar{position:static;}
+  #crewListWrap{padding:14px 20px 100px;}
+  .crew-row{
+    display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--line);
+    border-radius:8px; padding:9px 12px; margin-bottom:6px;
+  }
+  .crew-sno{font-family:ui-monospace,monospace; font-size:11px; color:var(--ink-soft); flex:0 0 26px;}
+  .crew-name{font-size:14.5px; font-weight:700; flex:1.6; min-width:0;}
+  .crew-rank{font-size:12.5px; color:var(--steel); font-weight:600; flex:1; min-width:0;}
+  .crew-dob{font-family:ui-monospace,monospace; font-size:12px; color:var(--ink-soft); flex:0 0 auto;}
+  .crew-row .icon-btn{flex:0 0 auto;}
+
+  /* ---------- Cargo log ---------- */
+  #cargoAddWrap{padding:14px 20px; background:#fff; border-bottom:1px solid var(--line);}
+  .tank-tabs{display:flex; gap:6px; margin:12px 0 10px;}
+  .tank-tabs button{
+    flex:1; border:1.5px solid var(--line); background:var(--paper); color:var(--ink-soft);
+    font-weight:700; font-size:12.5px; padding:9px 4px; border-radius:8px; cursor:pointer;
+    font-family:ui-monospace,monospace;
+  }
+  .tank-tabs button.active{background:var(--steel); color:#fff; border-color:var(--steel);}
+  .tank-fields-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px 10px;}
+  .tank-fields-grid .field label{font-size:10px;}
+  .tank-fields-grid .field input{padding:8px 9px; font-size:14px;}
+  .tank-section-label{
+    grid-column:1 / -1; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--ink-soft); margin-top:6px; padding-bottom:2px; border-bottom:1px solid var(--line);
+    font-family:ui-monospace,monospace;
+  }
+  .tank-section-label:first-child{margin-top:0;}
+
+  .cargo-table-scroll{overflow-x:auto; padding:14px 20px 100px; -webkit-overflow-scrolling:touch;}
+  table.cargo-table{border-collapse:collapse; font-size:11px; font-family:ui-monospace,monospace; white-space:nowrap;}
+  table.cargo-table th, table.cargo-table td{
+    border:1px solid var(--line); padding:5px 7px; text-align:center; background:#fff;
+  }
+  table.cargo-table thead th{background:var(--paper-2); color:var(--ink-soft); font-weight:700;}
+  table.cargo-table thead tr.tank-group-row th{background:var(--hull); color:#fff; font-size:10.5px;}
+  table.cargo-table td.dt-col, table.cargo-table th.dt-col{
+    position:sticky; left:0; background:#fff; z-index:2; text-align:left; font-weight:700;
+  }
+  table.cargo-table thead th.dt-col{background:var(--paper-2); z-index:3;}
+  table.cargo-table td.del-col{position:sticky; right:0; background:#fff; z-index:2;}
+  table.cargo-table td.del-col button{
+    width:22px; height:22px; border-radius:6px; border:1px solid var(--line); background:var(--paper);
+    cursor:pointer; font-size:11px;
+  }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{
+    display:flex; gap:8px; padding:12px 20px; background:var(--paper-2);
+    border-bottom:1px solid var(--line); flex-wrap:wrap; align-items:center;
+    position:sticky; top:76px; z-index:20;
+  }
+  select, .btn, input[type=text], input[type=date], textarea{
+    font-family:inherit; font-size:15px;
+  }
+  select.filter{
+    padding:9px 10px; border-radius:8px; border:1px solid var(--line); background:#fff; color:var(--ink);
+  }
+  .spacer{flex:1;}
+  .count-badge{font-size:11px; color:#7E93A3; font-family:ui-monospace,monospace; white-space:nowrap;}
+
+  .btn{
+    border:none; border-radius:8px; padding:10px 14px; font-weight:600; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px; transition:transform .05s ease, opacity .15s;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--hull); color:#fff;}
+  .btn-ghost{background:#fff; color:var(--ink); border:1px solid var(--line);}
+  .btn-danger{background:#fff; color:var(--urgent); border:1px solid rgba(199,69,44,.4);}
+
+  /* ---------- View switcher & date nav ---------- */
+  .view-switch{display:flex; background:#fff; border:1px solid var(--line); border-radius:8px; overflow:hidden; flex:0 0 auto;}
+  .view-switch button{
+    border:none; background:#fff; color:var(--ink-soft); font-weight:700; font-size:12px;
+    padding:9px 12px; cursor:pointer; font-family:ui-monospace,monospace; letter-spacing:.03em;
+    border-right:1px solid var(--line);
+  }
+  .view-switch button:last-child{border-right:none;}
+  .view-switch button.active{background:var(--hull); color:#fff;}
+
+  .date-nav{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 20px; background:#fff; border-bottom:1px solid var(--line);
+  }
+  .date-nav .nav-btn{
+    width:32px; height:32px; border-radius:7px; border:1px solid var(--line); background:var(--paper);
+    font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--ink);
+  }
+  .date-nav .nav-label{font-weight:700; font-size:14.5px; text-align:center; flex:1;}
+  .date-nav .today-btn{
+    font-size:11px; font-weight:700; padding:6px 10px; border-radius:7px; border:1px solid var(--line);
+    background:var(--paper); color:var(--steel); cursor:pointer; font-family:ui-monospace,monospace;
+  }
+
+  /* ---------- Week view ---------- */
+  .week-grid{display:flex; flex-direction:column; gap:10px; padding:14px 20px 100px;}
+  .week-day{background:#fff; border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+  .week-day.is-today{border-color:var(--steel); box-shadow:0 0 0 1px var(--steel) inset;}
+  .week-day-hdr{
+    display:flex; align-items:center; justify-content:space-between; padding:8px 12px;
+    background:var(--paper-2); font-family:ui-monospace,monospace; font-size:12px; font-weight:700; color:var(--ink-soft);
+  }
+  .week-day.is-today .week-day-hdr{color:var(--steel);}
+  .week-day-body{padding:4px 10px;}
+  .week-day-body .task{margin-bottom:5px; padding:6px 8px;}
+  .week-day-empty{padding:10px 12px; font-size:12px; color:var(--ink-soft); font-style:italic;}
+  .birthday-card{
+    background:#FFF7E8; border:1px solid rgba(214,150,59,.4); border-left:4px solid var(--important);
+    border-radius:8px; padding:9px 12px; margin-bottom:6px; font-size:13px; color:var(--ink);
+  }
+
+  /* ---------- Month view ---------- */
+  .month-grid{padding:14px 20px 100px;}
+  .month-weekdays{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:6px;}
+  .month-weekdays span{text-align:center; font-size:10.5px; font-weight:700; color:var(--ink-soft); font-family:ui-monospace,monospace;}
+  .month-cells{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
+  .month-cell{
+    aspect-ratio:1; background:#fff; border:1px solid var(--line); border-radius:8px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:2px;
+    position:relative;
+  }
+  .month-cell.blank{background:transparent; border:none; cursor:default;}
+  .month-cell.is-today{border-color:var(--steel); border-width:2px;}
+  .month-cell .cell-num{font-size:12.5px; font-weight:700; font-family:ui-monospace,monospace; color:var(--ink);}
+  .month-cell .cell-cake{position:absolute; top:2px; right:3px; font-size:9px;}
+  .month-cell .cell-dots{display:flex; gap:2px;}
+  .month-cell .cell-dot{width:5px; height:5px; border-radius:50%;}
+  .month-cell .cell-dot.pri-urgent{background:var(--urgent);}
+  .month-cell .cell-dot.pri-important{background:var(--important);}
+  .month-cell .cell-dot.pri-normal{background:var(--steel);}
+  .month-cell .cell-count{font-size:8.5px; color:var(--ink-soft); font-family:ui-monospace,monospace;}
+
+  /* ---------- Add form ---------- */
+  /* FIX 5: max-height only constrains the COLLAPSED state. Previously a flat
+     600px cap applied always, which clipped the form (and the Add button)
+     on narrow phones. 2000px keeps the transition smooth without clipping. */
+  #addWrap{padding:14px 20px; background:#fff; border-bottom:1px solid var(--line); overflow:hidden;
+    max-height:2000px; transition:max-height .2s ease, padding .2s ease;}
+  #addWrap.collapsed{max-height:0; padding-top:0; padding-bottom:0; border-bottom:none;}
+
+  .fab{
+    position:fixed; right:20px; bottom:24px; z-index:40;
+    width:52px; height:52px; border-radius:50%; background:var(--hull); color:#fff;
+    border:none; font-size:26px; box-shadow:0 4px 14px rgba(11,31,46,.4); cursor:pointer;
+    display:none; align-items:center; justify-content:center;
+  }
+  .fab.visible{display:flex;}
+  .addForm{
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .form-row{display:flex; gap:10px; flex-wrap:wrap; align-items:end;}
+  .form-row .field{flex:1; min-width:100px;}
+  .form-row .field.job-field{flex:2.4; min-width:200px;}
+  .form-row .field.remarks-field{flex:2; min-width:160px;}
+  .row-main{display:grid; grid-template-columns: minmax(0,2.2fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,2fr); gap:10px; align-items:end;}
+  .row-main .field{min-width:0; flex:none;}
+  .field input[type=date]{width:100%; min-width:0; box-sizing:border-box; -webkit-min-logical-width:0;}
+  .row-main .field{overflow:hidden;}
+  .row-main select, .row-main input{min-width:0;}
+  .flags-row{gap:8px;}
+  .yn-toggle{
+    flex:1; min-width:0; padding:10px 4px; border-radius:8px; border:1.5px solid var(--line);
+    background:var(--paper); color:var(--ink-soft); font-weight:700; font-size:12.5px;
+    font-family:ui-monospace,monospace; letter-spacing:.03em; text-align:center; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:5px;
+  }
+  .yn-toggle::before{content:''; width:14px; height:14px; border-radius:4px; border:1.5px solid var(--ink-soft); flex:0 0 auto;}
+  .yn-toggle.checked{background:var(--steel); color:#fff; border-color:var(--steel);}
+  .yn-toggle.checked::before{content:'✓'; background:#fff; color:var(--steel); border-color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:10px;}
+  .field label{display:block; font-size:11px; color:var(--ink-soft); margin-bottom:4px;
+    text-transform:uppercase; letter-spacing:.05em; font-weight:600;}
+  .field input, .field select, .field textarea{
+    width:100%; padding:10px 10px; border:1px solid var(--line); border-radius:8px;
+    background:var(--paper); color:var(--ink);
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{
+    outline:2px solid var(--focus); outline-offset:1px; background:#fff;
+  }
+  .field textarea{resize:vertical; min-height:40px; font-family:inherit;}
+  #photoBtn{
+    height:42px; width:42px; border-radius:8px; border:1px dashed var(--line); background:var(--paper);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:18px;
+  }
+  #photoBtn.has-photos{border-style:solid; border-color:var(--steel); background:#E9F0F5;}
+  #addBtn{height:42px; padding:0 18px;}
+
+  .thumbstrip{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;}
+  .thumb{position:relative; width:52px; height:52px; border-radius:6px; overflow:hidden; border:1px solid var(--line);}
+  .thumb img{width:100%; height:100%; object-fit:cover;}
+  .thumb .rm{
+    position:absolute; top:0; right:0; background:rgba(11,31,46,.75); color:#fff; border:none;
+    width:18px; height:18px; font-size:11px; line-height:18px; text-align:center; cursor:pointer;
+  }
+
+  /* ---------- List ---------- */
+  #listWrap{}
+  .empty{
+    text-align:center; padding:60px 20px; color:var(--ink-soft);
+  }
+  .empty .big{font-size:34px; margin-bottom:8px;}
+
+  .day-group{margin-bottom:6px;}
+  .day-label{
+    font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft);
+    font-weight:700; margin:18px 0 6px; padding-left:2px; font-family:ui-monospace,monospace;
+  }
+
+  .task{
+    display:flex; gap:10px; align-items:flex-start;
+    background:#fff; border:1px solid var(--line); border-left:3px solid var(--normal);
+    border-radius:8px; padding:8px 10px; margin-bottom:6px;
+  }
+  .task.pri-important{border-left-color:var(--important);}
+  .task.pri-urgent{border-left-color:var(--urgent);}
+  .task.done{opacity:.6; border-left-color:var(--done);}
+  .task.done .job-text{text-decoration:line-through; text-decoration-color:var(--ink-soft);}
+  .task.overdue:not(.done){background:#FBF1EE;}
+
+  .task-left{flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:5px;}
+  .tick{
+    width:22px; height:22px; border-radius:50%;
+    border:2px solid var(--steel); background:#fff; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px;
+  }
+  .task.done .tick{background:var(--done); border-color:var(--done);}
+
+  .task-main{flex:1; min-width:0; cursor:pointer;}
+  .task-top{display:flex; flex-direction:column; gap:2px;}
+  .sno-date{font-family:ui-monospace,monospace; font-size:10.5px; color:var(--ink-soft); letter-spacing:.02em;}
+  .job-row{display:flex; align-items:flex-start; gap:7px;}
+  .pri-badge{
+    flex:0 0 auto; width:19px; height:19px; border-radius:5px;
+    font-size:11px; font-weight:800; font-family:ui-monospace,monospace;
+    display:flex; align-items:center; justify-content:center; color:#fff;
+  }
+  .pri-badge.pri-important{background:var(--important);}
+  .pri-badge.pri-urgent{background:var(--urgent);}
+  .pri-badge.pri-normal{display:none;}
+  .job-text{font-size:14px; font-weight:600; line-height:1.3; flex:1; min-width:0;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden; text-overflow:ellipsis; white-space:normal;}
+  .task.expanded .job-text{-webkit-line-clamp:unset; overflow:visible;}
+  .chevron{flex:0 0 auto; color:var(--ink-soft); font-size:11px; transition:transform .15s; margin-top:1px;}
+  .task.expanded .chevron{transform:rotate(90deg);}
+
+  .task-details{display:none; margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);}
+  .task.expanded .task-details{display:block;}
+  .sno{font-family:ui-monospace,monospace; font-size:11px; color:var(--ink-soft);}
+  .flag-tag{
+    font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    padding:2px 7px; border-radius:20px; font-family:ui-monospace,monospace;
+    background:#EFEAF7; color:#6B4FA0; border:1px solid rgba(107,79,160,.25);
+  }
+  .flag-tag.flag-ad34{background:#E4F1EE; color:#2A7A66; border-color:rgba(42,122,102,.25);}
+  .flag-tag.flag-ra{background:#FDEBEA; color:#B23A2E; border-color:rgba(178,58,46,.25);}
+  .flag-tag.flag-ptw{background:#EAF1FB; color:#2B5FA0; border-color:rgba(43,95,160,.25);}
+
+  .check-row{display:flex; gap:16px; margin-top:8px; align-items:center;}
+  .check-item{display:flex; align-items:center; gap:7px; font-size:13px; color:var(--ink); cursor:pointer; font-weight:600;}
+  .check-box{
+    width:19px; height:19px; border:2px solid var(--steel); border-radius:4px; flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center; font-size:12px; color:#fff; background:#fff;
+  }
+  .check-box.checked{background:var(--steel);}
+
+  .meta-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; font-size:12px; color:var(--ink-soft); align-items:center;}
+  .meta-row .m-item{display:flex; align-items:center; gap:4px;}
+  .meta-row .overdue-flag{color:var(--urgent); font-weight:700;}
+  .remarks{margin-top:6px; font-size:13px; color:var(--ink); background:var(--paper); border-radius:6px; padding:6px 9px; white-space:pre-wrap;}
+  .task .thumbstrip{margin-top:8px;}
+  .task .thumb{width:44px; height:44px; cursor:pointer;}
+
+  .task-actions{flex:0 0 auto; display:flex; flex-direction:column; gap:6px;}
+  .icon-btn{
+    position:relative;
+    width:26px; height:26px; border-radius:6px; border:1px solid var(--line); background:#fff;
+    cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft);
+  }
+  .icon-btn:hover{background:var(--paper-2);}
+  .photo-count{
+    position:absolute; top:-5px; right:-5px; background:var(--steel); color:#fff;
+    font-size:9px; font-family:ui-monospace,monospace; border-radius:8px; padding:0 4px; line-height:14px;
+  }
+
+  /* ---------- Photo viewer modal ---------- */
+  .modal-bg{
+    position:fixed; inset:0; background:rgba(11,31,46,.85); z-index:100;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-bg img{max-width:100%; max-height:85vh; border-radius:8px;}
+  .modal-close{
+    position:absolute; top:18px; right:18px; background:#fff; border:none; width:36px; height:36px;
+    border-radius:50%; font-size:18px; cursor:pointer;
+  }
+
+  footer{
+    padding:14px 20px 24px; text-align:center; color:var(--ink-soft); font-size:11px;
+    font-family:ui-monospace,monospace; letter-spacing:.03em;
+  }
+
+  @media (max-width:760px){
+    .form-row .field{min-width:45%;}
+    .form-row .field.job-field, .form-row .field.remarks-field{flex-basis:100%;}
+    .row-main{grid-template-columns: minmax(0,1fr) minmax(0,1fr);}
+    .row-main .field.job-field, .row-main .field.remarks-field{grid-column: 1 / -1;}
+    .flags-row .yn-toggle{min-width:0; flex:1;}
+    .flags-row{gap:6px;}
+    #addBtn{width:100%;}
+    #photoBtn{width:100%;}
+    .toolbar{top:auto; position:static;}
+    header{position:static;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-row">
+    <div class="hdr-title">
+      <h1 id="pageTitle">To Do List</h1>
+    </div>
+    <div id="storagePill" class="storage-pill storage-ok"><span class="dot"></span><span id="storageText">Saved on this device</span></div>
+  </div>
+  <div class="hdr-sub-row">
+    <div class="hdr-sub" id="dateLine"></div>
+    <span class="count-badge" id="countBadge"></span>
+  </div>
+</header>
+
+<div class="top-tabs" id="topTabs">
+  <button data-tab="jobs" class="active">To Do List</button>
+  <button data-tab="crew">Crew List</button>
+  <button data-tab="cargo">Cargo Log</button>
+</div>
+
+<div class="backup-banner" id="backupBanner" style="display:none;">
+  <span class="bb-text" id="backupText"></span>
+  <button class="bb-now" id="backupNow">Back up now</button>
+  <button class="bb-later" id="backupLater">Later</button>
+</div>
+
+<div id="jobsSection">
+<div id="addWrap">
+  <div class="addForm">
+    <div class="form-row row-main">
+      <div class="field job-field">
+        <label>Job</label>
+        <input type="text" id="inJob" placeholder="e.g. Check cargo tank pressure gauges" maxlength="300">
+      </div>
+      <div class="field">
+        <label>Due Date</label>
+        <input type="date" id="inDue">
+      </div>
+      <div class="field">
+        <label>Priority</label>
+        <select id="inPriority">
+          <option value="normal">Normal</option>
+          <option value="important">Important</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </div>
+      <div class="field remarks-field">
+        <label>Remarks</label>
+        <input type="text" id="inRemarks" placeholder="Optional notes" maxlength="500">
+      </div>
+    </div>
+    <div class="form-row flags-row">
+      <button type="button" class="yn-toggle" id="inWeekly" data-value="no">WR</button>
+      <button type="button" class="yn-toggle" id="inAd34" data-value="no">AD 34</button>
+      <button type="button" class="yn-toggle" id="inRA" data-value="no">RA</button>
+      <button type="button" class="yn-toggle" id="inPTW" data-value="no">PTW</button>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="photoBtn" title="Attach photo">📷</button>
+        <!-- FIX 3: no capture attribute — with capture="environment" iOS jumps
+             straight to the camera and the Photo Library option disappears. -->
+        <input type="file" id="photoInput" accept="image/*" multiple style="display:none">
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="addBtn" class="btn btn-primary">+ Add Job</button>
+      </div>
+    </div>
+  </div>
+  <div id="pendingThumbs" class="thumbstrip"></div>
+</div>
+
+<div class="toolbar">
+  <div class="view-switch" id="viewSwitch">
+    <button data-view="list" class="active">List</button>
+    <button data-view="day">Day</button>
+    <button data-view="week">Week</button>
+    <button data-view="month">Month</button>
+  </div>
+  <select id="filterStatus" class="filter">
+    <option value="open">Pending</option>
+    <option value="all">All</option>
+    <option value="done">Completed</option>
+  </select>
+  <select id="filterPriority" class="filter">
+    <option value="all">All priorities</option>
+    <option value="urgent">Urgent</option>
+    <option value="important">Important</option>
+    <option value="normal">Normal</option>
+  </select>
+  <div class="spacer"></div>
+  <button class="btn btn-ghost" id="exportBtn">Export CSV</button>
+  <button class="btn btn-ghost" id="importBtn">Import CSV</button>
+  <input type="file" id="importInput" accept=".csv,text/csv" style="display:none">
+  <button class="btn btn-danger" id="clearDoneBtn">Clear completed</button>
+  <button class="btn btn-ghost" id="toggleFormBtn">Hide ▲</button>
+</div>
+
+<div class="date-nav" id="dateNav" style="display:none;">
+  <button class="nav-btn" id="navPrev">‹</button>
+  <div class="nav-label" id="navLabel"></div>
+  <button class="today-btn" id="navToday">Today</button>
+  <button class="nav-btn" id="navNext">›</button>
+</div>
+
+<div id="listWrap"></div>
+
+<button class="fab" id="fabAdd" title="Show job entry">+</button>
+</div><!-- /jobsSection -->
+
+<div id="crewSection" style="display:none;">
+  <div id="crewAddWrap">
+    <div class="addForm">
+      <div class="form-row">
+        <div class="field">
+          <label>Name</label>
+          <input type="text" id="crewName" placeholder="Full name" maxlength="100">
+        </div>
+        <div class="field">
+          <label>Rank</label>
+          <select id="crewRank">
+            <option>Master</option>
+            <option>Chief Officer</option>
+            <option>2nd Officer</option>
+            <option>3rd Officer</option>
+            <option>Chief Engineer</option>
+            <option>2nd Engineer</option>
+            <option>3rd Engineer</option>
+            <option>4th Engineer</option>
+            <option>Gas Engineer</option>
+            <option>ETO</option>
+            <option>Bosun</option>
+            <option>AB</option>
+            <option>OS</option>
+            <option>Pumpman</option>
+            <option>Fitter</option>
+            <option>Oiler</option>
+            <option>Cook</option>
+            <option>Steward</option>
+            <option>Deck Cadet</option>
+            <option>Eng Cadet</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>DOB</label>
+          <input type="date" id="crewDob">
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button id="crewAddBtn" class="btn btn-primary">+ Add Crew</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toolbar crew-toolbar">
+    <div class="spacer"></div>
+    <button class="btn btn-ghost" id="crewExportBtn">Export CSV</button>
+    <button class="btn btn-ghost" id="crewImportBtn">Import CSV</button>
+    <input type="file" id="crewImportInput" accept=".csv,text/csv" style="display:none">
+  </div>
+  <div id="crewListWrap"></div>
+</div>
+
+<div id="cargoSection" style="display:none;">
+  <div id="cargoAddWrap">
+    <div class="form-row">
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="cargoDate">
+      </div>
+      <div class="field">
+        <label>Time</label>
+        <input type="time" id="cargoTime">
+      </div>
+    </div>
+    <div class="tank-tabs" id="tankTabs">
+      <button data-tank="1" class="active">Tank 1</button>
+      <button data-tank="2">Tank 2</button>
+      <button data-tank="3">Tank 3</button>
+      <button data-tank="4">Tank 4</button>
+    </div>
+    <div id="tankFieldsWrap"></div>
+    <button id="cargoAddBtn" class="btn btn-primary" style="margin-top:10px; width:100%;">+ Save Cargo Log Entry</button>
+  </div>
+  <div class="toolbar crew-toolbar">
+    <div class="spacer"></div>
+    <button class="btn btn-ghost" id="cargoExportBtn">Export CSV</button>
+  </div>
+  <div id="cargoTableWrap"></div>
+</div>
+
+<footer>TO DO LIST · CREW LIST · CARGO LOG · DATA STORED LOCALLY ON THIS DEVICE ONLY</footer>
+
+<script>
+(function(){
+  var STORAGE_KEY = 'gasplanet_todo_v1';
+  var CREW_STORAGE_KEY = 'gasplanet_crew_v1';
+  var CARGO_STORAGE_KEY = 'gasplanet_cargo_v1';
+  var tasks = [];
+  var crew = [];
+  var cargoLogs = [];
+  var pendingPhotos = []; // photos attached to the in-progress "add" form
+  var storageWorks = true;
+  var expandedIds = new Set();
+  var currentView = 'list';
+  var activeTab = 'jobs';
+  var currentTankTab = '1';
+  var cargoDraft = {'1':{},'2':{},'3':{},'4':{}};
+
+  var TANK_FIELD_GROUPS = [
+    {label:'Pressure & Dome', fields:['pressure','dome']},
+    {label:'Port Side Temps', fields:['portTop','portMid','portBot','portSump']},
+    {label:'Stbd Side Temps', fields:['stbdTop','stbdMid','stbdBot','stbdSump']},
+    {label:'Soundings', fields:['portSound','stbdSound']},
+    {label:'Hold Space', fields:['holdTemp','holdPress']}
+  ];
+  var TANK_FIELD_META = {
+    pressure:{label:'Tank Pressure (kPa)', short:'Press'},
+    dome:{label:'Dome Temp (°C)', short:'Dome'},
+    portTop:{label:'Port Top (°C)', short:'P-Top'},
+    portMid:{label:'Port Middle (°C)', short:'P-Mid'},
+    portBot:{label:'Port Bottom (°C)', short:'P-Bot'},
+    portSump:{label:'Port Sump (°C)', short:'P-Sump'},
+    stbdTop:{label:'Stbd Top (°C)', short:'S-Top'},
+    stbdMid:{label:'Stbd Middle (°C)', short:'S-Mid'},
+    stbdBot:{label:'Stbd Bottom (°C)', short:'S-Bot'},
+    stbdSump:{label:'Stbd Sump (°C)', short:'S-Sump'},
+    portSound:{label:'Port Sounding (m)', short:'P-Snd'},
+    stbdSound:{label:'Stbd Sounding (m)', short:'S-Snd'},
+    holdTemp:{label:'Hold Space Temp (°C)', short:'H-Temp'},
+    holdPress:{label:'Hold Space Press (kPa)', short:'H-Pr'}
+  };
+  var TANK_FIELD_ORDER = ['pressure','dome','portTop','portMid','portBot','portSump','stbdTop','stbdMid','stbdBot','stbdSump','portSound','stbdSound','holdTemp','holdPress'];
+
+  // ---------- date helpers (FIX 1) ----------
+  // toISOString() returns UTC, so east of Greenwich in the morning (or west of
+  // it in the evening) "today" resolved to the wrong calendar day — corrupting
+  // completion stamps, overdue detection and the Today button. Everything below
+  // is built from LOCAL date components instead.
+  function isoFromDate(d){
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  function todayISO(){ return isoFromDate(new Date()); }
+
+  var viewAnchor = todayISO();
+
+  // ---------- storage ----------
+  // FIX 2: a quota failure used to be swallowed — the change stayed in memory,
+  // the screen looked normal, and everything since the failure vanished on the
+  // next reload. Now the write is verified, the in-memory state is rolled back
+  // to the last version that actually reached disk, and the user is told.
+  var lastGood = {};
+
+  function persist(key, data, label, restore){
+    var payload;
+    try{
+      payload = JSON.stringify(data);
+    }catch(e){
+      alert('Could not save — the data could not be encoded.');
+      return false;
+    }
+    try{
+      localStorage.setItem(key, payload);
+      lastGood[key] = payload;
+      storageWorks = true;
+      updateStoragePill();
+      renderBackupBanner();
+      return true;
+    }catch(e){
+      storageWorks = false;
+      updateStoragePill();
+      if(lastGood[key] !== undefined){
+        try{ restore(JSON.parse(lastGood[key])); }catch(e2){}
+      }
+      alert('STORAGE FULL — that change to the ' + label + ' was NOT saved, and has been undone.\n\n' +
+            'Photos take up the most room. To free space:\n' +
+            '  1. Export a CSV backup now\n' +
+            '  2. Delete some photos, or clear completed jobs\n\n' +
+            'If this keeps happening, make sure you opened this file directly in your browser rather than inside another app.');
+      return false;
+    }
+  }
+
+  function loadTasks(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      tasks = raw ? JSON.parse(raw) : [];
+      lastGood[STORAGE_KEY] = JSON.stringify(tasks);
+      storageWorks = true;
+    }catch(e){
+      tasks = [];
+      storageWorks = false;
+    }
+  }
+  function saveTasks(){
+    return persist(STORAGE_KEY, tasks, 'To Do List', function(prev){ tasks = prev; });
+  }
+  function loadCrew(){
+    try{
+      var raw = localStorage.getItem(CREW_STORAGE_KEY);
+      crew = raw ? JSON.parse(raw) : [];
+      lastGood[CREW_STORAGE_KEY] = JSON.stringify(crew);
+    }catch(e){
+      crew = [];
+    }
+  }
+  function saveCrew(){
+    return persist(CREW_STORAGE_KEY, crew, 'Crew List', function(prev){ crew = prev; });
+  }
+  function loadCargo(){
+    try{
+      var raw = localStorage.getItem(CARGO_STORAGE_KEY);
+      cargoLogs = raw ? JSON.parse(raw) : [];
+      lastGood[CARGO_STORAGE_KEY] = JSON.stringify(cargoLogs);
+    }catch(e){
+      cargoLogs = [];
+    }
+  }
+  function saveCargo(){
+    return persist(CARGO_STORAGE_KEY, cargoLogs, 'Cargo Log', function(prev){ cargoLogs = prev; });
+  }
+  function updateStoragePill(){
+    var pill = document.getElementById('storagePill');
+    var text = document.getElementById('storageText');
+    if(storageWorks){
+      pill.className = 'storage-pill storage-ok';
+      text.textContent = 'Saved on this device';
+    } else {
+      pill.className = 'storage-pill storage-bad';
+      text.textContent = 'NOT SAVING — tap Export CSV to back up';
+    }
+  }
+
+  // ---------- helpers ----------
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+  function addDaysISO(iso, n){
+    var parts = iso.split('-');
+    var d = new Date(parts[0], parts[1]-1, parts[2]);
+    d.setDate(d.getDate()+n);
+    return isoFromDate(d);
+  }
+  function addMonthsISO(iso, n){
+    var parts = iso.split('-');
+    var d = new Date(parts[0], parts[1]-1, parts[2]);
+    d.setMonth(d.getMonth()+n);
+    return isoFromDate(d);
+  }
+  function getMonday(iso){
+    var parts = iso.split('-');
+    var d = new Date(parts[0], parts[1]-1, parts[2]);
+    var day = (d.getDay()+6)%7; // 0=Mon
+    d.setDate(d.getDate()-day);
+    return isoFromDate(d);
+  }
+  function monthDay(iso){ return iso ? iso.slice(5,10) : ''; } // 'MM-DD'
+  function isLeapYear(y){ return (y%4===0 && y%100!==0) || y%400===0; }
+
+  // FIX 8: a 29-Feb birthday used to disappear entirely in non-leap years.
+  // It now shows on 28 Feb instead, which is the usual convention aboard.
+  function birthdaysOnDate(iso){
+    var md = monthDay(iso);
+    if(!md) return [];
+    var year = parseInt(iso.slice(0,4),10);
+    var alsoFeb29 = (md === '02-28' && !isLeapYear(year));
+    return crew.filter(function(c){
+      if(!c.dob) return false;
+      var cmd = monthDay(c.dob);
+      return cmd === md || (alsoFeb29 && cmd === '02-29');
+    });
+  }
+  function renderBirthdayCard(c, iso){
+    var age = '';
+    if(c.dob){
+      var born = parseInt(c.dob.slice(0,4),10);
+      var viewedYear = parseInt(iso.slice(0,4),10);
+      var turns = viewedYear - born;
+      if(turns > 0) age = ' — turns '+turns;
+    }
+    return '<div class="birthday-card">🎂 <strong>'+escapeHtml(c.name)+'</strong>&nbsp;('+escapeHtml(c.rank)+')'+age+' has a birthday today</div>';
+  }
+  function fmtDate(iso){
+    if(!iso) return '—';
+    var parts = iso.split('-');
+    var d = new Date(parts[0], parts[1]-1, parts[2]);
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return String(d.getDate()).padStart(2,'0')+'-'+months[d.getMonth()]+'-'+d.getFullYear();
+  }
+  function fmtDateShort(iso){
+    return fmtDate(iso);
+  }
+  function isOverdue(t){
+    if(t.done || !t.due) return false;
+    return t.due < todayISO();
+  }
+  function priorityRank(p){ return p==='urgent'?0 : p==='important'?1 : 2; }
+
+  // FIX 8: the old version built a <div> and read .innerHTML, which escapes
+  // & < > but NOT quotes — unsafe for the value="..." attributes in the cargo
+  // form. This escapes quotes too, so it is safe in text and attributes alike.
+  function escapeHtml(s){
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }
+
+  function nextSerial(){
+    var max = 0;
+    tasks.forEach(function(t){ if(t.serial > max) max = t.serial; });
+    return max + 1;
+  }
+
+  // ---------- image compression ----------
+  function fileToCompressedDataURL(file, cb){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var img = new Image();
+      img.onload = function(){
+        var maxDim = 900;
+        var w = img.width, h = img.height;
+        if(w > h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+        else if(h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        cb(canvas.toDataURL('image/jpeg', 0.65));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function renderPendingThumbs(){
+    var wrap = document.getElementById('pendingThumbs');
+    wrap.innerHTML = '';
+    pendingPhotos.forEach(function(src, idx){
+      var d = document.createElement('div');
+      d.className = 'thumb';
+      d.innerHTML = '<img src="'+src+'"><button class="rm" data-idx="'+idx+'">×</button>';
+      wrap.appendChild(d);
+    });
+    document.getElementById('photoBtn').className = pendingPhotos.length ? 'has-photos' : '';
+    wrap.querySelectorAll('.rm').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        pendingPhotos.splice(parseInt(btn.dataset.idx),1);
+        renderPendingThumbs();
+      });
+    });
+  }
+
+  // ---------- add task ----------
+  function resetYnToggle(id){
+    var el = document.getElementById(id);
+    el.dataset.value = 'no';
+    el.classList.remove('checked');
+  }
+  function addTask(){
+    var job = document.getElementById('inJob').value.trim();
+    if(!job){ document.getElementById('inJob').focus(); return; }
+    var due = document.getElementById('inDue').value;
+    var priority = document.getElementById('inPriority').value;
+    var remarks = document.getElementById('inRemarks').value.trim();
+    var weekly = document.getElementById('inWeekly').dataset.value;
+    var ad34 = document.getElementById('inAd34').dataset.value;
+    var ra = document.getElementById('inRA').dataset.value;
+    var ptw = document.getElementById('inPTW').dataset.value;
+
+    tasks.push({
+      id: uid(),
+      serial: nextSerial(),
+      job: job,
+      due: due,
+      priority: priority,
+      remarks: remarks,
+      weeklyReport: weekly,
+      ad34Planner: ad34,
+      ra: ra === 'yes',
+      ptw: ptw === 'yes',
+      photos: pendingPhotos.slice(),
+      done: false,
+      dateCompleted: '',
+      createdAt: todayISO()
+    });
+
+    // FIX 2: only clear the form once the write has actually landed, so a
+    // storage failure does not throw away what was just typed.
+    if(!saveTasks()){ render(); return; }
+
+    document.getElementById('inJob').value = '';
+    document.getElementById('inDue').value = '';
+    document.getElementById('inPriority').value = 'normal';
+    document.getElementById('inRemarks').value = '';
+    resetYnToggle('inWeekly');
+    resetYnToggle('inAd34');
+    resetYnToggle('inRA');
+    resetYnToggle('inPTW');
+    pendingPhotos = [];
+    renderPendingThumbs();
+
+    render();
+    document.getElementById('inJob').focus();
+  }
+
+  function toggleDone(id){
+    var t = tasks.find(function(x){ return x.id===id; });
+    if(!t) return;
+    t.done = !t.done;
+    t.dateCompleted = t.done ? todayISO() : '';
+    saveTasks();
+    render();
+  }
+
+  function deleteTask(id){
+    if(!confirm('Delete this job? This cannot be undone.')) return;
+    tasks = tasks.filter(function(x){ return x.id!==id; });
+    saveTasks();
+    render();
+  }
+
+  // ---------- sort & filter ----------
+  function getVisibleTasks(){
+    var status = document.getElementById('filterStatus').value;
+    var pri = document.getElementById('filterPriority').value;
+    var list = tasks.filter(function(t){
+      if(status==='open' && t.done) return false;
+      if(status==='done' && !t.done) return false;
+      if(pri!=='all' && t.priority!==pri) return false;
+      return true;
+    });
+    list.sort(function(a,b){
+      if(a.done !== b.done) return a.done ? 1 : -1;
+      var pr = priorityRank(a.priority) - priorityRank(b.priority);
+      if(pr !== 0) return pr;
+      var ad = a.due || '9999-99-99';
+      var bd = b.due || '9999-99-99';
+      if(ad !== bd) return ad < bd ? -1 : 1;
+      return a.serial - b.serial;
+    });
+    return list;
+  }
+
+  // ---------- render ----------
+  function renderTaskCard(t){
+    var overdueFlag = isOverdue(t);
+    var isExpanded = expandedIds.has(t.id);
+    var html = '';
+    html += '<div class="task pri-'+t.priority+(t.done?' done':'')+(overdueFlag?' overdue':'')+(isExpanded?' expanded':'')+'" data-id="'+t.id+'">';
+    html += '  <div class="task-left">';
+    html += '    <button class="tick" data-action="toggle" data-id="'+t.id+'">'+(t.done?'✓':'')+'</button>';
+    html += '    <span class="pri-badge pri-'+t.priority+'">'+(t.priority==='important'?'I':t.priority==='urgent'?'U':'')+'</span>';
+    html += '  </div>';
+    html += '  <div class="task-main" data-action="expand" data-id="'+t.id+'">';
+    html += '    <div class="task-top">';
+    html += '      <div class="sno-date">#'+t.serial+' · '+(t.due ? fmtDateShort(t.due) : 'no date')+(overdueFlag?' ⚠':'')+'</div>';
+    html += '      <div class="job-row">';
+    html += '        <span class="job-text">'+escapeHtml(t.job)+'</span>';
+    html += '        <span class="chevron">▸</span>';
+    html += '      </div>';
+    html += '    </div>';
+    html += '    <div class="task-details">';
+    html += '      <div class="meta-row">';
+    html += '        <span class="m-item">📅 Due: '+fmtDate(t.due)+(overdueFlag?' <span class="overdue-flag">— OVERDUE</span>':'')+'</span>';
+    if(t.done){ html += '        <span class="m-item">✅ Completed: '+fmtDate(t.dateCompleted)+'</span>'; }
+    if(t.weeklyReport==='yes'){ html += '        <span class="flag-tag">WR</span>'; }
+    if(t.ad34Planner==='yes'){ html += '        <span class="flag-tag flag-ad34">AD 34</span>'; }
+    if(t.ra){ html += '        <span class="flag-tag flag-ra">RA</span>'; }
+    if(t.ptw){ html += '        <span class="flag-tag flag-ptw">PTW</span>'; }
+    html += '      </div>';
+    if(t.remarks){ html += '      <div class="remarks">'+escapeHtml(t.remarks)+'</div>'; }
+    if(t.photos && t.photos.length){
+      html += '      <div class="thumbstrip">';
+      t.photos.forEach(function(src, idx){
+        html += '<div class="thumb" data-view="'+t.id+':'+idx+'"><img src="'+src+'"></div>';
+      });
+      html += '      </div>';
+    }
+    html += '    </div>';
+    html += '  </div>';
+    html += '  <div class="task-actions">';
+    html += '    <button class="icon-btn" data-action="addphoto" data-id="'+t.id+'" title="Add photo">📷'+(t.photos && t.photos.length ? '<span class="photo-count">'+t.photos.length+'</span>' : '')+'</button>';
+    html += '    <button class="icon-btn" data-action="delete" data-id="'+t.id+'" title="Delete">🗑</button>';
+    html += '  </div>';
+    html += '</div>';
+    return html;
+  }
+
+  function render(){
+    var pendingCount = tasks.filter(function(t){return !t.done;}).length;
+    document.getElementById('countBadge').textContent = pendingCount + ' pending / ' + tasks.length + ' total';
+
+    var dateNav = document.getElementById('dateNav');
+    var listWrap = document.getElementById('listWrap');
+
+    if(currentView === 'list'){
+      dateNav.style.display = 'none';
+      renderListView(listWrap);
+    } else if(currentView === 'day'){
+      dateNav.style.display = 'flex';
+      renderDayView(listWrap);
+    } else if(currentView === 'week'){
+      dateNav.style.display = 'flex';
+      renderWeekView(listWrap);
+    } else if(currentView === 'month'){
+      dateNav.style.display = 'flex';
+      renderMonthView(listWrap);
+    }
+  }
+
+  function renderListView(wrap){
+    var list = getVisibleTasks();
+    if(list.length===0){
+      wrap.innerHTML = '<div class="empty"><div class="big">⚓</div>All clear — no jobs match this filter.</div>';
+      return;
+    }
+    var html = '';
+    list.forEach(function(t){ html += renderTaskCard(t); });
+    wrap.innerHTML = '<div style="padding:14px 20px 100px;">'+html+'</div>';
+  }
+
+  function renderDayView(wrap){
+    document.getElementById('navLabel').textContent = fmtDate(viewAnchor);
+    var visible = getVisibleTasks();
+    var dayTasks = visible.filter(function(t){ return t.due === viewAnchor; });
+    var bdays = birthdaysOnDate(viewAnchor);
+    if(dayTasks.length===0 && bdays.length===0){
+      wrap.innerHTML = '<div class="empty"><div class="big">⚓</div>No jobs due on this day.</div>';
+      return;
+    }
+    var html = '';
+    bdays.forEach(function(c){ html += renderBirthdayCard(c, viewAnchor); });
+    dayTasks.forEach(function(t){ html += renderTaskCard(t); });
+    wrap.innerHTML = '<div style="padding:14px 20px 100px;">'+html+'</div>';
+  }
+
+  function renderWeekView(wrap){
+    var monday = getMonday(viewAnchor);
+    var sunday = addDaysISO(monday, 6);
+    document.getElementById('navLabel').textContent = fmtDateShort(monday) + ' – ' + fmtDate(sunday);
+    var visible = getVisibleTasks();
+    var dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    var html = '';
+    for(var i=0;i<7;i++){
+      var d = addDaysISO(monday, i);
+      var dayTasks = visible.filter(function(t){ return t.due === d; });
+      var bdays = birthdaysOnDate(d);
+      var isToday = d === todayISO();
+      html += '<div class="week-day'+(isToday?' is-today':'')+'">';
+      html += '  <div class="week-day-hdr"><span>'+dayNames[i]+' · '+fmtDate(d)+'</span><span>'+dayTasks.length+'</span></div>';
+      html += '  <div class="week-day-body">';
+      if(dayTasks.length===0 && bdays.length===0){
+        html += '<div class="week-day-empty">No jobs</div>';
+      } else {
+        (function(dayISO){
+          bdays.forEach(function(c){ html += renderBirthdayCard(c, dayISO); });
+        })(d);
+        dayTasks.forEach(function(t){ html += renderTaskCard(t); });
+      }
+      html += '  </div>';
+      html += '</div>';
+    }
+    wrap.innerHTML = '<div class="week-grid">'+html+'</div>';
+  }
+
+  function renderMonthView(wrap){
+    var y = parseInt(viewAnchor.slice(0,4),10);
+    var m = parseInt(viewAnchor.slice(5,7),10) - 1;
+    var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    document.getElementById('navLabel').textContent = monthNames[m]+' '+y;
+
+    var visible = getVisibleTasks();
+    var firstOfMonth = new Date(y, m, 1);
+    var startOffset = (firstOfMonth.getDay() + 6) % 7; // Monday=0
+    var daysInMonth = new Date(y, m+1, 0).getDate();
+    var today = todayISO();
+
+    var html = '<div class="month-weekdays"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>';
+    html += '<div class="month-cells">';
+    for(var i=0;i<startOffset;i++){ html += '<div class="month-cell blank"></div>'; }
+    for(var day=1; day<=daysInMonth; day++){
+      var iso = y+'-'+String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+      var dayTasks = visible.filter(function(t){ return t.due === iso; });
+      var bdays = birthdaysOnDate(iso);
+      var isToday = iso === today;
+      html += '<div class="month-cell'+(isToday?' is-today':'')+'" data-action="pickday" data-date="'+iso+'">';
+      if(bdays.length){ html += '  <span class="cell-cake" title="Birthday">🎂</span>'; }
+      html += '  <span class="cell-num">'+day+'</span>';
+      if(dayTasks.length){
+        var dots = dayTasks.slice(0,3);
+        html += '  <span class="cell-dots">';
+        dots.forEach(function(t){ html += '<span class="cell-dot pri-'+t.priority+'"></span>'; });
+        html += '  </span>';
+        html += '  <span class="cell-count">'+dayTasks.length+'</span>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    wrap.innerHTML = '<div class="month-grid">'+html+'</div>';
+  }
+
+  // ---------- crew list ----------
+  function nextCrewSerial(){
+    var max = 0;
+    crew.forEach(function(c){ if(c.serial > max) max = c.serial; });
+    return max + 1;
+  }
+  function addCrew(){
+    var name = document.getElementById('crewName').value.trim();
+    if(!name){ document.getElementById('crewName').focus(); return; }
+    var rank = document.getElementById('crewRank').value;
+    var dob = document.getElementById('crewDob').value;
+    crew.push({ id: uid(), serial: nextCrewSerial(), name: name, rank: rank, dob: dob });
+    if(!saveCrew()){ renderCrew(); return; }
+    document.getElementById('crewName').value = '';
+    document.getElementById('crewDob').value = '';
+    document.getElementById('crewRank').value = 'Master';
+    renderCrew();
+    render(); // birthdays feed the calendar views
+    document.getElementById('crewName').focus();
+  }
+  function deleteCrew(id){
+    if(!confirm('Remove this crew member from the list?')) return;
+    crew = crew.filter(function(c){ return c.id!==id; });
+    saveCrew();
+    renderCrew();
+    render();
+  }
+  function renderCrew(){
+    var wrap = document.getElementById('crewListWrap');
+    if(crew.length===0){
+      wrap.innerHTML = '<div class="empty"><div class="big">⚓</div>No crew added yet.</div>';
+      return;
+    }
+    var list = crew.slice().sort(function(a,b){ return a.serial-b.serial; });
+    var html = '';
+    list.forEach(function(c){
+      html += '<div class="crew-row">';
+      html += '  <span class="crew-sno">#'+c.serial+'</span>';
+      html += '  <span class="crew-name">'+escapeHtml(c.name)+'</span>';
+      html += '  <span class="crew-rank">'+escapeHtml(c.rank)+'</span>';
+      html += '  <span class="crew-dob">'+(c.dob ? fmtDate(c.dob) : '—')+'</span>';
+      html += '  <button class="icon-btn" data-crew-action="delete" data-id="'+c.id+'" title="Delete">🗑</button>';
+      html += '</div>';
+    });
+    wrap.innerHTML = html;
+  }
+
+  // ---------- backup reminder ----------
+  // localStorage is the only copy of this data: it is per-device, per-browser,
+  // and iOS can evict it for a page left unvisited. CSV export IS the backup,
+  // so each list is tracked separately and nagged for when it goes stale.
+  var BACKUP_KEYS = {
+    jobs:  'gasplanet_lastBackup_jobs',
+    crew:  'gasplanet_lastBackup_crew',
+    cargo: 'gasplanet_lastBackup_cargo'
+  };
+  var BACKUP_SNOOZE_KEY = 'gasplanet_backupSnooze';
+  var BACKUP_AFTER_DAYS = 14;
+  var SNOOZE_DAYS = 7;
+
+  function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+
+  function daysSince(iso){
+    var p = iso.split('-');
+    var then = new Date(p[0], p[1]-1, p[2]);
+    var now = new Date();
+    now = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((now - then) / 86400000);
+  }
+
+  function backupStores(){
+    return [
+      { key:'jobs',  label:'To Do List', count:tasks.length,     run:exportCSV },
+      { key:'crew',  label:'Crew List',  count:crew.length,      run:exportCrewCSV },
+      { key:'cargo', label:'Cargo Log',  count:cargoLogs.length, run:exportCargoCSV }
+    ];
+  }
+
+  function staleBackups(){
+    return backupStores().filter(function(s){
+      if(!s.count) return false;              // nothing to lose yet
+      var last = lsGet(BACKUP_KEYS[s.key]);
+      if(!last) return true;                  // never backed up
+      return daysSince(last) >= BACKUP_AFTER_DAYS;
+    });
+  }
+
+  function noteBackup(storeKey){
+    lsSet(BACKUP_KEYS[storeKey], todayISO());
+    renderBackupBanner();
+  }
+
+  function renderBackupBanner(){
+    var el = document.getElementById('backupBanner');
+    if(!el) return;
+    var snoozed = lsGet(BACKUP_SNOOZE_KEY);
+    if(snoozed && daysSince(snoozed) < SNOOZE_DAYS){ el.style.display = 'none'; return; }
+
+    var stale = staleBackups();
+    if(!stale.length){ el.style.display = 'none'; return; }
+
+    var names = stale.map(function(s){ return s.label; }).join(', ');
+    var neverAll = stale.every(function(s){ return !lsGet(BACKUP_KEYS[s.key]); });
+    var msg;
+    if(neverAll){
+      msg = 'No backup yet of ' + names + '. This device holds the only copy — export a CSV to keep one off the tablet.';
+    } else {
+      var oldest = 0;
+      stale.forEach(function(s){
+        var last = lsGet(BACKUP_KEYS[s.key]);
+        var d = last ? daysSince(last) : 9999;
+        if(d > oldest) oldest = d;
+      });
+      msg = (oldest === 9999 ? 'Never backed up: ' : 'Not backed up for ' + oldest + ' days: ') + names + '.';
+    }
+    document.getElementById('backupText').textContent = msg;
+    el.style.display = 'flex';
+  }
+
+  // Downloads are fired one at a time — some browsers drop a burst of
+  // simultaneous saves, and each list is a separate CSV file.
+  function backupNow(){
+    var stale = staleBackups();
+    if(!stale.length) return;
+    stale.forEach(function(s, i){
+      setTimeout(function(){ s.run(); }, i * 800);
+    });
+  }
+
+  // ---------- CSV shared ----------
+  function toCSV(rows){
+    return rows.map(function(r){
+      return r.map(function(cell){
+        var s = String(cell).replace(/"/g,'""');
+        return /[",\n]/.test(s) ? '"'+s+'"' : s;
+      }).join(',');
+    }).join('\n');
+  }
+  function downloadCSV(filename, csv){
+    var blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCrewCSV(){
+    var rows = [['Serial No','Name','Rank','DOB']];
+    crew.slice().sort(function(a,b){return a.serial-b.serial;}).forEach(function(c){
+      rows.push([c.serial, c.name, c.rank, c.dob || '']);
+    });
+    downloadCSV('GasPlanet_CrewList_'+todayISO()+'.csv', toCSV(rows));
+    noteBackup('crew');
+  }
+
+  function importCrewCSVFile(file){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var rows = parseCSV(e.target.result);
+      if(rows.length < 2){ alert('No data rows found in this file.'); return; }
+      var headers = rows[0].map(normalizeHeader);
+      var col = {};
+      headers.forEach(function(h, idx){
+        if(h==='name' || h==='crewname' || h==='fullname') col.name = idx;
+        else if(h==='rank') col.rank = idx;
+        else if(h==='dob' || h==='dateofbirth' || h==='birthdate') col.dob = idx;
+      });
+      if(col.name === undefined){
+        alert('Could not find a "Name" column in this file. Make sure the first row has column headers, including one named "Name".');
+        return;
+      }
+      var imported = 0, skipped = 0;
+      var serial = nextCrewSerial();
+      for(var r=1; r<rows.length; r++){
+        var row = rows[r];
+        var nameText = (row[col.name] || '').trim();
+        if(!nameText){ skipped++; continue; }
+        var rankText = col.rank!==undefined ? (row[col.rank]||'').trim() : '';
+        var dobVal = col.dob!==undefined ? parseDueDate(row[col.dob], true) : '';
+        crew.push({ id: uid(), serial: serial++, name: nameText, rank: rankText || 'Other', dob: dobVal });
+        imported++;
+      }
+      if(!saveCrew()){ renderCrew(); return; }
+      renderCrew();
+      render();
+      alert('Imported '+imported+' crew member(s).'+(skipped ? ' Skipped '+skipped+' row(s) with no name.' : ''));
+    };
+    reader.readAsText(file);
+  }
+
+  // ---------- cargo log ----------
+  function renderTankFields(){
+    var wrap = document.getElementById('tankFieldsWrap');
+    var data = cargoDraft[currentTankTab] || {};
+    var html = '<div class="tank-fields-grid">';
+    TANK_FIELD_GROUPS.forEach(function(g){
+      html += '<div class="tank-section-label">'+g.label+'</div>';
+      g.fields.forEach(function(key){
+        var meta = TANK_FIELD_META[key];
+        var val = data[key] !== undefined ? data[key] : '';
+        // FIX 4: no inputmode="decimal" — that keypad has no minus key on iOS,
+        // and every cargo / hold space temperature aboard is negative.
+        html += '<div class="field"><label>'+meta.label+'</label><input type="number" step="0.01" data-key="'+key+'" value="'+escapeHtml(val)+'"></div>';
+      });
+    });
+    html += '</div>';
+    wrap.innerHTML = html;
+  }
+
+  function captureTankInputs(){
+    var wrap = document.getElementById('tankFieldsWrap');
+    if(!cargoDraft[currentTankTab]) cargoDraft[currentTankTab] = {};
+    wrap.querySelectorAll('input[data-key]').forEach(function(inp){
+      cargoDraft[currentTankTab][inp.dataset.key] = inp.value;
+    });
+  }
+
+  function showTankTab(n){
+    currentTankTab = n;
+    document.querySelectorAll('#tankTabs button').forEach(function(b){ b.classList.toggle('active', b.dataset.tank===n); });
+    renderTankFields();
+  }
+
+  function switchTankTab(n){
+    captureTankInputs();
+    showTankTab(n);
+  }
+
+  function addCargoEntry(){
+    captureTankInputs();
+    var date = document.getElementById('cargoDate').value;
+    if(!date){ alert('Please select a date first.'); document.getElementById('cargoDate').focus(); return; }
+    var time = document.getElementById('cargoTime').value;
+    var tanksCopy = {'1':{},'2':{},'3':{},'4':{}};
+    ['1','2','3','4'].forEach(function(n){
+      TANK_FIELD_ORDER.forEach(function(key){
+        var v = (cargoDraft[n] && cargoDraft[n][key] !== undefined) ? cargoDraft[n][key] : '';
+        tanksCopy[n][key] = v;
+      });
+    });
+
+    // FIX 7: one row per Date + Time. Saving the same slot twice used to append
+    // a duplicate row silently; now it asks and replaces in place.
+    var dupIdx = -1;
+    for(var i=0;i<cargoLogs.length;i++){
+      if(cargoLogs[i].date === date && (cargoLogs[i].time || '') === (time || '')){ dupIdx = i; break; }
+    }
+    if(dupIdx !== -1){
+      var slot = fmtDate(date) + (time ? ' at ' + time : '');
+      if(!confirm('An entry already exists for ' + slot + '.\n\nOverwrite it with these readings?')) return;
+      cargoLogs[dupIdx] = { id: cargoLogs[dupIdx].id, date: date, time: time, tanks: tanksCopy };
+    } else {
+      cargoLogs.push({ id: uid(), date: date, time: time, tanks: tanksCopy });
+    }
+
+    if(!saveCargo()){ renderCargoTable(); return; }
+    renderCargoTable();
+
+    // FIX 6: reset by rendering the cleared draft directly. Going through
+    // switchTankTab() re-ran captureTankInputs() first, which read the old
+    // values back out of the still-rendered inputs and refilled the draft —
+    // so the previous entry's readings reappeared on that tank's tab.
+    cargoDraft = {'1':{},'2':{},'3':{},'4':{}};
+    document.getElementById('cargoTime').value = '';
+    showTankTab('1');
+  }
+
+  function deleteCargoEntry(id){
+    if(!confirm('Delete this cargo log entry? This cannot be undone.')) return;
+    cargoLogs = cargoLogs.filter(function(c){ return c.id!==id; });
+    saveCargo();
+    renderCargoTable();
+  }
+
+  function sortedCargoLogs(){
+    return cargoLogs.slice().sort(function(a,b){
+      var ak = a.date+' '+(a.time||'00:00');
+      var bk = b.date+' '+(b.time||'00:00');
+      return ak < bk ? -1 : ak > bk ? 1 : 0;
+    });
+  }
+
+  function renderCargoTable(){
+    var wrap = document.getElementById('cargoTableWrap');
+    if(cargoLogs.length===0){
+      wrap.innerHTML = '<div class="empty"><div class="big">⚓</div>No cargo log entries yet.</div>';
+      return;
+    }
+    var sorted = sortedCargoLogs();
+    var html = '<table class="cargo-table"><thead>';
+    html += '<tr class="tank-group-row"><th class="dt-col" rowspan="2">Date / Time</th>';
+    ['1','2','3','4'].forEach(function(n){ html += '<th colspan="'+TANK_FIELD_ORDER.length+'">Tank '+n+'</th>'; });
+    html += '<th rowspan="2"></th></tr>';
+    html += '<tr>';
+    ['1','2','3','4'].forEach(function(){
+      TANK_FIELD_ORDER.forEach(function(key){ html += '<th>'+TANK_FIELD_META[key].short+'</th>'; });
+    });
+    html += '</tr></thead><tbody>';
+    sorted.forEach(function(entry){
+      html += '<tr>';
+      html += '<td class="dt-col">'+fmtDate(entry.date)+(entry.time?' '+entry.time:'')+'</td>';
+      ['1','2','3','4'].forEach(function(n){
+        var tdata = entry.tanks[n] || {};
+        TANK_FIELD_ORDER.forEach(function(key){
+          var v = tdata[key];
+          html += '<td>'+(v!==undefined && v!=='' ? escapeHtml(v) : '–')+'</td>';
+        });
+      });
+      html += '<td class="del-col"><button data-action="delete-cargo" data-id="'+entry.id+'">🗑</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = '<div class="cargo-table-scroll">'+html+'</div>';
+  }
+
+  function exportCargoCSV(){
+    var headers = ['Date','Time'];
+    ['1','2','3','4'].forEach(function(n){
+      TANK_FIELD_ORDER.forEach(function(key){ headers.push('T'+n+' '+TANK_FIELD_META[key].short); });
+    });
+    var rows = [headers];
+    sortedCargoLogs().forEach(function(entry){
+      var row = [entry.date, entry.time || ''];
+      ['1','2','3','4'].forEach(function(n){
+        var tdata = entry.tanks[n] || {};
+        TANK_FIELD_ORDER.forEach(function(key){ row.push(tdata[key] !== undefined ? tdata[key] : ''); });
+      });
+      rows.push(row);
+    });
+    downloadCSV('GasPlanet_CargoLog_'+todayISO()+'.csv', toCSV(rows));
+    noteBackup('cargo');
+  }
+
+  // ---------- jobs CSV export ----------
+  function exportCSV(){
+    var rows = [['Serial No','Due Date','Job','Priority','Status','Date Completed','Remarks','Weekly Report','AD-34 Planner','RA','PTW','Photos Attached']];
+    tasks.slice().sort(function(a,b){return a.serial-b.serial;}).forEach(function(t){
+      rows.push([
+        t.serial,
+        t.due || '',
+        t.job,
+        t.priority,
+        t.done ? 'Completed' : 'Pending',
+        t.dateCompleted || '',
+        t.remarks || '',
+        t.weeklyReport==='yes' ? 'Yes' : 'No',
+        t.ad34Planner==='yes' ? 'Yes' : 'No',
+        t.ra ? 'Yes' : 'No',
+        t.ptw ? 'Yes' : 'No',
+        (t.photos ? t.photos.length : 0)
+      ]);
+    });
+    downloadCSV('GasPlanet_ToDoList_'+todayISO()+'.csv', toCSV(rows));
+    noteBackup('jobs');
+  }
+
+  // ---------- CSV import ----------
+  function parseCSV(text){
+    var rows = [];
+    var row = [];
+    var field = '';
+    var inQuotes = false;
+    for(var i=0; i<text.length; i++){
+      var c = text[i];
+      if(inQuotes){
+        if(c === '"'){
+          if(text[i+1] === '"'){ field += '"'; i++; }
+          else { inQuotes = false; }
+        } else { field += c; }
+      } else {
+        if(c === '"'){ inQuotes = true; }
+        else if(c === ','){ row.push(field); field=''; }
+        else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+        else if(c === '\r'){ /* skip */ }
+        else { field += c; }
+      }
+    }
+    if(field.length || row.length){ row.push(field); rows.push(row); }
+    return rows.filter(function(r){ return r.length>1 || (r.length===1 && r[0]!==''); });
+  }
+
+  function normalizeHeader(h){
+    return h.trim().toLowerCase().replace(/[^a-z0-9]/g,'');
+  }
+
+  // pastOnly: a two-digit year in a date of birth can only mean the past, so
+  // "05/06/85" resolves to 1985 rather than 2085. Due dates keep 20xx, since
+  // a job may legitimately fall in a future year.
+  function parseDueDate(raw, pastOnly){
+    if(!raw) return '';
+    raw = raw.trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    var m = raw.match(/^(\d{1,2})[-\/](\w{3,9}|\d{1,2})[-\/](\d{2,4})$/);
+    if(m){
+      var day = parseInt(m[1],10);
+      var monPart = m[2];
+      var year = parseInt(m[3],10);
+      if(year < 100){
+        year += 2000;
+        if(pastOnly && year > new Date().getFullYear()) year -= 100;
+      }
+      var months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+      var mon = isNaN(monPart) ? months[monPart.slice(0,3).toLowerCase()] : parseInt(monPart,10);
+      if(mon){
+        return year+'-'+String(mon).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+      }
+    }
+    var d = new Date(raw);
+    if(!isNaN(d.getTime())){
+      if(pastOnly && d.getFullYear() > new Date().getFullYear()) d.setFullYear(d.getFullYear() - 100);
+      return isoFromDate(d);
+    }
+    return '';
+  }
+
+  function isYesLike(v){
+    if(!v) return false;
+    var s = v.trim().toLowerCase();
+    return s==='yes' || s==='y' || s==='true' || s==='1' || s==='completed';
+  }
+
+  function importCSVFile(file){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var rows = parseCSV(e.target.result);
+      if(rows.length < 2){ alert('No data rows found in this file.'); return; }
+      var headers = rows[0].map(normalizeHeader);
+      var col = {};
+      headers.forEach(function(h, idx){
+        if(h==='job' || h==='task' || h==='jobtask') col.job = idx;
+        else if(h==='duedate' || h==='date') col.due = idx;
+        else if(h==='priority') col.priority = idx;
+        else if(h==='status') col.status = idx;
+        else if(h==='datecompleted' || h==='completeddate') col.dateCompleted = idx;
+        else if(h==='remarks' || h==='notes') col.remarks = idx;
+        else if(h==='weeklyreport' || h==='wr') col.weekly = idx;
+        else if(h==='ad34planner' || h==='ad34') col.ad34 = idx;
+        else if(h==='ra') col.ra = idx;
+        else if(h==='ptw') col.ptw = idx;
+      });
+      if(col.job === undefined){
+        alert('Could not find a "Job" column in this file. Make sure the first row has column headers, including one named "Job".');
+        return;
+      }
+      var imported = 0, skipped = 0;
+      var serial = nextSerial();
+      for(var r=1; r<rows.length; r++){
+        var row = rows[r];
+        var jobText = (row[col.job] || '').trim();
+        if(!jobText){ skipped++; continue; }
+        var priorityRaw = col.priority!==undefined ? (row[col.priority]||'').trim().toLowerCase() : 'normal';
+        var priority = (priorityRaw==='important' || priorityRaw==='urgent') ? priorityRaw : 'normal';
+        var statusRaw = col.status!==undefined ? (row[col.status]||'').trim().toLowerCase() : '';
+        var done = statusRaw==='completed' || statusRaw==='done';
+        var dueVal = col.due!==undefined ? parseDueDate(row[col.due]) : '';
+        var dateCompletedVal = col.dateCompleted!==undefined ? parseDueDate(row[col.dateCompleted]) : '';
+        if(done && !dateCompletedVal) dateCompletedVal = todayISO();
+
+        tasks.push({
+          id: uid(),
+          serial: serial++,
+          job: jobText,
+          due: dueVal,
+          priority: priority,
+          remarks: col.remarks!==undefined ? (row[col.remarks]||'').trim() : '',
+          weeklyReport: col.weekly!==undefined && isYesLike(row[col.weekly]) ? 'yes' : 'no',
+          ad34Planner: col.ad34!==undefined && isYesLike(row[col.ad34]) ? 'yes' : 'no',
+          ra: col.ra!==undefined ? isYesLike(row[col.ra]) : false,
+          ptw: col.ptw!==undefined ? isYesLike(row[col.ptw]) : false,
+          photos: [],
+          done: done,
+          dateCompleted: done ? dateCompletedVal : '',
+          createdAt: todayISO()
+        });
+        imported++;
+      }
+      if(!saveTasks()){ render(); return; }
+      render();
+      alert('Imported '+imported+' job(s).'+(skipped ? ' Skipped '+skipped+' row(s) with no job text.' : ''));
+    };
+    reader.readAsText(file);
+  }
+
+  // ---------- photo viewer ----------
+  function openViewer(src){
+    var bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    bg.innerHTML = '<button class="modal-close">×</button><img src="'+src+'">';
+    bg.addEventListener('click', function(e){ if(e.target===bg || e.target.className==='modal-close') bg.remove(); });
+    document.body.appendChild(bg);
+  }
+
+  // ---------- events ----------
+  document.getElementById('addBtn').addEventListener('click', addTask);
+  document.getElementById('inJob').addEventListener('keydown', function(e){ if(e.key==='Enter') addTask(); });
+
+  document.querySelectorAll('.yn-toggle').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var isYes = btn.dataset.value === 'yes';
+      btn.dataset.value = isYes ? 'no' : 'yes';
+      btn.classList.toggle('checked', !isYes);
+    });
+  });
+
+  document.getElementById('photoBtn').addEventListener('click', function(){
+    document.getElementById('photoInput').click();
+  });
+  document.getElementById('photoInput').addEventListener('change', function(e){
+    var files = Array.from(e.target.files || []);
+    var remaining = files.length;
+    if(!remaining) return;
+    files.forEach(function(f){
+      fileToCompressedDataURL(f, function(dataUrl){
+        pendingPhotos.push(dataUrl);
+        remaining--;
+        if(remaining===0) renderPendingThumbs();
+      });
+    });
+    e.target.value = '';
+  });
+
+  document.getElementById('filterStatus').addEventListener('change', render);
+  document.getElementById('filterPriority').addEventListener('change', render);
+
+  document.getElementById('viewSwitch').addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-view]');
+    if(!btn) return;
+    currentView = btn.dataset.view;
+    document.querySelectorAll('#viewSwitch button').forEach(function(b){ b.classList.toggle('active', b===btn); });
+    render();
+  });
+
+  document.getElementById('navPrev').addEventListener('click', function(){
+    if(currentView==='day') viewAnchor = addDaysISO(viewAnchor, -1);
+    else if(currentView==='week') viewAnchor = addDaysISO(viewAnchor, -7);
+    else if(currentView==='month') viewAnchor = addMonthsISO(viewAnchor, -1);
+    render();
+  });
+  document.getElementById('navNext').addEventListener('click', function(){
+    if(currentView==='day') viewAnchor = addDaysISO(viewAnchor, 1);
+    else if(currentView==='week') viewAnchor = addDaysISO(viewAnchor, 7);
+    else if(currentView==='month') viewAnchor = addMonthsISO(viewAnchor, 1);
+    render();
+  });
+  document.getElementById('navToday').addEventListener('click', function(){
+    viewAnchor = todayISO();
+    render();
+  });
+  document.getElementById('exportBtn').addEventListener('click', exportCSV);
+  document.getElementById('importBtn').addEventListener('click', function(){
+    document.getElementById('importInput').click();
+  });
+  document.getElementById('importInput').addEventListener('change', function(e){
+    var file = e.target.files[0];
+    if(file) importCSVFile(file);
+    e.target.value = '';
+  });
+
+  var FORM_HIDDEN_KEY = 'gasplanet_todo_formHidden';
+  function setFormHidden(hidden){
+    var addWrap = document.getElementById('addWrap');
+    var toggleBtn = document.getElementById('toggleFormBtn');
+    var fab = document.getElementById('fabAdd');
+    if(hidden){
+      addWrap.classList.add('collapsed');
+      toggleBtn.textContent = 'Show ▼';
+      fab.classList.add('visible');
+    } else {
+      addWrap.classList.remove('collapsed');
+      toggleBtn.textContent = 'Hide ▲';
+      fab.classList.remove('visible');
+    }
+    try{ localStorage.setItem(FORM_HIDDEN_KEY, hidden ? '1' : '0'); }catch(e){}
+  }
+  document.getElementById('toggleFormBtn').addEventListener('click', function(){
+    setFormHidden(!document.getElementById('addWrap').classList.contains('collapsed'));
+  });
+  document.getElementById('fabAdd').addEventListener('click', function(){
+    setFormHidden(false);
+    document.getElementById('inJob').focus();
+    window.scrollTo({top:0, behavior:'smooth'});
+  });
+  document.getElementById('clearDoneBtn').addEventListener('click', function(){
+    if(!tasks.some(function(t){return t.done;})){ return; }
+    if(!confirm('Remove all completed jobs from the list? This cannot be undone.')) return;
+    tasks = tasks.filter(function(t){ return !t.done; });
+    saveTasks();
+    render();
+  });
+
+  var addPhotoTargetId = null;
+  var addPhotoInput = document.createElement('input');
+  // FIX 3: no capture attribute here either — keeps the Photo Library option.
+  addPhotoInput.type = 'file'; addPhotoInput.accept = 'image/*'; addPhotoInput.multiple = true;
+  addPhotoInput.style.display = 'none';
+  document.body.appendChild(addPhotoInput);
+  addPhotoInput.addEventListener('change', function(e){
+    var files = Array.from(e.target.files || []);
+    var t = tasks.find(function(x){ return x.id===addPhotoTargetId; });
+    if(!t || !files.length){ e.target.value=''; return; }
+    var remaining = files.length;
+    files.forEach(function(f){
+      fileToCompressedDataURL(f, function(dataUrl){
+        t.photos.push(dataUrl);
+        remaining--;
+        if(remaining===0){ saveTasks(); render(); }
+      });
+    });
+    e.target.value = '';
+  });
+
+  // FIX 8: the toggleRA / togglePTW branches were dead — nothing has ever
+  // rendered those buttons (the card shows read-only flag tags), so the
+  // handlers and their toggleFlag() helper have been removed.
+  document.getElementById('listWrap').addEventListener('click', function(e){
+    var toggleBtn = e.target.closest('[data-action="toggle"]');
+    if(toggleBtn){ toggleDone(toggleBtn.dataset.id); return; }
+    var delBtn = e.target.closest('[data-action="delete"]');
+    if(delBtn){ deleteTask(delBtn.dataset.id); return; }
+    var addPhotoBtn = e.target.closest('[data-action="addphoto"]');
+    if(addPhotoBtn){ addPhotoTargetId = addPhotoBtn.dataset.id; addPhotoInput.click(); return; }
+    var thumb = e.target.closest('[data-view]');
+    if(thumb){
+      var parts = thumb.dataset.view.split(':');
+      var t = tasks.find(function(x){ return x.id===parts[0]; });
+      if(t && t.photos[parts[1]]) openViewer(t.photos[parts[1]]);
+      return;
+    }
+    var expandZone = e.target.closest('[data-action="expand"]');
+    if(expandZone){
+      var id = expandZone.dataset.id;
+      if(expandedIds.has(id)) expandedIds.delete(id); else expandedIds.add(id);
+      render();
+      return;
+    }
+    var dayCell = e.target.closest('[data-action="pickday"]');
+    if(dayCell){
+      viewAnchor = dayCell.dataset.date;
+      currentView = 'day';
+      document.querySelectorAll('#viewSwitch button').forEach(function(b){ b.classList.toggle('active', b.dataset.view==='day'); });
+      render();
+      return;
+    }
+  });
+
+  // ---------- init ----------
+  function setDateLine(){
+    var d = new Date();
+    var opts = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
+    document.getElementById('dateLine').textContent = d.toLocaleDateString('en-GB', opts).toUpperCase();
+  }
+
+  loadTasks();
+  loadCrew();
+  loadCargo();
+  setDateLine();
+  updateStoragePill();
+  render();
+  renderCrew();
+  renderTankFields();
+  renderCargoTable();
+  document.getElementById('cargoDate').value = todayISO();
+  renderBackupBanner();
+  try{ setFormHidden(localStorage.getItem(FORM_HIDDEN_KEY) === '1'); }catch(e){ setFormHidden(false); }
+
+  document.getElementById('backupNow').addEventListener('click', backupNow);
+  document.getElementById('backupLater').addEventListener('click', function(){
+    lsSet(BACKUP_SNOOZE_KEY, todayISO());
+    renderBackupBanner();
+  });
+
+  document.getElementById('crewAddBtn').addEventListener('click', addCrew);
+  document.getElementById('crewName').addEventListener('keydown', function(e){ if(e.key==='Enter') addCrew(); });
+  document.getElementById('crewListWrap').addEventListener('click', function(e){
+    var delBtn = e.target.closest('[data-crew-action="delete"]');
+    if(delBtn){ deleteCrew(delBtn.dataset.id); }
+  });
+  document.getElementById('crewExportBtn').addEventListener('click', exportCrewCSV);
+  document.getElementById('crewImportBtn').addEventListener('click', function(){
+    document.getElementById('crewImportInput').click();
+  });
+  document.getElementById('crewImportInput').addEventListener('change', function(e){
+    var file = e.target.files[0];
+    if(file) importCrewCSVFile(file);
+    e.target.value = '';
+  });
+
+  document.getElementById('tankTabs').addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-tank]');
+    if(!btn) return;
+    switchTankTab(btn.dataset.tank);
+  });
+  document.getElementById('cargoAddBtn').addEventListener('click', addCargoEntry);
+  document.getElementById('cargoExportBtn').addEventListener('click', exportCargoCSV);
+  document.getElementById('cargoTableWrap').addEventListener('click', function(e){
+    var delBtn = e.target.closest('[data-action="delete-cargo"]');
+    if(delBtn){ deleteCargoEntry(delBtn.dataset.id); }
+  });
+
+  var tabTitles = { jobs:'To Do List', crew:'Crew List', cargo:'Cargo Log' };
+  document.getElementById('topTabs').addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-tab]');
+    if(!btn) return;
+    activeTab = btn.dataset.tab;
+    document.querySelectorAll('#topTabs button').forEach(function(b){ b.classList.toggle('active', b===btn); });
+    document.getElementById('jobsSection').style.display = activeTab==='jobs' ? '' : 'none';
+    document.getElementById('crewSection').style.display = activeTab==='crew' ? '' : 'none';
+    document.getElementById('cargoSection').style.display = activeTab==='cargo' ? '' : 'none';
+    document.getElementById('pageTitle').textContent = tabTitles[activeTab];
+    document.getElementById('fabAdd').style.display = activeTab==='jobs' ? '' : 'none';
+  });
+})();
+</script>
+
+<script>
+// Registers the offline cache. Fails harmlessly when the page is opened
+// straight off disk rather than served over https.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('./sw.js').catch(function(){ /* offline cache unavailable */ });
+  });
+}
+</script>
+</body>
+</html>
