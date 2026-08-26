@@ -1500,9 +1500,15 @@
   var AD19_DEFAULT_MARSEC = 'Level 1';
   var AD19_COL_MARSEC = 25;
 
+  // Toolbox Meeting Time is a per-activity column in the planner, not part of
+  // the once-a-day block, so every exported row carries the usual slot.
+  var AD19_DEFAULT_TOOLBOX_TIME = '0800 - 0830';
+  var AD19_COL_TOOLBOX_TIME = 7;
+
   function ad19Row(t, firstOfDay){
     var row = new Array(AD19_COLUMNS.length).fill('');
     if(firstOfDay) row[AD19_COL_MARSEC] = AD19_DEFAULT_MARSEC;
+    row[AD19_COL_TOOLBOX_TIME] = AD19_DEFAULT_TOOLBOX_TIME;
     row[0]  = t.dateCompleted ? fmtDate(t.dateCompleted) : '';   // Date Completed
     row[1]  = t.job;                                             // Activities
     row[6]  = t.ra ? 'YES' : 'NO';                               // RA Form SF-23 Required
