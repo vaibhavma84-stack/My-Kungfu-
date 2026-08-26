@@ -1563,25 +1563,60 @@
   }
 
   // ---------- AD-19 Work Planner export ----------
-  // Columns mirror the "Job Log" sheet of AD19_Work_Planner_TEMPLATE.xlsm exactly
-  // and in the same order, so the rows paste straight in below the header.
-  // The app does not capture the toolbox / PPE / manning detail or the once-a-day
-  // header block, so those columns export empty and are filled in aboard.
+  // Columns mirror the activity table of the "Planner" tab (row 11/12 headers,
+  // columns A to Q) with the three-row PPE block flattened into three columns,
+  // so each job is one row. The Planner itself merges A and B across three rows
+  // per activity, which no CSV can paste into, so this is laid out to be read
+  // and transferred across, with the manning and PPE detail filled in there.
   var AD19_COLUMNS = [
-    'Date Completed','Activities','Task','Person Carrying Out Task','Single Person Task','Team',
-    'RA Form SF-23 Required','Toolbox Meeting Time','PPE','Type of Glove','Other PPE (Specify)',
-    'Work & Rest Hours Compiled','Permit to Work','Time Schedule (Tentative)',
-    'Toolbox Meeting Key Points / Remarks','Facilitator','Recipients','Time','Priority','Photo',
-    '[Once/day] Weather','[Once/day] Vessel Location','[Once/day] Meeting Date',
-    '[Once/day] Duty Engineer Rank','[Once/day] Name of Duty Engineer','[Once/day] MARSEC Level',
-    '[Once/day] Officer In Charge -1 (Contractors)','[Once/day] Pollution / Special Area',
-    '[Once/day] Officer In Charge -2 (Contractors)','[Once/day] Previous Day Activities Reviewed',
-    "[Once/day] Ship's Clock Adjustment (Hours)",'[Once/day] Is SIMOPS Planned?',
-    '[Once/day] SIMOPS - 1','[Once/day] SIMOPS - 2'
+    'S.NO','ACTIVITIES','TASK','PERSON CARRYING OUT TASK','SINGLE PERSON TASK',
+    'TEAM (include Safety Supervisor - where required)','RISK ASSESSMENT FORM SF-23 REQUIRED',
+    'TOOLBOX MEETING TIME','PPE','TYPE OF GLOVE','OTHER PPE (SPECIFY)',
+    'WORK & REST HOURS COMPILED','PERMIT TO WORK','TIME SCHEDULE (TENTATIVE)',
+    'TOOLBOX MEETING KEY POINTS, ANY OTHER REMARKS','FACILITATOR',
+    'RECIPIENTS (SHIP STAFF AND CONTRACTORS)','TIME'
   ];
 
-  // The form is filled by completion date, so that is what orders and groups the
-  // export. A job not yet ticked off falls back to its due date.
+  var AD19_COL = {
+    SNO:0, ACTIVITY:1, TASK:2, PERSON:3, SINGLE:4, TEAM:5, RA:6, TOOLBOX_TIME:7,
+    PPE:8, GLOVE:9, OTHER_PPE:10, WORK_REST:11, PTW:12, SCHEDULE:13,
+    REMARKS:14, FACILITATOR:15, RECIPIENTS:16, TIME:17
+  };
+
+  // Standing values, filled so they are not typed out every day.
+  var AD19_VESSEL_NAME       = 'GAS PLANET';
+  var AD19_DEFAULT_MARSEC    = 'MARSEC LEVEL 1';
+  var AD19_DEFAULT_TOOLBOX_TIME = '0800 - 0830';
+  var AD19_DEFAULT_WORK_REST = 'Yes';
+
+  // S.NO 1 to 3 of the planner are the standing watchkeeping entries — bridge
+  // watchkeeping, routine accommodation cleaning, food preparation — which are
+  // already on the form, so the export numbers from 4.
+  var AD19_FIXED_ROWS = 3;
+
+  // Permit to Work types — Sheet4!S13:S23 of the AD19 template, the same list the
+  // sheet validates against, so an exported value needs no editing.
+  var PTW_TYPES = [
+    'N/A','WORK AT HEIGHT/OVERSIDE','HOT WORK','COLD WORK','ENCLOSED SPACE','UNDERWATER',
+    'ELECTRICAL','PRESSURE TESTING OF PIPELINES','ELEVATOR MAINTENANCE',
+    'LIFEBOAT OPERATION / MAINTENANCE','WORKING ON DECK IN HEAVY WEATHER'
+  ];
+
+  function fillPtwTypes(){
+    var sel = document.getElementById('inPtwType');
+    sel.innerHTML = '<option value="">Select…</option>' + PTW_TYPES.map(function(v){
+      return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+    }).join('');
+  }
+
+  function syncPtwTypeRow(){
+    var on = document.getElementById('inPTW').dataset.value === 'yes';
+    document.getElementById('ptwTypeRow').style.display = on ? '' : 'none';
+    if(!on) document.getElementById('inPtwType').value = '';
+  }
+
+  // The planner is a per-day form, so the export is grouped by completion date.
+  // A job not yet ticked off falls back to its due date.
   function ad19Day(t){ return t.dateCompleted || t.due || ''; }
 
   function ad19Jobs(){
@@ -1593,38 +1628,18 @@
     });
   }
 
-  // The sheet fills the once-a-day block on the first row of each date group
-  // only (see rows 16/17 of the template), so the export does the same.
-  var AD19_DEFAULT_MARSEC = 'Level 1';
-  var AD19_COL_MARSEC = 25;
-
-  // Toolbox Meeting Time is a per-activity column in the planner, not part of
-  // the once-a-day block, so every exported row carries the usual slot.
-  var AD19_DEFAULT_TOOLBOX_TIME = '0800 - 0830';
-  var AD19_COL_TOOLBOX_TIME = 7;
-
-  // Work & Rest Hours Compiled — "Yes" is the ordinary case. The sheet's own
-  // list (Sheet4!F5:F7) offers the two exceptions, chosen there when they apply.
-  var AD19_DEFAULT_WORK_REST = 'Yes';
-  var AD19_COL_WORK_REST = 11;
-
-  function ad19Row(t, firstOfDay){
+  function ad19Row(t, sno){
     var row = new Array(AD19_COLUMNS.length).fill('');
-    if(firstOfDay) row[AD19_COL_MARSEC] = AD19_DEFAULT_MARSEC;
-    row[AD19_COL_TOOLBOX_TIME] = AD19_DEFAULT_TOOLBOX_TIME;
-    row[AD19_COL_WORK_REST] = AD19_DEFAULT_WORK_REST;
-    row[0]  = t.dateCompleted ? fmtDate(t.dateCompleted) : '';   // Date Completed
-    row[1]  = t.job;                                             // Activities
-    row[6]  = t.ra ? 'YES' : 'NO';                               // RA Form SF-23 Required
-    row[12] = t.ptw ? (t.ptwType || 'YES') : '';                 // Permit to Work (type)
-    row[14] = t.remarks || '';                                   // Toolbox Key Points / Remarks
-    row[18] = t.priority.charAt(0).toUpperCase() + t.priority.slice(1); // Priority
-    row[19] = (t.photos && t.photos.length) ? String(t.photos.length) : '';
-    // The planner has no column for a due date, so a job still outstanding
-    // carries its due date in the remarks rather than losing it.
-    if(!t.done && t.due){
-      row[14] = ('Due ' + fmtDate(t.due) + (row[14] ? ' — ' + row[14] : ''));
-    }
+    row[AD19_COL.SNO]          = String(sno);
+    row[AD19_COL.ACTIVITY]     = t.job;
+    row[AD19_COL.RA]           = t.ra ? 'YES' : 'NO';
+    row[AD19_COL.TOOLBOX_TIME] = AD19_DEFAULT_TOOLBOX_TIME;
+    row[AD19_COL.WORK_REST]    = AD19_DEFAULT_WORK_REST;
+    row[AD19_COL.PTW]          = t.ptw ? (t.ptwType || 'YES') : 'N/A';
+    row[AD19_COL.REMARKS]      = t.remarks || '';
+    // Not yet ticked off, so the date shown is the plan date rather than the
+    // date done — say so instead of letting it pass as completed.
+    if(!t.done) row[AD19_COL.REMARKS] = 'NOT YET COMPLETED' + (row[AD19_COL.REMARKS] ? ' — ' + row[AD19_COL.REMARKS] : '');
     return row;
   }
 
@@ -1634,15 +1649,25 @@
       alert('No jobs are ticked AD 19 yet.\n\nTick AD 19 on a job to include it in the work planner export.');
       return;
     }
-    var rows = [AD19_COLUMNS];
+    var rows = [];
     var lastDay = null;
+    var sno = 0;
     jobs.forEach(function(t){
       var day = ad19Day(t);
-      var firstOfDay = (day !== lastDay);
-      lastDay = day;
-      rows.push(ad19Row(t, firstOfDay));
+      if(day !== lastDay){
+        if(lastDay !== null) rows.push([]);          // blank line between days
+        rows.push(['WORK PLANNER FOR DATE', day ? fmtDate(day) : '(no date)']);
+        rows.push(['VESSEL NAME', AD19_VESSEL_NAME]);
+        rows.push(['SECURITY PRECAUTION FOR PLANNED DATE', AD19_DEFAULT_MARSEC]);
+        rows.push(['NOTE', 'S.NO 1-' + AD19_FIXED_ROWS + ' are the standing watchkeeping entries already on the form. These start at ' + (AD19_FIXED_ROWS + 1) + '.']);
+        rows.push([]);
+        rows.push(AD19_COLUMNS);
+        lastDay = day;
+        sno = AD19_FIXED_ROWS;
+      }
+      rows.push(ad19Row(t, ++sno));
     });
-    downloadCSV('GasPlanet_AD19_JobLog_'+todayISO()+'.csv', toCSV(rows));
+    downloadCSV('GasPlanet_AD19_Planner_'+todayISO()+'.csv', toCSV(rows));
   }
 
   // ---------- CSV import ----------
