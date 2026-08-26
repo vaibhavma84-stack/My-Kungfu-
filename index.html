@@ -60,8 +60,8 @@
   /* ---------- Top-level tabs ---------- */
   .top-tabs{display:flex; background:var(--hull-2);}
   .top-tabs button{
-    flex:1; border:none; background:transparent; color:#A9BBC9; font-weight:700; font-size:13.5px;
-    padding:12px 8px; cursor:pointer; border-bottom:3px solid transparent;
+    flex:1; border:none; background:transparent; color:#A9BBC9; font-weight:700; font-size:12.5px;
+    padding:12px 4px; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;
   }
   .top-tabs button.active{color:#fff; border-bottom-color:var(--important); background:rgba(255,255,255,.04);}
 
@@ -369,6 +369,38 @@
     font-size:9px; font-family:ui-monospace,monospace; border-radius:8px; padding:0 4px; line-height:14px;
   }
 
+  /* ---------- Ship's particulars ---------- */
+  #shipPasteWrap{padding:14px 20px; background:#fff; border-bottom:1px solid var(--line);}
+  #shipPaste{
+    width:100%; padding:10px; border:1px solid var(--line); border-radius:8px;
+    background:var(--paper); color:var(--ink); font-family:inherit; font-size:14px; resize:vertical;
+  }
+  .ship-note{
+    font-size:12.5px; color:var(--ink-soft); line-height:1.45; margin-bottom:9px;
+    background:#EAF1FB; border:1px solid rgba(43,95,160,.25); border-radius:8px; padding:9px 11px;
+  }
+  .ship-note b{color:var(--steel);}
+  #shipFormWrap{padding:14px 20px 100px;}
+  .ship-group{margin-bottom:18px;}
+  .ship-group h4{
+    margin:0 0 8px; font-size:11px; font-weight:800; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--ink-soft); font-family:ui-monospace,monospace;
+    padding-bottom:5px; border-bottom:2px solid var(--line);
+  }
+  .ship-fields{display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:9px;}
+  .ship-fields .field label{font-size:10px;}
+  .ship-fields .field input{padding:8px 9px; font-size:14px;}
+  .ship-fields .field input.filled{background:#fff; border-color:#B9CBDD;}
+  .ship-hero{
+    background:linear-gradient(180deg,var(--hull) 0%,var(--hull-2) 100%); color:var(--paper);
+    border-radius:10px; padding:14px 16px; margin-bottom:16px;
+  }
+  .ship-hero .sh-name{font-size:19px; font-weight:800; letter-spacing:.02em;}
+  .ship-hero .sh-meta{
+    font-family:ui-monospace,monospace; font-size:12px; color:#A9BBC9; margin-top:5px;
+    display:flex; flex-wrap:wrap; gap:4px 14px;
+  }
+
   /* ---------- Completion date picker ---------- */
   .date-card{
     background:#fff; border-radius:12px; padding:18px 18px 14px; width:100%; max-width:320px;
@@ -446,6 +478,7 @@
   <button data-tab="jobs" class="active">To Do List</button>
   <button data-tab="crew">Crew List</button>
   <button data-tab="cargo">Cargo Log</button>
+  <button data-tab="ship">Ship</button>
 </div>
 
 <div class="backup-banner" id="backupBanner" style="display:none;">
@@ -627,6 +660,28 @@
     <button class="btn btn-ghost" id="cargoExportBtn">Export CSV</button>
   </div>
   <div id="cargoTableWrap"></div>
+</div>
+
+<div id="shipSection" style="display:none;">
+  <div id="shipPasteWrap">
+    <div class="ship-note">
+      <b>From a photo of the particulars:</b> open the photo in Photos, press and hold the text,
+      Copy — then paste below and tap Read. Recognised lines fill the fields underneath.
+    </div>
+    <textarea id="shipPaste" rows="3" placeholder="Paste text copied from the particulars here…"></textarea>
+    <div class="form-row" style="margin-top:8px;">
+      <button class="btn btn-primary" id="shipParseBtn">Read pasted text</button>
+      <button class="btn btn-ghost" id="shipClearPasteBtn">Clear</button>
+    </div>
+  </div>
+  <div class="toolbar crew-toolbar">
+    <div class="spacer"></div>
+    <button class="btn btn-ghost" id="shipExportBtn">Export CSV</button>
+    <button class="btn btn-ghost" id="shipImportBtn">Import CSV</button>
+    <input type="file" id="shipImportInput" accept=".csv,text/csv" style="display:none">
+    <button class="btn btn-danger" id="shipResetBtn">New ship</button>
+  </div>
+  <div id="shipFormWrap"></div>
 </div>
 
 <footer>TO DO LIST · CREW LIST · CARGO LOG · DATA STORED LOCALLY ON THIS DEVICE ONLY</footer>
@@ -1562,6 +1617,210 @@
     if(!on) document.getElementById('inPtwType').value = '';
   }
 
+  // ---------- ship's particulars ----------
+  // One profile per device. Signing off one ship and joining another means
+  // "New ship", then pasting that vessel's particulars in.
+  var SHIP_KEY = 'gasplanet_ship_v1';
+  var ship = {};
+
+  var SHIP_GROUPS = [
+    { title:'Identification', fields:[
+      ['name','Vessel Name'], ['type','Type'], ['imo','IMO / Lloyd\'s No.'], ['callSign','Call Sign'],
+      ['mmsi','MMSI'], ['flag','Flag'], ['portReg','Port of Registry'], ['officialNo','Official Number']
+    ]},
+    { title:'Class & Build', fields:[
+      ['classSociety','Class Society'], ['classRegNo','Class Register No.'], ['pandi','P & I'],
+      ['yardNo','Yard No.'], ['shipyard','Shipyard'], ['delivered','Delivered'],
+      ['launched','Launched'], ['keelLaid','Keel Laid']
+    ]},
+    { title:'Management', fields:[
+      ['owners','Owners'], ['managers','Managers'],
+      ['operators','Commercial Operators'], ['email','Ship E-mail']
+    ]},
+    { title:'Principal Dimensions (m)', fields:[
+      ['loa','LOA'], ['lbp','LBP'], ['breadth','Breadth (moulded)'], ['depth','Depth (moulded)'],
+      ['summerDraft','Summer Draft'], ['maxAirDraft','Max Air Draft'], ['keelMasthead','Keel to Masthead'],
+      ['keelBridge','Keel to Bridge'], ['bridgeBow','Bridge Front - Bow'],
+      ['bridgeStern','Bridge Front - Stern'], ['bridgeManifold','Bridge Front - Manifold']
+    ]},
+    { title:'Tonnage & Load Line', fields:[
+      ['grt','Gross Tonnage'], ['nrt','Net Tonnage'], ['dwt','Deadweight'], ['displacement','Displacement'],
+      ['suezGt','Suez GT'], ['suezNt','Suez NT'], ['panamaNt','Panama NT'],
+      ['fwa','FWA (mm)'], ['tpc','TPC']
+    ]},
+    { title:'Cargo', fields:[
+      ['cargoTanks','No. of Cargo Tanks'], ['cargoCap100','Total Capacity 100% (m3)'],
+      ['cargoCap97','Total Capacity 97% (m3)'], ['minCargoTemp','Min Cargo Temp (C)'],
+      ['maxCargoSg','Max Cargo S.G.'], ['marvs','MARVS Sea / Hbr'], ['manifold','Cargo Manifold']
+    ]},
+    { title:'Machinery', fields:[
+      ['mainEngine','Main Engine'], ['mcr','M.C.R.'], ['ncr','N.C.R.'],
+      ['auxEngine','Aux Engine'], ['propeller','Propeller'], ['rudder','Rudder']
+    ]}
+  ];
+
+  // Read from the vessel's own particulars sheet.
+  var SHIP_DEFAULT = {
+    name:"LPG 'GAS PLANET'", type:'LPG Carrier', imo:'9889552', callSign:'3EZC5',
+    mmsi:'355437000', flag:'PANAMA', portReg:'PANAMA', officialNo:'51758-20',
+    classSociety:'NKK', classRegNo:'203536', pandi:'UK P&I', yardNo:'KHI-1743',
+    shipyard:'Kawasaki Heavy Industries Ltd., Sakaide, Japan',
+    delivered:'16-Oct-2020', launched:'27-Apr-2020', keelLaid:'20-Jan-2020',
+    owners:'Nissen Kaiun Co. Ltd. (99%) / Southern Route Maritime, S.A. (1%)',
+    managers:'Synergy Maritime Pvt. Ltd, Chennai, India',
+    operators:'NYK Energy Ocean Asia Pte Ltd.',
+    email:'gasplanet@synergypacificship.com',
+    loa:'229.90', lbp:'226.50', breadth:'37.20', depth:'21.90', summerDraft:'11.511',
+    maxAirDraft:'40.43', keelMasthead:'50.30', keelBridge:'36.60',
+    bridgeBow:'189.80', bridgeStern:'40.10', bridgeManifold:'72.55',
+    grt:'49231', nrt:'14770', dwt:'54997', displacement:'74555',
+    suezGt:'51485.40', suezNt:'45836.06', panamaNt:'40578.00', fwa:'253', tpc:'73.6',
+    cargoTanks:'4', cargoCap100:'84178.012', cargoCap97:'81652.672',
+    minCargoTemp:'-46.0', maxCargoSg:'0.6100', marvs:'25 kPa / 50 kPa',
+    manifold:'FWD - V (12" 150) - L (16" 150) - L (16" 300) - V (12" 150) - AFT',
+    mainEngine:'KAWASAKI MAN B&W 7S60ME-C10.5', mcr:'11830 kW @ 84 rpm', ncr:'10650 kW @ 81 rpm',
+    auxEngine:'YANMAR 6EY22ALW 1220 kW x 900/min',
+    propeller:'5-Blade FPP, single screw, solid Ni-Al-Bronze keyless',
+    rudder:'Mariner with bulb & fins'
+  };
+
+  function loadShip(){
+    try{
+      var raw = localStorage.getItem(SHIP_KEY);
+      ship = raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(SHIP_DEFAULT));
+      lastGood[SHIP_KEY] = JSON.stringify(ship);
+    }catch(e){ ship = {}; }
+  }
+  function saveShip(){
+    return persist(SHIP_KEY, ship, "Ship's Particulars", function(prev){ ship = prev; });
+  }
+
+  function shipName(){ return (ship.name || '').replace(/^LPG\s*/i,'').replace(/['"]/g,'').trim() || 'VESSEL'; }
+
+  function renderShip(){
+    var wrap = document.getElementById('shipFormWrap');
+    var html = '<div class="ship-hero"><div class="sh-name">' + escapeHtml(ship.name || 'No vessel set') + '</div>'
+             + '<div class="sh-meta">'
+             + (ship.imo ? '<span>IMO ' + escapeHtml(ship.imo) + '</span>' : '')
+             + (ship.callSign ? '<span>Call sign ' + escapeHtml(ship.callSign) + '</span>' : '')
+             + (ship.flag ? '<span>' + escapeHtml(ship.flag) + '</span>' : '')
+             + (ship.mmsi ? '<span>MMSI ' + escapeHtml(ship.mmsi) + '</span>' : '')
+             + '</div></div>';
+    SHIP_GROUPS.forEach(function(g){
+      html += '<div class="ship-group"><h4>' + escapeHtml(g.title) + '</h4><div class="ship-fields">';
+      g.fields.forEach(function(f){
+        var v = ship[f[0]] || '';
+        html += '<div class="field"><label>' + escapeHtml(f[1]) + '</label>'
+              + '<input type="text" data-ship="' + f[0] + '" value="' + escapeHtml(v) + '"'
+              + (v ? ' class="filled"' : '') + '></div>';
+      });
+      html += '</div></div>';
+    });
+    wrap.innerHTML = html;
+  }
+
+  function captureShipInputs(){
+    document.querySelectorAll('#shipFormWrap input[data-ship]').forEach(function(inp){
+      ship[inp.dataset.ship] = inp.value.trim();
+    });
+  }
+
+  // Parses text copied off a particulars sheet (iOS Live Text and the like).
+  // Labels vary between owners, so each field carries several spellings.
+  var SHIP_PATTERNS = [
+    ['imo',        /\b(?:IMO|LLOYD'?S)[^0-9]{0,24}(\d{7})\b/i],
+    ['mmsi',       /\bMMSI[^0-9]{0,16}(\d{9})\b/i],
+    ['callSign',   /\bCALL\s*SIGN[^A-Z0-9]{0,12}([A-Z0-9]{3,10})\b/i],
+    ['officialNo', /\bOFFICIAL\s*(?:NUMBER|NO\.?)[^A-Z0-9]{0,12}([A-Z0-9\-\/]+)/i],
+    ['flag',       /\bFLAG[^A-Za-z]{0,12}([A-Za-z][A-Za-z .'-]{2,28})/i],
+    ['portReg',    /\bPORT\s*OF\s*REGISTRY[^A-Za-z]{0,12}([A-Za-z][A-Za-z .'-]{2,28})/i],
+    ['yardNo',     /\bYARD\s*(?:NO\.?|NUMBER)[^A-Z0-9]{0,12}([A-Z0-9\-\/]+)/i],
+    ['loa',        /\bLOA\b[^0-9]{0,14}(\d{1,3}(?:\.\d+)?)/i],
+    ['lbp',        /\bLBP\b[^0-9]{0,14}(\d{1,3}(?:\.\d+)?)/i],
+    ['breadth',    /\bBREADTH[^0-9]{0,24}(\d{1,3}(?:\.\d+)?)/i],
+    ['depth',      /\bDEPTH[^0-9]{0,24}(\d{1,3}(?:\.\d+)?)/i],
+    ['grt',        /\bGROSS[^0-9]{0,20}(\d[\d,]*(?:\.\d+)?)/i],
+    ['nrt',        /\bNET\b[^0-9]{0,20}(\d[\d,]*(?:\.\d+)?)/i],
+    ['dwt',        /\b(?:DWT|DEADWEIGHT)[^0-9]{0,20}(\d[\d,]*(?:\.\d+)?)/i],
+    ['fwa',        /\bFWA[^0-9]{0,16}(\d{1,4})/i],
+    ['tpc',        /\bTPC[^0-9]{0,16}(\d{1,3}(?:\.\d+)?)/i],
+    ['email',      /([A-Za-z0-9._%-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/],
+    ['mainEngine', /\bMAIN\s*ENGINE(?:\s*MAKE)?[^A-Za-z0-9]{0,12}([A-Za-z0-9][^\n]{4,60})/i],
+    ['managers',   /\bMANAGERS?[^A-Za-z]{0,12}([A-Za-z][^\n]{4,90})/i],
+    ['owners',     /\bOWNERS?[^A-Za-z0-9]{0,12}([A-Za-z0-9][^\n]{4,90})/i]
+  ];
+
+  function parseShipText(text){
+    var found = {};
+    // vessel name: a quoted name wins, else a line that looks like a title
+    var q = text.match(/['"‘’“”]\s*([A-Z][A-Z0-9 .'-]{2,40})\s*['"‘’“”]/);
+    if(q) found.name = q[1].trim();
+    SHIP_PATTERNS.forEach(function(pr){
+      var m = text.match(pr[1]);
+      if(m && m[1]) found[pr[0]] = m[1].replace(/,/g,'').trim();
+    });
+    return found;
+  }
+
+  function applyShipParse(){
+    var text = document.getElementById('shipPaste').value;
+    if(!text.trim()){ alert('Paste the copied text into the box first.'); return; }
+    captureShipInputs();
+    var found = parseShipText(text);
+    var keys = Object.keys(found);
+    if(!keys.length){
+      alert('Nothing recognised in that text.\n\nIt still works to type the fields in below — the paste box only fills what it can match.');
+      return;
+    }
+    keys.forEach(function(k){ ship[k] = found[k]; });
+    if(!saveShip()){ renderShip(); return; }
+    renderShip();
+    updateShipHeader();
+    alert('Filled ' + keys.length + ' field(s):\n\n' + keys.map(function(k){
+      return '  ' + k + ' = ' + found[k];
+    }).join('\n') + '\n\nCheck them against the sheet and correct anything below.');
+  }
+
+  function updateShipHeader(){
+    var el = document.getElementById('footerShip');
+    if(el) el.textContent = shipName();
+  }
+
+  function exportShipCSV(){
+    captureShipInputs();
+    var rows = [['Field','Value']];
+    SHIP_GROUPS.forEach(function(g){
+      g.fields.forEach(function(f){ rows.push([f[1], ship[f[0]] || '']); });
+    });
+    downloadCSV('ShipParticulars_' + shipName().replace(/[^A-Za-z0-9]+/g,'_') + '_' + todayISO() + '.csv', toCSV(rows));
+  }
+
+  function importShipCSVFile(file){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var rows = parseCSV(e.target.result);
+      if(rows.length < 2){ alert('No data rows found in this file.'); return; }
+      var byLabel = {};
+      SHIP_GROUPS.forEach(function(g){ g.fields.forEach(function(f){ byLabel[normalizeHeader(f[1])] = f[0]; }); });
+      var n = 0;
+      for(var r = 1; r < rows.length; r++){
+        var key = byLabel[normalizeHeader(rows[r][0] || '')];
+        if(key){ ship[key] = (rows[r][1] || '').trim(); n++; }
+      }
+      if(!saveShip()){ renderShip(); return; }
+      renderShip(); updateShipHeader();
+      alert('Imported ' + n + ' field(s).');
+    };
+    reader.readAsText(file);
+  }
+
+  function resetShip(){
+    if(!confirm('Clear every field and start a new ship?\n\nThe to do list, crew list and cargo log are not touched. Export the particulars first if you want a copy.')) return;
+    ship = {};
+    if(!saveShip()) return;
+    renderShip(); updateShipHeader();
+  }
+
   // ---------- AD-19 Work Planner export ----------
   // Columns mirror the activity table of the "Planner" tab (row 11/12 headers,
   // columns A to Q) with the three-row PPE block flattened into three columns,
@@ -1584,7 +1843,7 @@
   };
 
   // Standing values, filled so they are not typed out every day.
-  var AD19_VESSEL_NAME       = 'GAS PLANET';
+  // Vessel name comes from the Ship tab, so a change of ship carries through.
   var AD19_DEFAULT_MARSEC    = 'MARSEC LEVEL 1';
   var AD19_DEFAULT_TOOLBOX_TIME = '0800 - 0830';
   var AD19_DEFAULT_WORK_REST = 'Yes';
@@ -1657,7 +1916,7 @@
       if(day !== lastDay){
         if(lastDay !== null) rows.push([]);          // blank line between days
         rows.push(['WORK PLANNER FOR DATE', day ? fmtDate(day) : '(no date)']);
-        rows.push(['VESSEL NAME', AD19_VESSEL_NAME]);
+        rows.push(['VESSEL NAME', shipName()]);
         rows.push(['SECURITY PRECAUTION FOR PLANNED DATE', AD19_DEFAULT_MARSEC]);
         rows.push(['NOTE', 'S.NO 1-' + AD19_FIXED_ROWS + ' are the standing watchkeeping entries already on the form. These start at ' + (AD19_FIXED_ROWS + 1) + '.']);
         rows.push([]);
@@ -2012,12 +2271,14 @@
   loadTasks();
   loadCrew();
   loadCargo();
+  loadShip();
   setDateLine();
   updateStoragePill();
   render();
   renderCrew();
   renderTankFields();
   renderCargoTable();
+  renderShip();
   fillPtwTypes();
   syncPtwTypeRow();
   document.getElementById('cargoDate').value = todayISO();
@@ -2046,6 +2307,31 @@
     e.target.value = '';
   });
 
+  document.getElementById('shipParseBtn').addEventListener('click', applyShipParse);
+  document.getElementById('shipClearPasteBtn').addEventListener('click', function(){
+    document.getElementById('shipPaste').value = '';
+  });
+  document.getElementById('shipExportBtn').addEventListener('click', exportShipCSV);
+  document.getElementById('shipImportBtn').addEventListener('click', function(){
+    document.getElementById('shipImportInput').click();
+  });
+  document.getElementById('shipImportInput').addEventListener('change', function(e){
+    var file = e.target.files[0];
+    if(file) importShipCSVFile(file);
+    e.target.value = '';
+  });
+  document.getElementById('shipResetBtn').addEventListener('click', resetShip);
+  // typing straight into a field saves on blur
+  document.getElementById('shipFormWrap').addEventListener('change', function(e){
+    if(!e.target.matches('input[data-ship]')) return;
+    captureShipInputs();
+    saveShip();
+    e.target.classList.toggle('filled', !!e.target.value.trim());
+    if(e.target.dataset.ship === 'name'){
+      document.querySelector('.ship-hero .sh-name').textContent = ship.name || 'No vessel set';
+    }
+  });
+
   document.getElementById('tankTabs').addEventListener('click', function(e){
     var btn = e.target.closest('button[data-tank]');
     if(!btn) return;
@@ -2058,7 +2344,7 @@
     if(delBtn){ deleteCargoEntry(delBtn.dataset.id); }
   });
 
-  var tabTitles = { jobs:'To Do List', crew:'Crew List', cargo:'Cargo Log' };
+  var tabTitles = { jobs:'To Do List', crew:'Crew List', cargo:'Cargo Log', ship:"Ship's Particulars" };
   document.getElementById('topTabs').addEventListener('click', function(e){
     var btn = e.target.closest('button[data-tab]');
     if(!btn) return;
@@ -2067,6 +2353,7 @@
     document.getElementById('jobsSection').style.display = activeTab==='jobs' ? '' : 'none';
     document.getElementById('crewSection').style.display = activeTab==='crew' ? '' : 'none';
     document.getElementById('cargoSection').style.display = activeTab==='cargo' ? '' : 'none';
+    document.getElementById('shipSection').style.display = activeTab==='ship' ? '' : 'none';
     document.getElementById('pageTitle').textContent = tabTitles[activeTab];
     document.getElementById('fabAdd').style.display = activeTab==='jobs' ? '' : 'none';
   });
