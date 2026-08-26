@@ -369,6 +369,34 @@
     font-size:9px; font-family:ui-monospace,monospace; border-radius:8px; padding:0 4px; line-height:14px;
   }
 
+  /* ---------- Completion date picker ---------- */
+  .date-card{
+    background:#fff; border-radius:12px; padding:18px 18px 14px; width:100%; max-width:320px;
+    box-shadow:0 12px 40px rgba(11,31,46,.45);
+  }
+  .date-card h3{margin:0 0 4px; font-size:16px; font-weight:700; color:var(--ink);}
+  .date-card .dc-job{
+    font-size:12.5px; color:var(--ink-soft); margin-bottom:14px; line-height:1.35;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .date-card label{
+    display:block; font-size:11px; color:var(--ink-soft); margin-bottom:5px;
+    text-transform:uppercase; letter-spacing:.05em; font-weight:700;
+  }
+  .date-card input[type=date]{
+    width:100%; padding:12px 10px; border:1px solid var(--line); border-radius:8px;
+    background:var(--paper); color:var(--ink); font-size:16px; font-family:inherit;
+  }
+  .date-card .dc-actions{display:flex; gap:8px; margin-top:14px;}
+  .date-card .dc-actions button{flex:1; padding:11px 8px; font-size:13.5px;}
+
+  .done-chip{
+    display:inline-flex; align-items:center; gap:3px; margin-left:6px; padding:1px 6px;
+    border-radius:4px; background:#E8F0E9; color:#3F6B48; border:1px solid rgba(110,139,116,.4);
+    font-family:ui-monospace,monospace; font-size:10px; font-weight:700; white-space:nowrap;
+  }
+  .done-chip.missing{background:#FBF1EE; color:var(--urgent); border-color:rgba(199,69,44,.35);}
+
   /* ---------- Photo viewer modal ---------- */
   .modal-bg{
     position:fixed; inset:0; background:rgba(11,31,46,.85); z-index:100;
@@ -456,6 +484,12 @@
       <button type="button" class="yn-toggle" id="inAd34" data-value="no">AD 19</button>
       <button type="button" class="yn-toggle" id="inRA" data-value="no">RA</button>
       <button type="button" class="yn-toggle" id="inPTW" data-value="no">PTW</button>
+    </div>
+    <div class="form-row" id="ptwTypeRow" style="display:none;">
+      <div class="field">
+        <label>Permit type</label>
+        <select id="inPtwType"></select>
+      </div>
     </div>
     <div class="form-row">
       <div class="field">
@@ -886,6 +920,7 @@
       ad34Planner: ad34,
       ra: ra === 'yes',
       ptw: ptw === 'yes',
+      ptwType: ptw === 'yes' ? document.getElementById('inPtwType').value : '',
       photos: pendingPhotos.slice(),
       done: false,
       dateCompleted: '',
@@ -904,6 +939,8 @@
     resetYnToggle('inAd34');
     resetYnToggle('inRA');
     resetYnToggle('inPTW');
+    document.getElementById('inPtwType').value = '';
+    syncPtwTypeRow();
     pendingPhotos = [];
     renderPendingThumbs();
 
@@ -914,10 +951,31 @@
   function toggleDone(id){
     var t = tasks.find(function(x){ return x.id===id; });
     if(!t) return;
-    t.done = !t.done;
-    t.dateCompleted = t.done ? todayISO() : '';
-    saveTasks();
-    render();
+    if(t.done){                       // un-ticking needs no date
+      t.done = false;
+      t.dateCompleted = '';
+      saveTasks();
+      render();
+      return;
+    }
+    askCompletionDate(t.job, t.due && t.due <= todayISO() ? t.due : todayISO(), function(iso){
+      if(!iso) return;                // cancelled — leave the job pending
+      t.done = true;
+      t.dateCompleted = iso;
+      saveTasks();
+      render();
+    });
+  }
+
+  function editCompletionDate(id){
+    var t = tasks.find(function(x){ return x.id===id; });
+    if(!t || !t.done) return;
+    askCompletionDate(t.job, t.dateCompleted || todayISO(), function(iso){
+      if(!iso) return;
+      t.dateCompleted = iso;
+      saveTasks();
+      render();
+    });
   }
 
   function deleteTask(id){
@@ -961,7 +1019,13 @@
     html += '  </div>';
     html += '  <div class="task-main" data-action="expand" data-id="'+t.id+'">';
     html += '    <div class="task-top">';
-    html += '      <div class="sno-date">#'+t.serial+' · '+(t.due ? fmtDateShort(t.due) : 'no date')+(overdueFlag?' ⚠':'')+'</div>';
+    html += '      <div class="sno-date">#'+t.serial+' · '+(t.due ? fmtDateShort(t.due) : 'no date')+(overdueFlag?' ⚠':'');
+    if(t.done){
+      html += '<span class="done-chip'+(t.dateCompleted?'':' missing')+'" data-action="editcompleted" data-id="'+t.id+'">'
+            + (t.dateCompleted ? '✓ ' + fmtDate(t.dateCompleted) : '✓ set date')
+            + '</span>';
+    }
+    html += '</div>';
     html += '      <div class="job-row">';
     html += '        <span class="job-text">'+escapeHtml(t.job)+'</span>';
     html += '        <span class="chevron">▸</span>';
@@ -970,11 +1034,11 @@
     html += '    <div class="task-details">';
     html += '      <div class="meta-row">';
     html += '        <span class="m-item">📅 Due: '+fmtDate(t.due)+(overdueFlag?' <span class="overdue-flag">— OVERDUE</span>':'')+'</span>';
-    if(t.done){ html += '        <span class="m-item">✅ Completed: '+fmtDate(t.dateCompleted)+'</span>'; }
+    if(t.done){ html += '        <span class="m-item" data-action="editcompleted" data-id="'+t.id+'" style="cursor:pointer;text-decoration:underline dotted">✅ Completed: '+fmtDate(t.dateCompleted)+' — tap to change</span>'; }
     if(t.weeklyReport==='yes'){ html += '        <span class="flag-tag">WR</span>'; }
     if(t.ad34Planner==='yes'){ html += '        <span class="flag-tag flag-ad34">AD 19</span>'; }
     if(t.ra){ html += '        <span class="flag-tag flag-ra">RA</span>'; }
-    if(t.ptw){ html += '        <span class="flag-tag flag-ptw">PTW</span>'; }
+    if(t.ptw){ html += '        <span class="flag-tag flag-ptw">PTW'+(t.ptwType ? ': '+escapeHtml(t.ptwType) : '')+'</span>'; }
     html += '      </div>';
     if(t.remarks){ html += '      <div class="remarks">'+escapeHtml(t.remarks)+'</div>'; }
     if(t.photos && t.photos.length){
@@ -1447,7 +1511,7 @@
 
   // ---------- jobs CSV export ----------
   function exportCSV(){
-    var rows = [['Serial No','Due Date','Job','Priority','Status','Date Completed','Remarks','Weekly Report','AD-19 Planner','RA','PTW','Photos Attached']];
+    var rows = [['Serial No','Due Date','Job','Priority','Status','Date Completed','Remarks','Weekly Report','AD-19 Planner','RA','PTW','Permit Type','Photos Attached']];
     tasks.slice().sort(function(a,b){return a.serial-b.serial;}).forEach(function(t){
       rows.push([
         t.serial,
@@ -1461,11 +1525,41 @@
         t.ad34Planner==='yes' ? 'Yes' : 'No',
         t.ra ? 'Yes' : 'No',
         t.ptw ? 'Yes' : 'No',
+        t.ptwType || '',
         (t.photos ? t.photos.length : 0)
       ]);
     });
     downloadCSV('GasPlanet_ToDoList_'+todayISO()+'.csv', toCSV(rows));
     noteBackup('jobs');
+  }
+
+  // Permit to Work types — Sheet4!S13:S23 of the AD19 template, the same list the
+  // Job Log column M validates against, so exported values drop in without edits.
+  var PTW_TYPES = [
+    'N/A',
+    'WORK AT HEIGHT/OVERSIDE',
+    'HOT WORK',
+    'COLD WORK',
+    'ENCLOSED SPACE',
+    'UNDERWATER',
+    'ELECTRICAL',
+    'PRESSURE TESTING OF PIPELINES',
+    'ELEVATOR MAINTENANCE',
+    'LIFEBOAT OPERATION / MAINTENANCE',
+    'WORKING ON DECK IN HEAVY WEATHER'
+  ];
+
+  function fillPtwTypes(){
+    var sel = document.getElementById('inPtwType');
+    sel.innerHTML = '<option value="">Select…</option>' + PTW_TYPES.map(function(v){
+      return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+    }).join('');
+  }
+
+  function syncPtwTypeRow(){
+    var on = document.getElementById('inPTW').dataset.value === 'yes';
+    document.getElementById('ptwTypeRow').style.display = on ? '' : 'none';
+    if(!on) document.getElementById('inPtwType').value = '';
   }
 
   // ---------- AD-19 Work Planner export ----------
@@ -1486,10 +1580,14 @@
     '[Once/day] SIMOPS - 1','[Once/day] SIMOPS - 2'
   ];
 
+  // The form is filled by completion date, so that is what orders and groups the
+  // export. A job not yet ticked off falls back to its due date.
+  function ad19Day(t){ return t.dateCompleted || t.due || ''; }
+
   function ad19Jobs(){
     return tasks.filter(function(t){ return t.ad34Planner === 'yes'; }).sort(function(a,b){
-      var ad = a.due || a.dateCompleted || '9999-99-99';
-      var bd = b.due || b.dateCompleted || '9999-99-99';
+      var ad = ad19Day(a) || '9999-99-99';
+      var bd = ad19Day(b) || '9999-99-99';
       if(ad !== bd) return ad < bd ? -1 : 1;
       return a.serial - b.serial;
     });
@@ -1512,7 +1610,7 @@
     row[0]  = t.dateCompleted ? fmtDate(t.dateCompleted) : '';   // Date Completed
     row[1]  = t.job;                                             // Activities
     row[6]  = t.ra ? 'YES' : 'NO';                               // RA Form SF-23 Required
-    row[12] = t.ptw ? 'YES' : '';                                // Permit to Work
+    row[12] = t.ptw ? (t.ptwType || 'YES') : '';                 // Permit to Work (type)
     row[14] = t.remarks || '';                                   // Toolbox Key Points / Remarks
     row[18] = t.priority.charAt(0).toUpperCase() + t.priority.slice(1); // Priority
     row[19] = (t.photos && t.photos.length) ? String(t.photos.length) : '';
@@ -1533,7 +1631,7 @@
     var rows = [AD19_COLUMNS];
     var lastDay = null;
     jobs.forEach(function(t){
-      var day = t.dateCompleted || t.due || '';
+      var day = ad19Day(t);
       var firstOfDay = (day !== lastDay);
       lastDay = day;
       rows.push(ad19Row(t, firstOfDay));
@@ -1624,6 +1722,7 @@
         else if(h==='ad19planner' || h==='ad19' || h==='ad34planner' || h==='ad34') col.ad34 = idx;
         else if(h==='ra') col.ra = idx;
         else if(h==='ptw') col.ptw = idx;
+        else if(h==='permittype' || h==='permittowork') col.ptwType = idx;
       });
       if(col.job === undefined){
         alert('Could not find a "Job" column in this file. Make sure the first row has column headers, including one named "Job".');
@@ -1654,6 +1753,7 @@
           ad34Planner: col.ad34!==undefined && isYesLike(row[col.ad34]) ? 'yes' : 'no',
           ra: col.ra!==undefined ? isYesLike(row[col.ra]) : false,
           ptw: col.ptw!==undefined ? isYesLike(row[col.ptw]) : false,
+          ptwType: col.ptwType!==undefined ? (row[col.ptwType]||'').trim() : '',
           photos: [],
           done: done,
           dateCompleted: done ? dateCompletedVal : '',
@@ -1666,6 +1766,43 @@
       alert('Imported '+imported+' job(s).'+(skipped ? ' Skipped '+skipped+' row(s) with no job text.' : ''));
     };
     reader.readAsText(file);
+  }
+
+  // ---------- completion date picker ----------
+  // The date a job is ticked off is rarely the day it was actually done, and the
+  // AD-19 form is filled by completion date, so the date is chosen rather than
+  // stamped automatically.
+  function askCompletionDate(jobText, defaultISO, cb){
+    var bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    bg.innerHTML =
+      '<div class="date-card">' +
+        '<h3>Date completed</h3>' +
+        '<div class="dc-job">' + escapeHtml(jobText) + '</div>' +
+        '<label>When was this job done?</label>' +
+        '<input type="date" class="dc-input" value="' + escapeHtml(defaultISO || todayISO()) + '">' +
+        '<div class="dc-actions">' +
+          '<button class="btn btn-ghost" data-dc="cancel">Cancel</button>' +
+          '<button class="btn btn-ghost" data-dc="today">Today</button>' +
+          '<button class="btn btn-primary" data-dc="ok">Confirm</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(bg);
+    var input = bg.querySelector('.dc-input');
+
+    function close(result){ bg.remove(); cb(result); }
+    bg.addEventListener('click', function(e){
+      if(e.target === bg){ close(null); return; }
+      var btn = e.target.closest('[data-dc]');
+      if(!btn) return;
+      var act = btn.dataset.dc;
+      if(act === 'cancel'){ close(null); }
+      else if(act === 'today'){ input.value = todayISO(); }
+      else if(act === 'ok'){
+        if(!input.value){ input.focus(); return; }
+        close(input.value);
+      }
+    });
   }
 
   // ---------- photo viewer ----------
@@ -1686,6 +1823,7 @@
       var isYes = btn.dataset.value === 'yes';
       btn.dataset.value = isYes ? 'no' : 'yes';
       btn.classList.toggle('checked', !isYes);
+      if(btn.id === 'inPTW') syncPtwTypeRow();
     });
   });
 
@@ -1803,6 +1941,8 @@
   document.getElementById('listWrap').addEventListener('click', function(e){
     var toggleBtn = e.target.closest('[data-action="toggle"]');
     if(toggleBtn){ toggleDone(toggleBtn.dataset.id); return; }
+    var cdBtn = e.target.closest('[data-action="editcompleted"]');
+    if(cdBtn){ editCompletionDate(cdBtn.dataset.id); return; }
     var delBtn = e.target.closest('[data-action="delete"]');
     if(delBtn){ deleteTask(delBtn.dataset.id); return; }
     var addPhotoBtn = e.target.closest('[data-action="addphoto"]');
@@ -1847,6 +1987,8 @@
   renderCrew();
   renderTankFields();
   renderCargoTable();
+  fillPtwTypes();
+  syncPtwTypeRow();
   document.getElementById('cargoDate').value = todayISO();
   renderBackupBanner();
   try{ setFormHidden(localStorage.getItem(FORM_HIDDEN_KEY) === '1'); }catch(e){ setFormHidden(false); }
