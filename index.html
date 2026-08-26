@@ -1495,8 +1495,14 @@
     });
   }
 
-  function ad19Row(t){
+  // The sheet fills the once-a-day block on the first row of each date group
+  // only (see rows 16/17 of the template), so the export does the same.
+  var AD19_DEFAULT_MARSEC = 'Level 1';
+  var AD19_COL_MARSEC = 25;
+
+  function ad19Row(t, firstOfDay){
     var row = new Array(AD19_COLUMNS.length).fill('');
+    if(firstOfDay) row[AD19_COL_MARSEC] = AD19_DEFAULT_MARSEC;
     row[0]  = t.dateCompleted ? fmtDate(t.dateCompleted) : '';   // Date Completed
     row[1]  = t.job;                                             // Activities
     row[6]  = t.ra ? 'YES' : 'NO';                               // RA Form SF-23 Required
@@ -1519,7 +1525,13 @@
       return;
     }
     var rows = [AD19_COLUMNS];
-    jobs.forEach(function(t){ rows.push(ad19Row(t)); });
+    var lastDay = null;
+    jobs.forEach(function(t){
+      var day = t.dateCompleted || t.due || '';
+      var firstOfDay = (day !== lastDay);
+      lastDay = day;
+      rows.push(ad19Row(t, firstOfDay));
+    });
     downloadCSV('GasPlanet_AD19_JobLog_'+todayISO()+'.csv', toCSV(rows));
   }
 
