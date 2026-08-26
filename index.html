@@ -453,7 +453,7 @@
     </div>
     <div class="form-row flags-row">
       <button type="button" class="yn-toggle" id="inWeekly" data-value="no">WR</button>
-      <button type="button" class="yn-toggle" id="inAd34" data-value="no">AD 34</button>
+      <button type="button" class="yn-toggle" id="inAd34" data-value="no">AD 19</button>
       <button type="button" class="yn-toggle" id="inRA" data-value="no">RA</button>
       <button type="button" class="yn-toggle" id="inPTW" data-value="no">PTW</button>
     </div>
@@ -494,6 +494,7 @@
   </select>
   <div class="spacer"></div>
   <button class="btn btn-ghost" id="exportBtn">Export CSV</button>
+  <button class="btn btn-ghost" id="exportAd19Btn">Export AD-19</button>
   <button class="btn btn-ghost" id="importBtn">Import CSV</button>
   <input type="file" id="importInput" accept=".csv,text/csv" style="display:none">
   <button class="btn btn-danger" id="clearDoneBtn">Clear completed</button>
@@ -690,6 +691,8 @@
     try{
       var raw = localStorage.getItem(STORAGE_KEY);
       tasks = raw ? JSON.parse(raw) : [];
+      // The AD 34 label was corrected to AD 19; the stored key is left alone so
+      // jobs saved under the old label keep their tick.
       lastGood[STORAGE_KEY] = JSON.stringify(tasks);
       storageWorks = true;
     }catch(e){
@@ -969,7 +972,7 @@
     html += '        <span class="m-item">📅 Due: '+fmtDate(t.due)+(overdueFlag?' <span class="overdue-flag">— OVERDUE</span>':'')+'</span>';
     if(t.done){ html += '        <span class="m-item">✅ Completed: '+fmtDate(t.dateCompleted)+'</span>'; }
     if(t.weeklyReport==='yes'){ html += '        <span class="flag-tag">WR</span>'; }
-    if(t.ad34Planner==='yes'){ html += '        <span class="flag-tag flag-ad34">AD 34</span>'; }
+    if(t.ad34Planner==='yes'){ html += '        <span class="flag-tag flag-ad34">AD 19</span>'; }
     if(t.ra){ html += '        <span class="flag-tag flag-ra">RA</span>'; }
     if(t.ptw){ html += '        <span class="flag-tag flag-ptw">PTW</span>'; }
     html += '      </div>';
@@ -1444,7 +1447,7 @@
 
   // ---------- jobs CSV export ----------
   function exportCSV(){
-    var rows = [['Serial No','Due Date','Job','Priority','Status','Date Completed','Remarks','Weekly Report','AD-34 Planner','RA','PTW','Photos Attached']];
+    var rows = [['Serial No','Due Date','Job','Priority','Status','Date Completed','Remarks','Weekly Report','AD-19 Planner','RA','PTW','Photos Attached']];
     tasks.slice().sort(function(a,b){return a.serial-b.serial;}).forEach(function(t){
       rows.push([
         t.serial,
@@ -1463,6 +1466,61 @@
     });
     downloadCSV('GasPlanet_ToDoList_'+todayISO()+'.csv', toCSV(rows));
     noteBackup('jobs');
+  }
+
+  // ---------- AD-19 Work Planner export ----------
+  // Columns mirror the "Job Log" sheet of AD19_Work_Planner_TEMPLATE.xlsm exactly
+  // and in the same order, so the rows paste straight in below the header.
+  // The app does not capture the toolbox / PPE / manning detail or the once-a-day
+  // header block, so those columns export empty and are filled in aboard.
+  var AD19_COLUMNS = [
+    'Date Completed','Activities','Task','Person Carrying Out Task','Single Person Task','Team',
+    'RA Form SF-23 Required','Toolbox Meeting Time','PPE','Type of Glove','Other PPE (Specify)',
+    'Work & Rest Hours Compiled','Permit to Work','Time Schedule (Tentative)',
+    'Toolbox Meeting Key Points / Remarks','Facilitator','Recipients','Time','Priority','Photo',
+    '[Once/day] Weather','[Once/day] Vessel Location','[Once/day] Meeting Date',
+    '[Once/day] Duty Engineer Rank','[Once/day] Name of Duty Engineer','[Once/day] MARSEC Level',
+    '[Once/day] Officer In Charge -1 (Contractors)','[Once/day] Pollution / Special Area',
+    '[Once/day] Officer In Charge -2 (Contractors)','[Once/day] Previous Day Activities Reviewed',
+    "[Once/day] Ship's Clock Adjustment (Hours)",'[Once/day] Is SIMOPS Planned?',
+    '[Once/day] SIMOPS - 1','[Once/day] SIMOPS - 2'
+  ];
+
+  function ad19Jobs(){
+    return tasks.filter(function(t){ return t.ad34Planner === 'yes'; }).sort(function(a,b){
+      var ad = a.due || a.dateCompleted || '9999-99-99';
+      var bd = b.due || b.dateCompleted || '9999-99-99';
+      if(ad !== bd) return ad < bd ? -1 : 1;
+      return a.serial - b.serial;
+    });
+  }
+
+  function ad19Row(t){
+    var row = new Array(AD19_COLUMNS.length).fill('');
+    row[0]  = t.dateCompleted ? fmtDate(t.dateCompleted) : '';   // Date Completed
+    row[1]  = t.job;                                             // Activities
+    row[6]  = t.ra ? 'YES' : 'NO';                               // RA Form SF-23 Required
+    row[12] = t.ptw ? 'YES' : '';                                // Permit to Work
+    row[14] = t.remarks || '';                                   // Toolbox Key Points / Remarks
+    row[18] = t.priority.charAt(0).toUpperCase() + t.priority.slice(1); // Priority
+    row[19] = (t.photos && t.photos.length) ? String(t.photos.length) : '';
+    // The planner has no column for a due date, so a job still outstanding
+    // carries its due date in the remarks rather than losing it.
+    if(!t.done && t.due){
+      row[14] = ('Due ' + fmtDate(t.due) + (row[14] ? ' — ' + row[14] : ''));
+    }
+    return row;
+  }
+
+  function exportAd19CSV(){
+    var jobs = ad19Jobs();
+    if(!jobs.length){
+      alert('No jobs are ticked AD 19 yet.\n\nTick AD 19 on a job to include it in the work planner export.');
+      return;
+    }
+    var rows = [AD19_COLUMNS];
+    jobs.forEach(function(t){ rows.push(ad19Row(t)); });
+    downloadCSV('GasPlanet_AD19_JobLog_'+todayISO()+'.csv', toCSV(rows));
   }
 
   // ---------- CSV import ----------
@@ -1545,7 +1603,7 @@
         else if(h==='datecompleted' || h==='completeddate') col.dateCompleted = idx;
         else if(h==='remarks' || h==='notes') col.remarks = idx;
         else if(h==='weeklyreport' || h==='wr') col.weekly = idx;
-        else if(h==='ad34planner' || h==='ad34') col.ad34 = idx;
+        else if(h==='ad19planner' || h==='ad19' || h==='ad34planner' || h==='ad34') col.ad34 = idx;
         else if(h==='ra') col.ra = idx;
         else if(h==='ptw') col.ptw = idx;
       });
@@ -1658,6 +1716,7 @@
     render();
   });
   document.getElementById('exportBtn').addEventListener('click', exportCSV);
+  document.getElementById('exportAd19Btn').addEventListener('click', exportAd19CSV);
   document.getElementById('importBtn').addEventListener('click', function(){
     document.getElementById('importInput').click();
   });
@@ -1824,8 +1883,6 @@
 </script>
 
 <script>
-// Registers the offline cache. Fails harmlessly when the page is opened
-// straight off disk rather than served over https.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function(){
     navigator.serviceWorker.register('./sw.js').catch(function(){ /* offline cache unavailable */ });
