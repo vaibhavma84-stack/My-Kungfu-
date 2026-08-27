@@ -304,6 +304,14 @@
   .task.done .job-text{text-decoration:line-through; text-decoration-color:var(--ink-soft);}
   .task.overdue:not(.done){background:#FBF1EE;}
 
+  /* Interval colours, so a glance down the list shows what is due when. */
+  .task.rep-weekly:not(.done){background:#FFF176; border-color:#E4D24A;}
+  .task.rep-monthly:not(.done){background:#D6E2F0; border-color:#AFC4DA;}
+  .task.rep-quarterly:not(.done){background:#EFD9D4; border-color:#D8B6AE;}
+  .task.rep-weekly .rep-chip{background:#FFFBE0; border-color:#D4C24A; color:#6B5A05;}
+  .task.rep-monthly .rep-chip{background:#EDF3FA; border-color:#9FB8D2; color:#2B5FA0;}
+  .task.rep-quarterly .rep-chip{background:#FAEEEB; border-color:#CFA69C; color:#A03A28;}
+
   .task-left{flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:5px;}
   .tick{
     width:22px; height:22px; border-radius:50%;
@@ -453,6 +461,11 @@
   .edit-card .ec-actions button{flex:1; padding:12px 8px;}
   .edit-card .ec-actions .ec-del{flex:0 0 auto; padding:12px 14px;}
 
+  .rep-chip{
+    display:inline-flex; align-items:center; gap:3px; margin-left:6px; padding:1px 6px;
+    border-radius:4px; background:#EAF1FB; color:#2B5FA0; border:1px solid rgba(43,95,160,.3);
+    font-family:ui-monospace,monospace; font-size:10px; font-weight:700; white-space:nowrap;
+  }
   .done-chip{
     display:inline-flex; align-items:center; gap:3px; margin-left:6px; padding:1px 6px;
     border-radius:4px; background:#E8F0E9; color:#3F6B48; border:1px solid rgba(110,139,116,.4);
@@ -591,6 +604,10 @@
           <option value="urgent">Urgent</option>
         </select>
       </div>
+      <div class="field">
+        <label>Repeat</label>
+        <select id="inRepeat"></select>
+      </div>
       <div class="field remarks-field">
         <label>Remarks</label>
         <input type="text" id="inRemarks" placeholder="Optional notes" maxlength="500">
@@ -649,6 +666,7 @@
   <button class="btn btn-ghost" id="exportWrBtn">Export WR</button>
   <button class="btn btn-primary" id="weeklyReportBtn" style="padding:10px 14px;">Weekly Report</button>
   <button class="btn btn-ghost" id="importBtn">Import CSV</button>
+  <button class="btn btn-ghost" id="blankCsvBtn">Blank CSV</button>
   <input type="file" id="importInput" accept=".csv,text/csv" style="display:none">
   <button class="btn btn-danger" id="clearDoneBtn">Clear completed</button>
   <button class="btn btn-ghost" id="toggleFormBtn">Hide ▲</button>
@@ -1079,6 +1097,71 @@
     });
   }
 
+  // ---------- repeating jobs ----------
+  // A PMS job that comes round again: ticking it off raises the next one
+  // automatically, so the schedule keeps running without being re-entered.
+  // Intervals run in DAYS from the date the job was last done, the way the
+  // ship's PMS counts them — 3-monthly means 90 days after it was done, not
+  // 90 days after it was due.
+  var REPEATS = [
+    ['',           'Does not repeat', 0],
+    ['weekly',     'Weekly (7 days)', 7],
+    ['biweekly',   '2-weekly (14 days)', 14],
+    ['monthly',    'Monthly (30 days)', 30],
+    ['quarterly',  '3-monthly (90 days)', 90],
+    ['halfyearly', '6-monthly (180 days)', 180],
+    ['yearly',     'Yearly (365 days)', 365]
+  ];
+  var REPEAT_DAYS = {};
+  REPEATS.forEach(function(r){ if(r[0]) REPEAT_DAYS[r[0]] = r[2]; });
+  var REPEAT_LABEL = {};
+  REPEATS.forEach(function(r){ REPEAT_LABEL[r[0]] = r[1]; });
+
+  function fillRepeatSelect(sel, value){
+    sel.innerHTML = REPEATS.map(function(r){
+      return '<option value="' + r[0] + '"' + (r[0] === (value || '') ? ' selected' : '') + '>' +
+             escapeHtml(r[1]) + '</option>';
+    }).join('');
+  }
+
+  // Next due = the day it was done + the interval. Counting from the done date
+  // rather than the due date is what the PMS intervals mean, and it also keeps
+  // the next one from ever landing in the past when a job is closed late.
+  function nextDueDate(t, completedISO){
+    var days = REPEAT_DAYS[t.repeat];
+    if(!days || !completedISO) return null;
+    return addDaysISO(completedISO, days);
+  }
+
+  // Raise the next occurrence. Flags, priority, remarks and the repeat itself
+  // carry over; photos and the completion do not.
+  function spawnRepeat(t, completedISO){
+    if(!t.repeat || t.spawned) return null;
+    var due = nextDueDate(t, completedISO);
+    if(!due) return null;
+    t.spawned = true;
+    var copy = {
+      id: uid(),
+      serial: nextSerial(),
+      job: t.job,
+      due: due,
+      priority: t.priority,
+      remarks: t.remarks || '',
+      weeklyReport: t.weeklyReport,
+      ad34Planner: t.ad34Planner,
+      ra: !!t.ra,
+      ptw: !!t.ptw,
+      ptwType: t.ptwType || '',
+      repeat: t.repeat,
+      photos: [],
+      done: false,
+      dateCompleted: '',
+      createdAt: todayISO()
+    };
+    tasks.push(copy);
+    return copy;
+  }
+
   // ---------- add task ----------
   function resetYnToggle(id){
     var el = document.getElementById(id);
@@ -1108,6 +1191,7 @@
       ra: ra === 'yes',
       ptw: ptw === 'yes',
       ptwType: ptw === 'yes' ? document.getElementById('inPtwType').value : '',
+      repeat: document.getElementById('inRepeat').value,
       photos: pendingPhotos.slice(),
       done: false,
       dateCompleted: '',
@@ -1121,6 +1205,7 @@
     document.getElementById('inJob').value = '';
     document.getElementById('inDue').value = '';
     document.getElementById('inPriority').value = 'normal';
+    document.getElementById('inRepeat').value = '';
     document.getElementById('inRemarks').value = '';
     resetYnToggle('inWeekly');
     resetYnToggle('inAd34');
@@ -1149,8 +1234,13 @@
       if(!iso) return;                // cancelled — leave the job pending
       t.done = true;
       t.dateCompleted = iso;
+      var next = spawnRepeat(t, iso);
       saveTasks();
       render();
+      if(next){
+        alert('Next occurrence raised: due ' + fmtDate(next.due) +
+              '  (' + REPEAT_DAYS[t.repeat] + ' days after ' + fmtDate(iso) + ').');
+      }
     });
   }
 
@@ -1199,7 +1289,9 @@
     var overdueFlag = isOverdue(t);
     var isExpanded = expandedIds.has(t.id);
     var html = '';
-    html += '<div class="task pri-'+t.priority+(t.done?' done':'')+(overdueFlag?' overdue':'')+(isExpanded?' expanded':'')+'" data-id="'+t.id+'">';
+    var repClass = (t.repeat === 'weekly' || t.repeat === 'monthly' || t.repeat === 'quarterly')
+                 ? ' rep-' + t.repeat : '';
+    html += '<div class="task pri-'+t.priority+(t.done?' done':'')+(overdueFlag?' overdue':'')+repClass+(isExpanded?' expanded':'')+'" data-id="'+t.id+'">';
     html += '  <div class="task-left">';
     html += '    <button class="tick" data-action="toggle" data-id="'+t.id+'">'+(t.done?'✓':'')+'</button>';
     html += '    <span class="pri-badge pri-'+t.priority+'">'+(t.priority==='important'?'I':t.priority==='urgent'?'U':'')+'</span>';
@@ -1207,6 +1299,7 @@
     html += '  <div class="task-main" data-action="expand" data-id="'+t.id+'">';
     html += '    <div class="task-top">';
     html += '      <div class="sno-date">#'+t.serial+' · '+(t.due ? fmtDateShort(t.due) : 'no date')+(overdueFlag?' ⚠':'');
+    if(t.repeat) html += '<span class="rep-chip">↻ '+escapeHtml((REPEAT_LABEL[t.repeat]||t.repeat).replace(/\s*\(.*\)$/,''))+'</span>';
     if(t.done){
       html += '<span class="done-chip'+(t.dateCompleted?'':' missing')+'" data-action="editcompleted" data-id="'+t.id+'">'
             + (t.dateCompleted ? '✓ ' + fmtDate(t.dateCompleted) : '✓ set date')
@@ -1699,7 +1792,7 @@
 
   // ---------- jobs CSV export ----------
   function exportCSV(){
-    var rows = [['Serial No','Due Date','Job','Priority','Status','Date Completed','Remarks','Weekly Report','AD-19 Planner','RA','PTW','Permit Type','Photos Attached']];
+    var rows = [['Serial No','Due Date','Job','Priority','Status','Date Completed','Remarks','Weekly Report','AD-19 Planner','RA','PTW','Permit Type','Repeat','Photos Attached']];
     tasks.slice().sort(function(a,b){return a.serial-b.serial;}).forEach(function(t){
       rows.push([
         t.serial,
@@ -1714,6 +1807,7 @@
         t.ra ? 'Yes' : 'No',
         t.ptw ? 'Yes' : 'No',
         t.ptwType || '',
+        REPEAT_LABEL[t.repeat || ''] || '',
         (t.photos ? t.photos.length : 0)
       ]);
     });
@@ -2467,6 +2561,23 @@
     document.body.style.overflow = '';
   }
 
+  // ---------- blank import sheet ----------
+  // Joining a ship: take this, paste the PMS job list into it, import it back.
+  var IMPORT_COLUMNS = ['Due Date','Job','Priority','Status','Date Completed','Remarks',
+                        'Weekly Report','AD-19 Planner','RA','PTW','Permit Type','Repeat'];
+
+  function exportBlankCSV(){
+    downloadCSV('GasPlanet_JobImport_BLANK.csv', toCSV([IMPORT_COLUMNS]));
+    alert('Blank sheet saved.\n\n' +
+          'Paste the PMS jobs under "Job" — that is the only column you must fill.\n\n' +
+          'Due Date / Date Completed: 05-Sep-2026 or 2026-09-05\n' +
+          'Priority: normal, important or urgent\n' +
+          'Status: Pending or Completed\n' +
+          'Weekly Report / AD-19 Planner / RA / PTW: Yes or No\n' +
+          'Repeat: Weekly, 2-weekly, Monthly, 3-monthly, 6-monthly or Yearly\n\n' +
+          'Then use Import CSV. Importing adds to the list, it does not replace it.');
+  }
+
   // ---------- CSV import ----------
   function parseCSV(text){
     var rows = [];
@@ -2526,6 +2637,22 @@
     return '';
   }
 
+  function parseRepeat(v){
+    var s = (v || '').trim().toLowerCase();
+    if(!s) return '';
+    for(var i = 0; i < REPEATS.length; i++){
+      var lbl = REPEATS[i][1].toLowerCase().replace(/\s*\(.*\)$/,'');
+      if(REPEATS[i][0] && (s === REPEATS[i][0] || s === REPEATS[i][1].toLowerCase() || s === lbl)) return REPEATS[i][0];
+    }
+    if(/^(2|bi)[- ]?week/.test(s)) return 'biweekly';
+    if(/^week/.test(s)) return 'weekly';
+    if(/^(3|three|quarter)/.test(s)) return 'quarterly';
+    if(/^(6|six|half)/.test(s)) return 'halfyearly';
+    if(/^month/.test(s)) return 'monthly';
+    if(/^(year|annual)/.test(s)) return 'yearly';
+    return '';
+  }
+
   function isYesLike(v){
     if(!v) return false;
     var s = v.trim().toLowerCase();
@@ -2551,6 +2678,7 @@
         else if(h==='ra') col.ra = idx;
         else if(h==='ptw') col.ptw = idx;
         else if(h==='permittype' || h==='permittowork') col.ptwType = idx;
+        else if(h==='repeat') col.repeat = idx;
       });
       if(col.job === undefined){
         alert('Could not find a "Job" column in this file. Make sure the first row has column headers, including one named "Job".');
@@ -2582,6 +2710,7 @@
           ra: col.ra!==undefined ? isYesLike(row[col.ra]) : false,
           ptw: col.ptw!==undefined ? isYesLike(row[col.ptw]) : false,
           ptwType: col.ptwType!==undefined ? (row[col.ptwType]||'').trim() : '',
+          repeat: col.repeat!==undefined ? parseRepeat(row[col.repeat]) : '',
           photos: [],
           done: done,
           dateCompleted: done ? dateCompletedVal : '',
@@ -2615,6 +2744,7 @@
           '<div class="field"><label>Job</label><input type="text" id="edJob" maxlength="300" value="' + escapeHtml(t.job) + '"></div>' +
           '<div class="ec-grid">' +
             '<div class="field"><label>Due date</label><input type="date" id="edDue" value="' + escapeHtml(t.due || '') + '"></div>' +
+            '<div class="field"><label>Repeat</label><select id="edRepeat"></select></div>' +
             '<div class="field"><label>Priority</label><select id="edPrio">' +
               ['normal','important','urgent'].map(function(v){
                 return '<option value="' + v + '"' + (t.priority === v ? ' selected' : '') + '>' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
@@ -2654,6 +2784,7 @@
       '</div>';
     document.body.appendChild(bg);
 
+    fillRepeatSelect(bg.querySelector('#edRepeat'), t.repeat);
     var ptwRow  = bg.querySelector('#edPtwRow');
     var compRow = bg.querySelector('#edCompRow');
     bg.querySelector('#edDone').addEventListener('change', function(){
@@ -2688,18 +2819,25 @@
       t.job          = job;
       t.due          = bg.querySelector('#edDue').value;
       t.priority     = bg.querySelector('#edPrio').value;
+      t.repeat       = bg.querySelector('#edRepeat').value;
       t.remarks      = bg.querySelector('#edRem').value.trim();
       t.weeklyReport = val('wr') ? 'yes' : 'no';
       t.ad34Planner  = val('ad19') ? 'yes' : 'no';
       t.ra           = val('ra');
       t.ptw          = val('ptw');
       t.ptwType      = t.ptw ? bg.querySelector('#edPtwType').value : '';
+      var wasDone = t.done;
       var done = bg.querySelector('#edDone').value === 'done';
       t.done = done;
       t.dateCompleted = done ? (bg.querySelector('#edComp').value || todayISO()) : '';
+      var next = (done && !wasDone) ? spawnRepeat(t, t.dateCompleted) : null;
       bg.remove();
       saveTasks();
       render();
+      if(next){
+        alert('Next occurrence raised: due ' + fmtDate(next.due) +
+              '  (' + REPEAT_DAYS[t.repeat] + ' days after ' + fmtDate(t.dateCompleted) + ').');
+      }
     });
   }
 
@@ -2807,6 +2945,7 @@
     render();
   });
   document.getElementById('exportBtn').addEventListener('click', exportCSV);
+  document.getElementById('blankCsvBtn').addEventListener('click', exportBlankCSV);
   document.getElementById('exportAd19Btn').addEventListener('click', exportAd19CSV);
   document.getElementById('exportWrBtn').addEventListener('click', exportWrCSV);
   document.getElementById('weeklyReportBtn').addEventListener('click', openWeeklyReport);
@@ -2946,6 +3085,7 @@
   document.getElementById('exDate').value = todayISO();
   fillPtwTypes();
   syncPtwTypeRow();
+  fillRepeatSelect(document.getElementById('inRepeat'), '');
   document.getElementById('cargoDate').value = todayISO();
   renderBackupBanner();
   try{ setFormHidden(localStorage.getItem(FORM_HIDDEN_KEY) === '1'); }catch(e){ setFormHidden(false); }
