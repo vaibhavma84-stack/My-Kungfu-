@@ -605,7 +605,7 @@
         </select>
       </div>
       <div class="field">
-        <label>Repeat</label>
+        <label>Interval</label>
         <select id="inRepeat"></select>
       </div>
       <div class="field remarks-field">
@@ -769,9 +769,9 @@
 <div id="extraSection" style="display:none;">
   <div id="extraAddWrap">
     <div class="ship-note">
-      One-off jobs for the work planner — a job that comes up on the day and is not
-      on the to do list. These are added to the AD-19 export alongside the jobs
-      ticked AD 19, under the date given here.
+      One-off jobs for the work planner — something that came up on the day and was
+      never on the to do list. Anything you close out on the to do list already
+      goes onto that day's planner by itself; this is only for the extras.
     </div>
     <div class="addForm">
       <div class="form-row row-main">
@@ -802,7 +802,6 @@
     </div>
   </div>
   <div class="toolbar crew-toolbar">
-    <button class="btn btn-ghost" id="bulkAd19Btn">Tick AD 19 on all completed jobs</button>
     <div class="spacer"></div>
     <span class="count-badge" id="extraCount"></span>
     <button class="btn btn-danger" id="extraClearBtn">Clear all</button>
@@ -1104,7 +1103,7 @@
   // ship's PMS counts them — 3-monthly means 90 days after it was done, not
   // 90 days after it was due.
   var REPEATS = [
-    ['',           'Does not repeat', 0],
+    ['',           'No interval', 0],
     ['weekly',     'Weekly (7 days)', 7],
     ['biweekly',   '2-weekly (14 days)', 14],
     ['monthly',    'Monthly (30 days)', 30],
@@ -1792,7 +1791,7 @@
 
   // ---------- jobs CSV export ----------
   function exportCSV(){
-    var rows = [['Serial No','Due Date','Job','Priority','Status','Date Completed','Remarks','Weekly Report','AD-19 Planner','RA','PTW','Permit Type','Repeat','Photos Attached']];
+    var rows = [['Serial No','Due Date','Job','Priority','Status','Date Completed','Remarks','Weekly Report','AD-19 Planner','RA','PTW','Permit Type','Interval','Photos Attached']];
     tasks.slice().sort(function(a,b){return a.serial-b.serial;}).forEach(function(t){
       rows.push([
         t.serial,
@@ -1893,28 +1892,6 @@
     renderExPendingThumbs();
     renderExtras();
     document.getElementById('exJob').focus();
-  }
-
-  // Jobs are often finished before anyone remembers they belonged on the
-  // planner — this catches up everything already ticked off in one go.
-  function bulkTickAd19(){
-    var done = tasks.filter(function(t){ return t.done; });
-    var toDo = done.filter(function(t){ return t.ad34Planner !== 'yes'; });
-    if(!done.length){
-      alert('No completed jobs in the to do list yet.');
-      return;
-    }
-    if(!toDo.length){
-      alert('All ' + done.length + ' completed job(s) are already ticked AD 19.');
-      return;
-    }
-    if(!confirm('Tick AD 19 on ' + toDo.length + ' completed job(s)?\n\n' +
-                'They will then appear in the AD-19 export under their completion dates. ' +
-                'Jobs still pending are not touched.')) return;
-    toDo.forEach(function(t){ t.ad34Planner = 'yes'; });
-    if(!saveTasks()){ render(); return; }
-    render();
-    alert('Ticked AD 19 on ' + toDo.length + ' job(s).');
   }
 
   var exPendingPhotos = [];
@@ -2350,10 +2327,17 @@
   // So a PMS job closed early or late moves off its due date onto the real one.
   function ad19Day(t){ return t.dateCompleted || t.due || ''; }
 
-  // Jobs ticked AD 19 on the to do list, plus the one-off additions, as one
-  // list. Within a day the to do list comes first, then the additions.
+  // Everything that reaches the planner:
+  //   * every job that has been closed out — closing a job means the work was
+  //     done that day, so it belongs on that day's planner whether or not
+  //     anyone remembered to tick AD 19
+  //   * jobs still open but ticked AD 19, so a day can be planned in advance
+  //   * the one-off additions from the AD-19 tab
+  // Within a day the to do list comes first, then the additions.
   function ad19Jobs(){
-    var fromList = tasks.filter(function(t){ return t.ad34Planner === 'yes'; }).map(function(t){
+    var fromList = tasks.filter(function(t){
+      return t.done || t.ad34Planner === 'yes';
+    }).map(function(t){
       return { day: ad19Day(t), order: 0, seq: t.serial, job: t.job, ra: t.ra,
                ptw: t.ptw ? (t.ptwType || 'YES') : 'N/A', remarks: t.remarks || '', done: t.done };
     });
@@ -2388,7 +2372,7 @@
   function exportAd19CSV(){
     var jobs = ad19Jobs();
     if(!jobs.length){
-      alert('Nothing to export yet.\n\nTick AD 19 on a job in the to do list, or add a one-off job on the AD-19 tab.');
+      alert('Nothing to export yet.\n\nClose out a job on the to do list — anything completed goes onto that day\'s planner. To plan a day ahead, tick AD 19 on a job that is not done yet.');
       return;
     }
     var rows = [];
@@ -2563,18 +2547,18 @@
 
   // ---------- blank import sheet ----------
   // Joining a ship: take this, paste the PMS job list into it, import it back.
-  var IMPORT_COLUMNS = ['Due Date','Job','Priority','Status','Date Completed','Remarks',
-                        'Weekly Report','AD-19 Planner','RA','PTW','Permit Type','Repeat'];
+  // Three columns only — what a PMS list actually gives you. Every other field
+  // is set in the app afterwards, and import still accepts the wider sheet that
+  // Export CSV produces.
+  var IMPORT_COLUMNS = ['Due Date','Job','Interval'];
 
   function exportBlankCSV(){
     downloadCSV('GasPlanet_JobImport_BLANK.csv', toCSV([IMPORT_COLUMNS]));
-    alert('Blank sheet saved.\n\n' +
-          'Paste the PMS jobs under "Job" — that is the only column you must fill.\n\n' +
-          'Due Date / Date Completed: 05-Sep-2026 or 2026-09-05\n' +
-          'Priority: normal, important or urgent\n' +
-          'Status: Pending or Completed\n' +
-          'Weekly Report / AD-19 Planner / RA / PTW: Yes or No\n' +
-          'Repeat: Weekly, 2-weekly, Monthly, 3-monthly, 6-monthly or Yearly\n\n' +
+    alert('Blank sheet saved — three columns.\n\n' +
+          'Job        the job name (the only one you must fill)\n' +
+          'Due Date   05-Sep-2026 or 2026-09-05\n' +
+          'Interval   Weekly, 2-weekly, Monthly, 3-monthly,\n' +
+          '           6-monthly or Yearly — leave blank if it does not repeat\n\n' +
           'Then use Import CSV. Importing adds to the list, it does not replace it.');
   }
 
@@ -2678,7 +2662,7 @@
         else if(h==='ra') col.ra = idx;
         else if(h==='ptw') col.ptw = idx;
         else if(h==='permittype' || h==='permittowork') col.ptwType = idx;
-        else if(h==='repeat') col.repeat = idx;
+        else if(h==='interval' || h==='repeat') col.repeat = idx;
       });
       if(col.job === undefined){
         alert('Could not find a "Job" column in this file. Make sure the first row has column headers, including one named "Job".');
@@ -2744,7 +2728,7 @@
           '<div class="field"><label>Job</label><input type="text" id="edJob" maxlength="300" value="' + escapeHtml(t.job) + '"></div>' +
           '<div class="ec-grid">' +
             '<div class="field"><label>Due date</label><input type="date" id="edDue" value="' + escapeHtml(t.due || '') + '"></div>' +
-            '<div class="field"><label>Repeat</label><select id="edRepeat"></select></div>' +
+            '<div class="field"><label>Interval</label><select id="edRepeat"></select></div>' +
             '<div class="field"><label>Priority</label><select id="edPrio">' +
               ['normal','important','urgent'].map(function(v){
                 return '<option value="' + v + '"' + (t.priority === v ? ' selected' : '') + '>' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
@@ -3115,7 +3099,6 @@
   document.getElementById('exAddBtn').addEventListener('click', addExtra);
   document.getElementById('exJob').addEventListener('keydown', function(e){ if(e.key==='Enter') addExtra(); });
   document.getElementById('extraClearBtn').addEventListener('click', clearExtras);
-  document.getElementById('bulkAd19Btn').addEventListener('click', bulkTickAd19);
   var exPhotoTargetId = null;
   var exRowPhotoInput = document.createElement('input');
   exRowPhotoInput.type = 'file'; exRowPhotoInput.accept = 'image/*'; exRowPhotoInput.multiple = true;
