@@ -461,6 +461,19 @@
   .edit-card .ec-actions button{flex:1; padding:12px 8px;}
   .edit-card .ec-actions .ec-del{flex:0 0 auto; padding:12px 14px;}
 
+  /* Projected occurrences of a repeating job — a forecast, not a job yet. */
+  .task.ghost{
+    border-style:dashed; opacity:.72; background:transparent;
+    border-left-width:3px; border-left-style:dashed;
+  }
+  .task.ghost .job-text{font-weight:600; color:var(--ink-soft);}
+  .task.ghost .ghost-mark{
+    display:flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border-radius:50%; border:2px dashed var(--line);
+    color:var(--ink-soft); font-size:11px;
+  }
+  .cell-dot.ghost-dot{background:transparent; border:1px solid var(--steel);}
+
   .rep-chip{
     display:inline-flex; align-items:center; gap:3px; margin-left:6px; padding:1px 6px;
     border-radius:4px; background:#EAF1FB; color:#2B5FA0; border:1px solid rgba(43,95,160,.3);
@@ -1261,6 +1274,45 @@
     render();
   }
 
+  // ---------- projected repeats ----------
+  // Only one occurrence of a repeating job is ever real: closing it raises the
+  // next. That keeps the pending list to one line per job, but it also meant the
+  // calendar showed a weekly job once rather than every week. These are the
+  // future occurrences worked out from the interval and drawn in the calendar
+  // views only — never stored, never counted, and they disappear the moment the
+  // real job moves.
+  function daysBetweenISO(a, b){
+    var pa = a.split('-'), pb = b.split('-');
+    var da = new Date(pa[0], pa[1]-1, pa[2]);
+    var db = new Date(pb[0], pb[1]-1, pb[2]);
+    return Math.round((db - da) / 86400000);
+  }
+
+  function projectedOn(iso){
+    var out = [];
+    tasks.forEach(function(t){
+      if(t.done || !t.repeat || !t.due) return;
+      var days = REPEAT_DAYS[t.repeat];
+      if(!days) return;
+      var diff = daysBetweenISO(t.due, iso);
+      if(diff > 0 && diff % days === 0) out.push(t);   // the real job covers diff 0
+    });
+    return out;
+  }
+
+  function renderGhost(t, iso){
+    var repClass = (t.repeat === 'weekly' || t.repeat === 'monthly' || t.repeat === 'quarterly')
+                 ? ' rep-' + t.repeat : '';
+    return '<div class="task ghost' + repClass + '" data-action="ghost" data-id="' + t.id + '">' +
+             '<div class="task-left"><span class="ghost-mark">↻</span></div>' +
+             '<div class="task-main">' +
+               '<div class="sno-date">due ' + fmtDateShort(iso) +
+                 '<span class="rep-chip">' + escapeHtml((REPEAT_LABEL[t.repeat] || '').replace(/\s*\(.*\)$/,'')) + '</span></div>' +
+               '<div class="job-row"><span class="job-text">' + escapeHtml(t.job) + '</span></div>' +
+             '</div>' +
+           '</div>';
+  }
+
   // ---------- sort & filter ----------
   function getVisibleTasks(){
     var status = document.getElementById('filterStatus').value;
@@ -1376,13 +1428,15 @@
     var visible = getVisibleTasks();
     var dayTasks = visible.filter(function(t){ return t.due === viewAnchor; });
     var bdays = birthdaysOnDate(viewAnchor);
-    if(dayTasks.length===0 && bdays.length===0){
+    var ghosts = projectedOn(viewAnchor);
+    if(dayTasks.length===0 && bdays.length===0 && ghosts.length===0){
       wrap.innerHTML = '<div class="empty"><div class="big">⚓</div>No jobs due on this day.</div>';
       return;
     }
     var html = '';
     bdays.forEach(function(c){ html += renderBirthdayCard(c, viewAnchor); });
     dayTasks.forEach(function(t){ html += renderTaskCard(t); });
+    ghosts.forEach(function(t){ html += renderGhost(t, viewAnchor); });
     wrap.innerHTML = '<div style="padding:14px 20px 100px;">'+html+'</div>';
   }
 
@@ -1397,17 +1451,21 @@
       var d = addDaysISO(monday, i);
       var dayTasks = visible.filter(function(t){ return t.due === d; });
       var bdays = birthdaysOnDate(d);
+      var ghosts = projectedOn(d);
       var isToday = d === todayISO();
       html += '<div class="week-day'+(isToday?' is-today':'')+'">';
-      html += '  <div class="week-day-hdr"><span>'+dayNames[i]+' · '+fmtDate(d)+'</span><span>'+dayTasks.length+'</span></div>';
+      html += '  <div class="week-day-hdr"><span>'+dayNames[i]+' · '+fmtDate(d)+'</span><span>'+(dayTasks.length+ghosts.length)+'</span></div>';
       html += '  <div class="week-day-body">';
-      if(dayTasks.length===0 && bdays.length===0){
+      if(dayTasks.length===0 && bdays.length===0 && ghosts.length===0){
         html += '<div class="week-day-empty">No jobs</div>';
       } else {
         (function(dayISO){
           bdays.forEach(function(c){ html += renderBirthdayCard(c, dayISO); });
         })(d);
         dayTasks.forEach(function(t){ html += renderTaskCard(t); });
+        (function(dayISO){
+          ghosts.forEach(function(t){ html += renderGhost(t, dayISO); });
+        })(d);
       }
       html += '  </div>';
       html += '</div>';
@@ -1433,17 +1491,20 @@
     for(var day=1; day<=daysInMonth; day++){
       var iso = y+'-'+String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
       var dayTasks = visible.filter(function(t){ return t.due === iso; });
+      var ghosts = projectedOn(iso);
       var bdays = birthdaysOnDate(iso);
       var isToday = iso === today;
       html += '<div class="month-cell'+(isToday?' is-today':'')+'" data-action="pickday" data-date="'+iso+'">';
       if(bdays.length){ html += '  <span class="cell-cake" title="Birthday">🎂</span>'; }
       html += '  <span class="cell-num">'+day+'</span>';
-      if(dayTasks.length){
-        var dots = dayTasks.slice(0,3);
+      if(dayTasks.length || ghosts.length){
         html += '  <span class="cell-dots">';
-        dots.forEach(function(t){ html += '<span class="cell-dot pri-'+t.priority+'"></span>'; });
+        dayTasks.slice(0,3).forEach(function(t){ html += '<span class="cell-dot pri-'+t.priority+'"></span>'; });
+        ghosts.slice(0, Math.max(0, 3 - dayTasks.length)).forEach(function(t){
+          html += '<span class="cell-dot ghost-dot"></span>';
+        });
         html += '  </span>';
-        html += '  <span class="cell-count">'+dayTasks.length+'</span>';
+        html += '  <span class="cell-count">'+(dayTasks.length + ghosts.length)+'</span>';
       }
       html += '</div>';
     }
@@ -3017,6 +3078,8 @@
     if(cdBtn){ editCompletionDate(cdBtn.dataset.id); return; }
     var edBtn = e.target.closest('[data-action="edit"]');
     if(edBtn){ openEditJob(edBtn.dataset.id); return; }
+    var ghost = e.target.closest('[data-action="ghost"]');
+    if(ghost){ openEditJob(ghost.dataset.id); return; }
     var delBtn = e.target.closest('[data-action="delete"]');
     if(delBtn){ deleteTask(delBtn.dataset.id); return; }
     var addPhotoBtn = e.target.closest('[data-action="addphoto"]');
