@@ -594,6 +594,7 @@
   <div class="spacer"></div>
   <button class="btn btn-ghost" id="exportBtn">Export CSV</button>
   <button class="btn btn-ghost" id="exportAd19Btn">Export AD-19</button>
+  <button class="btn btn-ghost" id="exportWrBtn">Export WR</button>
   <button class="btn btn-ghost" id="importBtn">Import CSV</button>
   <input type="file" id="importInput" accept=".csv,text/csv" style="display:none">
   <button class="btn btn-danger" id="clearDoneBtn">Clear completed</button>
@@ -2259,6 +2260,60 @@
     downloadCSV('GasPlanet_AD19_Planner_'+todayISO()+'.csv', toCSV(rows));
   }
 
+  // ---------- Work Done Report (WR) ----------
+  // Jobs ticked WR on the to do list, grouped into Monday-to-Sunday weeks by
+  // the date the work was done. A job still outstanding keeps its place under
+  // its due date and is marked, rather than dropping out of the report.
+  var WR_COLUMNS = ['S.NO','DATE','WORK DONE','REMARKS','RA SF-23','PERMIT TO WORK','PHOTOS'];
+
+  function wrDay(t){ return t.dateCompleted || t.due || ''; }
+
+  function wrJobs(){
+    return tasks.filter(function(t){ return t.weeklyReport === 'yes'; }).sort(function(a,b){
+      var ad = wrDay(a) || '9999-99-99', bd = wrDay(b) || '9999-99-99';
+      if(ad !== bd) return ad < bd ? -1 : 1;
+      return a.serial - b.serial;
+    });
+  }
+
+  function exportWrCSV(){
+    var jobs = wrJobs();
+    if(!jobs.length){
+      alert('No jobs are ticked WR yet.\n\nTick WR on a job to include it in the work done report.');
+      return;
+    }
+    var rows = [];
+    var lastWeek = null;
+    var sno = 0;
+    jobs.forEach(function(t){
+      var day = wrDay(t);
+      var week = day ? getMonday(day) : '';
+      if(week !== lastWeek){
+        if(lastWeek !== null) rows.push([]);
+        rows.push(['WORK DONE REPORT']);
+        rows.push(['VESSEL NAME', shipName()]);
+        rows.push(['WEEK COMMENCING', week ? fmtDate(week) : '(no date)']);
+        rows.push(['WEEK ENDING', week ? fmtDate(addDaysISO(week, 6)) : '']);
+        rows.push([]);
+        rows.push(WR_COLUMNS);
+        lastWeek = week;
+        sno = 0;
+      }
+      var remarks = t.remarks || '';
+      if(!t.done) remarks = 'NOT YET COMPLETED' + (remarks ? ' — ' + remarks : '');
+      rows.push([
+        String(++sno),
+        day ? fmtDate(day) : '',
+        t.job,
+        remarks,
+        t.ra ? 'YES' : 'NO',
+        t.ptw ? (t.ptwType || 'YES') : 'N/A',
+        (t.photos && t.photos.length) ? String(t.photos.length) : ''
+      ]);
+    });
+    downloadCSV('GasPlanet_WorkDoneReport_' + todayISO() + '.csv', toCSV(rows));
+  }
+
   // ---------- CSV import ----------
   function parseCSV(text){
     var rows = [];
@@ -2600,6 +2655,7 @@
   });
   document.getElementById('exportBtn').addEventListener('click', exportCSV);
   document.getElementById('exportAd19Btn').addEventListener('click', exportAd19CSV);
+  document.getElementById('exportWrBtn').addEventListener('click', exportWrCSV);
   document.getElementById('importBtn').addEventListener('click', function(){
     document.getElementById('importInput').click();
   });
