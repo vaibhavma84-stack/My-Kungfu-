@@ -2250,8 +2250,10 @@
     if(!on) document.getElementById('inPtwType').value = '';
   }
 
-  // The planner is a per-day form, so the export is grouped by completion date.
-  // A job not yet ticked off falls back to its due date.
+  // Which day's planner an activity belongs to.
+  //   not yet done  -> its due date, because that is the day it is planned for
+  //   done          -> the date it was actually done, wherever that fell
+  // So a PMS job closed early or late moves off its due date onto the real one.
   function ad19Day(t){ return t.dateCompleted || t.due || ''; }
 
   // Jobs ticked AD 19 on the to do list, plus the one-off additions, as one
@@ -2282,9 +2284,10 @@
     row[AD19_COL.WORK_REST]    = AD19_DEFAULT_WORK_REST;
     row[AD19_COL.PTW]          = t.ptw;
     row[AD19_COL.REMARKS]      = t.remarks;
-    // Not yet ticked off, so the date shown is the plan date rather than the
-    // date done — say so instead of letting it pass as completed.
-    if(!t.done) row[AD19_COL.REMARKS] = 'NOT YET COMPLETED' + (row[AD19_COL.REMARKS] ? ' — ' + row[AD19_COL.REMARKS] : '');
+    // No "not yet completed" marker here: the planner is drawn up before the
+    // work, so an entry that is not yet ticked off is simply the plan. The date
+    // rule is in ad19Day() — planned under its due date until it is completed,
+    // then under the date it was actually done.
     return row;
   }
 
