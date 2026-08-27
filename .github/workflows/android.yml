@@ -29,8 +29,18 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Read the build number the page reports
+        id: ver
+        run: |
+          name=$(grep -o "APP_BUILD = '[^']*'" index.html | head -1 | cut -d"'" -f2)
+          echo "name=${name:-dev}" >> "$GITHUB_OUTPUT"
+          echo "Page reports build: ${name:-dev}"
+
       - name: Build debug APK
         working-directory: android
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          BUILD_NAME: ${{ steps.ver.outputs.name }}
         run: gradle assembleDebug --no-daemon --stacktrace
 
       - name: Name the APK by date
@@ -54,8 +64,10 @@ jobs:
           cp android/app/build/outputs/apk/debug/app-debug.apk DeckLog.apk
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest DeckLog.apk \
-            --title "Deck Log — latest build" \
-            --notes "Built from ${{ github.sha }} on ${{ steps.name.outputs.stamp }}.
+            --title "Deck Log ${{ steps.ver.outputs.name }}" \
+            --notes "Build ${{ steps.ver.outputs.name }} (versionCode ${{ github.run_number }}), from ${{ github.sha }} on ${{ steps.name.outputs.stamp }}.
+
+          Check it installed: the version at the foot of the app should read ${{ steps.ver.outputs.name }}.
 
           Install straight from the phone: tap DeckLog.apk below, then allow
           installing from this source when Android asks." 

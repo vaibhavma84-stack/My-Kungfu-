@@ -12,8 +12,11 @@ android {
         // Samsung A55 runs Android 14; 24 keeps older phones aboard working too.
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // Stamped by CI: the run number always climbs, so Android treats each
+        // build as a genuine upgrade rather than a reinstall of the same
+        // version, and App Info shows which build is actually on the phone.
+        versionCode = (System.getenv("BUILD_NUMBER") ?: "1").toInt()
+        versionName = System.getenv("BUILD_NAME") ?: "dev"
     }
 
     buildTypes {
