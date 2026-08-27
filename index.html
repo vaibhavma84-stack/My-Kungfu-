@@ -433,6 +433,26 @@
   .date-card .dc-actions{display:flex; gap:8px; margin-top:14px;}
   .date-card .dc-actions button{flex:1; padding:11px 8px; font-size:13.5px;}
 
+  .edit-card{
+    background:#fff; border-radius:12px; width:100%; max-width:420px; max-height:88vh;
+    overflow-y:auto; -webkit-overflow-scrolling:touch; box-shadow:0 12px 40px rgba(11,31,46,.45);
+  }
+  .edit-card .ec-head{
+    position:sticky; top:0; background:#fff; padding:16px 16px 10px; border-bottom:1px solid var(--line);
+    display:flex; align-items:baseline; gap:8px; z-index:2;
+  }
+  .edit-card .ec-head h3{margin:0; font-size:16px; font-weight:700;}
+  .edit-card .ec-head .ec-sno{font-family:ui-monospace,monospace; font-size:11px; color:var(--ink-soft);}
+  .edit-card .ec-body{padding:14px 16px 4px; display:flex; flex-direction:column; gap:10px;}
+  .edit-card .ec-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .edit-card .ec-toggles{display:grid; grid-template-columns:repeat(4,1fr); gap:7px;}
+  .edit-card .ec-actions{
+    position:sticky; bottom:0; background:#fff; border-top:1px solid var(--line);
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom)); display:flex; gap:8px;
+  }
+  .edit-card .ec-actions button{flex:1; padding:12px 8px;}
+  .edit-card .ec-actions .ec-del{flex:0 0 auto; padding:12px 14px;}
+
   .done-chip{
     display:inline-flex; align-items:center; gap:3px; margin-left:6px; padding:1px 6px;
     border-radius:4px; background:#E8F0E9; color:#3F6B48; border:1px solid rgba(110,139,116,.4);
@@ -702,11 +722,15 @@
       </div>
       <div class="form-row flags-row">
         <button type="button" class="yn-toggle" id="exRA" data-value="no">RA SF-23</button>
+        <button id="exPhotoBtn" class="yn-toggle" type="button" style="flex:1;">📷 Photo</button>
+        <input type="file" id="exPhotoInput" accept="image/*" multiple style="display:none">
         <button id="exAddBtn" class="btn btn-primary" style="flex:2;">+ Add to AD-19</button>
       </div>
+      <div id="exPendingThumbs" class="thumbstrip"></div>
     </div>
   </div>
   <div class="toolbar crew-toolbar">
+    <button class="btn btn-ghost" id="bulkAd19Btn">Tick AD 19 on all completed jobs</button>
     <div class="spacer"></div>
     <span class="count-badge" id="extraCount"></span>
     <button class="btn btn-danger" id="extraClearBtn">Clear all</button>
@@ -1158,6 +1182,7 @@
     html += '    </div>';
     html += '  </div>';
     html += '  <div class="task-actions">';
+    html += '    <button class="icon-btn" data-action="edit" data-id="'+t.id+'" title="Edit">✎</button>';
     html += '    <button class="icon-btn" data-action="addphoto" data-id="'+t.id+'" title="Add photo">📷'+(t.photos && t.photos.length ? '<span class="photo-count">'+t.photos.length+'</span>' : '')+'</button>';
     html += '    <button class="icon-btn" data-action="delete" data-id="'+t.id+'" title="Delete">🗑</button>';
     html += '  </div>';
@@ -1706,6 +1731,7 @@
       ra: document.getElementById('exRA').dataset.value === 'yes',
       ptwType: document.getElementById('exPtw').value || 'N/A',
       remarks: document.getElementById('exRemarks').value.trim(),
+      photos: exPendingPhotos.slice(),
       created: todayISO()
     });
     if(!saveExtras()){ renderExtras(); return; }
@@ -1713,8 +1739,141 @@
     document.getElementById('exRemarks').value = '';
     resetYnToggle('exRA');
     document.getElementById('exPtw').value = 'N/A';
+    exPendingPhotos = [];
+    renderExPendingThumbs();
     renderExtras();
     document.getElementById('exJob').focus();
+  }
+
+  // Jobs are often finished before anyone remembers they belonged on the
+  // planner — this catches up everything already ticked off in one go.
+  function bulkTickAd19(){
+    var done = tasks.filter(function(t){ return t.done; });
+    var toDo = done.filter(function(t){ return t.ad34Planner !== 'yes'; });
+    if(!done.length){
+      alert('No completed jobs in the to do list yet.');
+      return;
+    }
+    if(!toDo.length){
+      alert('All ' + done.length + ' completed job(s) are already ticked AD 19.');
+      return;
+    }
+    if(!confirm('Tick AD 19 on ' + toDo.length + ' completed job(s)?\n\n' +
+                'They will then appear in the AD-19 export under their completion dates. ' +
+                'Jobs still pending are not touched.')) return;
+    toDo.forEach(function(t){ t.ad34Planner = 'yes'; });
+    if(!saveTasks()){ render(); return; }
+    render();
+    alert('Ticked AD 19 on ' + toDo.length + ' job(s).');
+  }
+
+  var exPendingPhotos = [];
+
+  function renderExPendingThumbs(){
+    var wrap = document.getElementById('exPendingThumbs');
+    wrap.innerHTML = '';
+    exPendingPhotos.forEach(function(src, idx){
+      var d = document.createElement('div');
+      d.className = 'thumb';
+      d.innerHTML = '<img src="' + src + '"><button class="rm" data-idx="' + idx + '">×</button>';
+      wrap.appendChild(d);
+    });
+    wrap.querySelectorAll('.rm').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        exPendingPhotos.splice(parseInt(btn.dataset.idx), 1);
+        renderExPendingThumbs();
+      });
+    });
+  }
+
+  function openEditExtra(id){
+    var x = extras.find(function(e){ return e.id === id; });
+    if(!x) return;
+    var bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    bg.innerHTML =
+      '<div class="edit-card">' +
+        '<div class="ec-head"><h3>Edit AD-19 job</h3></div>' +
+        '<div class="ec-body">' +
+          '<div class="field"><label>Activity</label><input type="text" id="exeJob" maxlength="300" value="' + escapeHtml(x.job) + '"></div>' +
+          '<div class="ec-grid">' +
+            '<div class="field"><label>Date</label><input type="date" id="exeDate" value="' + escapeHtml(x.date || '') + '"></div>' +
+            '<div class="field"><label>Permit to Work</label><select id="exePtw">' +
+              PTW_TYPES.map(function(v){
+                return '<option value="' + escapeHtml(v) + '"' + (x.ptwType === v ? ' selected' : '') + '>' + escapeHtml(v) + '</option>';
+              }).join('') + '</select></div>' +
+          '</div>' +
+          '<div class="field"><label>Toolbox key points / remarks</label><input type="text" id="exeRem" maxlength="500" value="' + escapeHtml(x.remarks || '') + '"></div>' +
+          '<div class="ec-toggles"><button type="button" class="yn-toggle' + (x.ra ? ' checked' : '') +
+            '" data-exe-tg="ra" data-value="' + (x.ra ? 'yes' : 'no') + '" style="grid-column:span 2;">RA SF-23</button>' +
+            '<button type="button" class="yn-toggle" data-exe-add-photo="1" style="grid-column:span 2;">📷 Add photo</button></div>' +
+          '<div class="field"><label>Photos</label><div class="thumbstrip" id="exeThumbs"></div></div>' +
+        '</div>' +
+        '<div class="ec-actions">' +
+          '<button class="btn btn-ghost ec-del" data-exe="delete">🗑</button>' +
+          '<button class="btn btn-ghost" data-exe="cancel">Cancel</button>' +
+          '<button class="btn btn-primary" data-exe="save">Save</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(bg);
+
+    var working = (x.photos || []).slice();
+    function drawThumbs(){
+      var w = bg.querySelector('#exeThumbs');
+      w.innerHTML = working.length ? '' : '<span style="font-size:12px;color:var(--ink-soft)">None attached</span>';
+      working.forEach(function(src, i){
+        var d = document.createElement('div');
+        d.className = 'thumb';
+        d.innerHTML = '<img src="' + src + '"><button class="rm" data-rm="' + i + '">×</button>';
+        w.appendChild(d);
+      });
+    }
+    drawThumbs();
+
+    var fileIn = document.createElement('input');
+    fileIn.type = 'file'; fileIn.accept = 'image/*'; fileIn.multiple = true; fileIn.style.display = 'none';
+    bg.appendChild(fileIn);
+    fileIn.addEventListener('change', function(e){
+      var files = Array.from(e.target.files || []);
+      var left = files.length;
+      if(!left) return;
+      files.forEach(function(f){
+        fileToCompressedDataURL(f, function(u){
+          if(u) working.push(u);
+          if(--left === 0) drawThumbs();
+        });
+      });
+      e.target.value = '';
+    });
+
+    bg.addEventListener('click', function(e){
+      if(e.target === bg){ bg.remove(); return; }
+      var rm = e.target.closest('[data-rm]');
+      if(rm){ working.splice(parseInt(rm.dataset.rm), 1); drawThumbs(); return; }
+      if(e.target.closest('[data-exe-add-photo]')){ fileIn.click(); return; }
+      var tg = e.target.closest('[data-exe-tg]');
+      if(tg){
+        var on = tg.dataset.value === 'yes';
+        tg.dataset.value = on ? 'no' : 'yes';
+        tg.classList.toggle('checked', !on);
+        return;
+      }
+      var btn = e.target.closest('[data-exe]');
+      if(!btn) return;
+      if(btn.dataset.exe === 'cancel'){ bg.remove(); return; }
+      if(btn.dataset.exe === 'delete'){ bg.remove(); deleteExtra(id); return; }
+      var job = bg.querySelector('#exeJob').value.trim();
+      if(!job){ bg.querySelector('#exeJob').focus(); return; }
+      x.job     = job;
+      x.date    = bg.querySelector('#exeDate').value || todayISO();
+      x.ptwType = bg.querySelector('#exePtw').value || 'N/A';
+      x.remarks = bg.querySelector('#exeRem').value.trim();
+      x.ra      = bg.querySelector('[data-exe-tg="ra"]').dataset.value === 'yes';
+      x.photos  = working;
+      bg.remove();
+      saveExtras();
+      renderExtras();
+    });
   }
 
   function deleteExtra(id){
@@ -1751,8 +1910,20 @@
       if(x.ptwType && x.ptwType !== 'N/A') html += '<span class="flag-tag flag-ptw">' + escapeHtml(x.ptwType) + '</span>';
       html += '    </div>';
       if(x.remarks) html += '<div class="ex-rem">' + escapeHtml(x.remarks) + '</div>';
+      if(x.photos && x.photos.length){
+        html += '<div class="thumbstrip">';
+        x.photos.forEach(function(src, idx){
+          html += '<div class="thumb" data-extra-view="' + x.id + ':' + idx + '"><img src="' + src + '"></div>';
+        });
+        html += '</div>';
+      }
       html += '  </div>';
-      html += '  <button class="icon-btn" data-extra-action="delete" data-id="' + x.id + '" title="Delete">🗑</button>';
+      html += '  <div class="task-actions">';
+      html += '    <button class="icon-btn" data-extra-action="edit" data-id="' + x.id + '" title="Edit">✎</button>';
+      html += '    <button class="icon-btn" data-extra-action="addphoto" data-id="' + x.id + '" title="Add photo">📷'
+            + (x.photos && x.photos.length ? '<span class="photo-count">' + x.photos.length + '</span>' : '') + '</button>';
+      html += '    <button class="icon-btn" data-extra-action="delete" data-id="' + x.id + '" title="Delete">🗑</button>';
+      html += '  </div>';
       html += '</div>';
     });
     wrap.innerHTML = html;
@@ -2217,6 +2388,113 @@
     reader.readAsText(file);
   }
 
+  // ---------- edit a job ----------
+  // Everything on a job stays editable after it is ticked off — a job is often
+  // completed before anyone remembers it belonged on the AD-19 planner.
+  function openEditJob(id){
+    var t = tasks.find(function(x){ return x.id === id; });
+    if(!t) return;
+
+    var bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    var tg = function(key, label, on){
+      return '<button type="button" class="yn-toggle' + (on ? ' checked' : '') + '" data-ed-tg="' + key + '" data-value="' + (on ? 'yes' : 'no') + '">' + label + '</button>';
+    };
+    bg.innerHTML =
+      '<div class="edit-card">' +
+        '<div class="ec-head"><h3>Edit job</h3><span class="ec-sno">#' + t.serial + '</span></div>' +
+        '<div class="ec-body">' +
+          '<div class="field"><label>Job</label><input type="text" id="edJob" maxlength="300" value="' + escapeHtml(t.job) + '"></div>' +
+          '<div class="ec-grid">' +
+            '<div class="field"><label>Due date</label><input type="date" id="edDue" value="' + escapeHtml(t.due || '') + '"></div>' +
+            '<div class="field"><label>Priority</label><select id="edPrio">' +
+              ['normal','important','urgent'].map(function(v){
+                return '<option value="' + v + '"' + (t.priority === v ? ' selected' : '') + '>' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
+              }).join('') +
+            '</select></div>' +
+          '</div>' +
+          '<div class="field"><label>Remarks</label><input type="text" id="edRem" maxlength="500" value="' + escapeHtml(t.remarks || '') + '"></div>' +
+          '<div class="ec-toggles">' +
+            tg('wr','WR', t.weeklyReport === 'yes') +
+            tg('ad19','AD 19', t.ad34Planner === 'yes') +
+            tg('ra','RA', !!t.ra) +
+            tg('ptw','PTW', !!t.ptw) +
+          '</div>' +
+          '<div class="field" id="edPtwRow"' + (t.ptw ? '' : ' style="display:none;"') + '>' +
+            '<label>Permit type</label><select id="edPtwType">' +
+              '<option value="">Select…</option>' +
+              PTW_TYPES.map(function(v){
+                return '<option value="' + escapeHtml(v) + '"' + (t.ptwType === v ? ' selected' : '') + '>' + escapeHtml(v) + '</option>';
+              }).join('') +
+            '</select>' +
+          '</div>' +
+          '<div class="field"><label>Status</label>' +
+            '<select id="edDone">' +
+              '<option value="open"' + (t.done ? '' : ' selected') + '>Pending</option>' +
+              '<option value="done"' + (t.done ? ' selected' : '') + '>Completed</option>' +
+            '</select></div>' +
+          '<div class="field" id="edCompRow"' + (t.done ? '' : ' style="display:none;"') + '>' +
+            '<label>Date completed</label>' +
+            '<input type="date" id="edComp" value="' + escapeHtml(t.dateCompleted || todayISO()) + '">' +
+          '</div>' +
+        '</div>' +
+        '<div class="ec-actions">' +
+          '<button class="btn btn-ghost ec-del" data-ed="delete">🗑</button>' +
+          '<button class="btn btn-ghost" data-ed="cancel">Cancel</button>' +
+          '<button class="btn btn-primary" data-ed="save">Save</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(bg);
+
+    var ptwRow  = bg.querySelector('#edPtwRow');
+    var compRow = bg.querySelector('#edCompRow');
+    bg.querySelector('#edDone').addEventListener('change', function(){
+      compRow.style.display = this.value === 'done' ? '' : 'none';
+    });
+
+    bg.addEventListener('click', function(e){
+      if(e.target === bg){ bg.remove(); return; }
+      var t2 = e.target.closest('[data-ed-tg]');
+      if(t2){
+        var on = t2.dataset.value === 'yes';
+        t2.dataset.value = on ? 'no' : 'yes';
+        t2.classList.toggle('checked', !on);
+        if(t2.dataset.edTg === 'ptw'){
+          ptwRow.style.display = on ? 'none' : '';
+          if(on) bg.querySelector('#edPtwType').value = '';
+        }
+        return;
+      }
+      var btn = e.target.closest('[data-ed]');
+      if(!btn) return;
+      if(btn.dataset.ed === 'cancel'){ bg.remove(); return; }
+      if(btn.dataset.ed === 'delete'){
+        bg.remove();
+        deleteTask(id);
+        return;
+      }
+      // save
+      var job = bg.querySelector('#edJob').value.trim();
+      if(!job){ bg.querySelector('#edJob').focus(); return; }
+      var val = function(k){ return bg.querySelector('[data-ed-tg="' + k + '"]').dataset.value === 'yes'; };
+      t.job          = job;
+      t.due          = bg.querySelector('#edDue').value;
+      t.priority     = bg.querySelector('#edPrio').value;
+      t.remarks      = bg.querySelector('#edRem').value.trim();
+      t.weeklyReport = val('wr') ? 'yes' : 'no';
+      t.ad34Planner  = val('ad19') ? 'yes' : 'no';
+      t.ra           = val('ra');
+      t.ptw          = val('ptw');
+      t.ptwType      = t.ptw ? bg.querySelector('#edPtwType').value : '';
+      var done = bg.querySelector('#edDone').value === 'done';
+      t.done = done;
+      t.dateCompleted = done ? (bg.querySelector('#edComp').value || todayISO()) : '';
+      bg.remove();
+      saveTasks();
+      render();
+    });
+  }
+
   // ---------- completion date picker ----------
   // The date a job is ticked off is rarely the day it was actually done, and the
   // AD-19 form is filled by completion date, so the date is chosen rather than
@@ -2392,6 +2670,8 @@
     if(toggleBtn){ toggleDone(toggleBtn.dataset.id); return; }
     var cdBtn = e.target.closest('[data-action="editcompleted"]');
     if(cdBtn){ editCompletionDate(cdBtn.dataset.id); return; }
+    var edBtn = e.target.closest('[data-action="edit"]');
+    if(edBtn){ openEditJob(edBtn.dataset.id); return; }
     var delBtn = e.target.closest('[data-action="delete"]');
     if(delBtn){ deleteTask(delBtn.dataset.id); return; }
     var addPhotoBtn = e.target.closest('[data-action="addphoto"]');
@@ -2473,9 +2753,57 @@
   document.getElementById('exAddBtn').addEventListener('click', addExtra);
   document.getElementById('exJob').addEventListener('keydown', function(e){ if(e.key==='Enter') addExtra(); });
   document.getElementById('extraClearBtn').addEventListener('click', clearExtras);
+  document.getElementById('bulkAd19Btn').addEventListener('click', bulkTickAd19);
+  var exPhotoTargetId = null;
+  var exRowPhotoInput = document.createElement('input');
+  exRowPhotoInput.type = 'file'; exRowPhotoInput.accept = 'image/*'; exRowPhotoInput.multiple = true;
+  exRowPhotoInput.style.display = 'none';
+  document.body.appendChild(exRowPhotoInput);
+  exRowPhotoInput.addEventListener('change', function(e){
+    var files = Array.from(e.target.files || []);
+    var x = extras.find(function(v){ return v.id === exPhotoTargetId; });
+    if(!x || !files.length){ e.target.value = ''; return; }
+    if(!x.photos) x.photos = [];
+    var left = files.length;
+    files.forEach(function(f){
+      fileToCompressedDataURL(f, function(u){
+        if(u) x.photos.push(u);
+        if(--left === 0){ saveExtras(); renderExtras(); }
+      });
+    });
+    e.target.value = '';
+  });
+
   document.getElementById('extraListWrap').addEventListener('click', function(e){
+    var edit = e.target.closest('[data-extra-action="edit"]');
+    if(edit){ openEditExtra(edit.dataset.id); return; }
+    var ph = e.target.closest('[data-extra-action="addphoto"]');
+    if(ph){ exPhotoTargetId = ph.dataset.id; exRowPhotoInput.click(); return; }
+    var thumb = e.target.closest('[data-extra-view]');
+    if(thumb){
+      var parts = thumb.dataset.extraView.split(':');
+      var x = extras.find(function(v){ return v.id === parts[0]; });
+      if(x && x.photos && x.photos[parts[1]]) openViewer(x.photos[parts[1]]);
+      return;
+    }
     var del = e.target.closest('[data-extra-action="delete"]');
     if(del) deleteExtra(del.dataset.id);
+  });
+
+  document.getElementById('exPhotoBtn').addEventListener('click', function(){
+    document.getElementById('exPhotoInput').click();
+  });
+  document.getElementById('exPhotoInput').addEventListener('change', function(e){
+    var files = Array.from(e.target.files || []);
+    var left = files.length;
+    if(!left) return;
+    files.forEach(function(f){
+      fileToCompressedDataURL(f, function(u){
+        if(u) exPendingPhotos.push(u);
+        if(--left === 0) renderExPendingThumbs();
+      });
+    });
+    e.target.value = '';
   });
 
   document.getElementById('shipParseBtn').addEventListener('click', applyShipParse);
