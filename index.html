@@ -460,6 +460,58 @@
   }
   .done-chip.missing{background:#FBF1EE; color:var(--urgent); border-color:rgba(199,69,44,.35);}
 
+  /* ---------- Weekly work done report ---------- */
+  #reportView{
+    position:fixed; inset:0; z-index:150; background:#fff; overflow-y:auto;
+    -webkit-overflow-scrolling:touch; display:none;
+  }
+  #reportView.on{display:block;}
+  .rv-bar{
+    position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    padding:10px 14px calc(10px); background:var(--hull); color:#fff;
+  }
+  .rv-bar button{
+    border:none; border-radius:7px; padding:9px 12px; font-size:12.5px; font-weight:700; cursor:pointer;
+    font-family:ui-monospace,monospace; background:rgba(255,255,255,.16); color:#fff;
+  }
+  .rv-bar button.primary{background:var(--important); color:#1B2530;}
+  .rv-bar .rv-week{flex:1; text-align:center; font-size:12.5px; font-family:ui-monospace,monospace;}
+  .rv-page{max-width:820px; margin:0 auto; padding:22px 18px 60px;}
+  .rv-head{border-bottom:2px solid #002060; padding-bottom:10px; margin-bottom:6px; text-align:center;}
+  .rv-head .rv-title{
+    font-size:19px; font-weight:800; text-decoration:underline; letter-spacing:.02em; color:#1B2530;
+  }
+  .rv-head .rv-ship{font-size:17px; margin-top:5px; color:#1B2530;}
+  .rv-head .rv-range{font-size:14px; margin-top:4px; text-decoration:underline; color:#1B2530;}
+  .rv-list{margin:18px 0 26px; padding:0; list-style:none;}
+  .rv-list li{
+    font-size:14px; line-height:1.5; padding:3px 0 3px 20px; position:relative; color:#1B2530;
+  }
+  .rv-list li::before{content:'•'; position:absolute; left:4px; color:#002060; font-weight:700;}
+  .rv-photos{margin-top:10px;}
+  .rv-block{margin-bottom:14px; break-inside:avoid; page-break-inside:avoid;}
+  .rv-imgs{display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid #999;}
+  .rv-imgs div{border-right:1px solid #999; min-height:40px; display:flex; align-items:center; justify-content:center;}
+  .rv-imgs div:last-child{border-right:none;}
+  .rv-imgs img{width:100%; height:auto; max-height:320px; object-fit:contain; display:block;
+    background:#f4f4f4;}
+  .rv-cap{
+    background:#D9D9D9; border:1px solid #999; border-top:none; text-align:center;
+    font-weight:700; font-size:13.5px; padding:6px 8px; color:#1B2530;
+  }
+  .rv-empty{padding:40px 10px; text-align:center; color:var(--ink-soft); font-size:13.5px;}
+  @media print{
+    body > *:not(#reportView){display:none !important;}
+    #reportView{position:static; overflow:visible; display:block !important;}
+    .rv-bar{display:none !important;}
+    .rv-page{max-width:none; padding:0;}
+    .rv-block{page-break-inside:avoid;}
+    .rv-cap{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    .rv-imgs img{max-height:86mm;}
+    .rv-imgs div{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    @page{size:A4 portrait; margin:12mm;}
+  }
+
   /* ---------- Photo viewer modal ---------- */
   .modal-bg{
     position:fixed; inset:0; background:rgba(11,31,46,.85); z-index:100;
@@ -595,6 +647,7 @@
   <button class="btn btn-ghost" id="exportBtn">Export CSV</button>
   <button class="btn btn-ghost" id="exportAd19Btn">Export AD-19</button>
   <button class="btn btn-ghost" id="exportWrBtn">Export WR</button>
+  <button class="btn btn-primary" id="weeklyReportBtn" style="padding:10px 14px;">Weekly Report</button>
   <button class="btn btn-ghost" id="importBtn">Import CSV</button>
   <input type="file" id="importInput" accept=".csv,text/csv" style="display:none">
   <button class="btn btn-danger" id="clearDoneBtn">Clear completed</button>
@@ -760,6 +813,8 @@
   </div>
   <div id="shipFormWrap"></div>
 </div>
+
+<div id="reportView"></div>
 
 <footer>TO DO LIST · CREW LIST · CARGO LOG · DATA STORED LOCALLY ON THIS DEVICE ONLY</footer>
 
@@ -2314,6 +2369,101 @@
     downloadCSV('GasPlanet_WorkDoneReport_' + todayISO() + '.csv', toCSV(rows));
   }
 
+  // ---------- Weekly Work Done Report ----------
+  // Mirrors the ship's own Deck Weekly Workdone document: a heading block, the
+  // week's work as a list of statements, then the photographs two to a row with
+  // the same statement repeated in a grey band beneath each row.
+  var reportWeek = null;   // Monday of the week on show
+
+  function ordinalDate(iso){
+    var d = parseInt(iso.slice(8,10), 10);
+    var suffix = (d % 10 === 1 && d !== 11) ? 'st'
+               : (d % 10 === 2 && d !== 12) ? 'nd'
+               : (d % 10 === 3 && d !== 13) ? 'rd' : 'th';
+    var MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    return d + suffix + ' ' + MON[parseInt(iso.slice(5,7),10) - 1] + ' ' + iso.slice(0,4);
+  }
+
+  function weekJobs(monday){
+    var sunday = addDaysISO(monday, 6);
+    return tasks.filter(function(t){
+      if(t.weeklyReport !== 'yes') return false;
+      var d = wrDay(t);
+      return d && d >= monday && d <= sunday;
+    }).sort(function(a,b){
+      var ad = wrDay(a), bd = wrDay(b);
+      if(ad !== bd) return ad < bd ? -1 : 1;
+      return a.serial - b.serial;
+    });
+  }
+
+  function renderReport(){
+    var monday = reportWeek;
+    var sunday = addDaysISO(monday, 6);
+    var jobs = weekJobs(monday);
+
+    var html = '<div class="rv-bar">' +
+      '<button data-rv="close">Close</button>' +
+      '<button data-rv="prev">‹ Prev</button>' +
+      '<span class="rv-week">' + fmtDate(monday) + ' – ' + fmtDate(sunday) + '</span>' +
+      '<button data-rv="next">Next ›</button>' +
+      '<button data-rv="thisweek">This week</button>' +
+      '<button class="primary" data-rv="print">Print / Save PDF</button>' +
+      '</div><div class="rv-page">';
+
+    html += '<div class="rv-head">' +
+      '<div class="rv-title">WEEKLY WORK DONE REPORT</div>' +
+      '<div class="rv-ship">' + escapeHtml(reportShipLine()) + '</div>' +
+      '<div class="rv-range">' + ordinalDate(monday) + ' to ' + ordinalDate(sunday) + '</div>' +
+      '</div>';
+
+    if(!jobs.length){
+      html += '<div class="rv-empty">No jobs ticked WR for this week.<br>' +
+              'Tick WR on a job and set its completion date inside this week.</div></div>';
+      document.getElementById('reportView').innerHTML = html;
+      return;
+    }
+
+    html += '<ul class="rv-list">';
+    jobs.forEach(function(t){ html += '<li>' + escapeHtml(t.job) + '</li>'; });
+    html += '</ul>';
+
+    // photographs, two to a row, caption repeated under each row
+    html += '<div class="rv-photos">';
+    jobs.forEach(function(t){
+      if(!t.photos || !t.photos.length) return;
+      for(var i = 0; i < t.photos.length; i += 2){
+        var a = t.photos[i], b = t.photos[i+1];
+        html += '<div class="rv-block"><div class="rv-imgs">' +
+                  '<div><img src="' + a + '" alt=""></div>' +
+                  '<div>' + (b ? '<img src="' + b + '" alt="">' : '') + '</div>' +
+                '</div>' +
+                '<div class="rv-cap">' + escapeHtml(t.job) + '</div></div>';
+      }
+    });
+    html += '</div></div>';
+    document.getElementById('reportView').innerHTML = html;
+  }
+
+  // "LPG/C GAS PLANET" — type prefix from the Ship tab where one is set.
+  function reportShipLine(){
+    var type = (ship.type || '').toUpperCase();
+    var prefix = /LPG/.test(type) ? 'LPG/C ' : (type ? type.split(/\s+/)[0] + ' ' : '');
+    return prefix + shipName();
+  }
+
+  function openWeeklyReport(){
+    reportWeek = getMonday(todayISO());
+    renderReport();
+    document.getElementById('reportView').classList.add('on');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeWeeklyReport(){
+    document.getElementById('reportView').classList.remove('on');
+    document.body.style.overflow = '';
+  }
+
   // ---------- CSV import ----------
   function parseCSV(text){
     var rows = [];
@@ -2656,6 +2806,19 @@
   document.getElementById('exportBtn').addEventListener('click', exportCSV);
   document.getElementById('exportAd19Btn').addEventListener('click', exportAd19CSV);
   document.getElementById('exportWrBtn').addEventListener('click', exportWrCSV);
+  document.getElementById('weeklyReportBtn').addEventListener('click', openWeeklyReport);
+  document.getElementById('reportView').addEventListener('click', function(e){
+    var btn = e.target.closest('[data-rv]');
+    if(!btn) return;
+    var a = btn.dataset.rv;
+    if(a === 'close'){ closeWeeklyReport(); return; }
+    if(a === 'print'){ window.print(); return; }
+    if(a === 'prev'){ reportWeek = addDaysISO(reportWeek, -7); }
+    else if(a === 'next'){ reportWeek = addDaysISO(reportWeek, 7); }
+    else if(a === 'thisweek'){ reportWeek = getMonday(todayISO()); }
+    renderReport();
+    document.getElementById('reportView').scrollTop = 0;
+  });
   document.getElementById('importBtn').addEventListener('click', function(){
     document.getElementById('importInput').click();
   });
