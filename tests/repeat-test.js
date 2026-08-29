@@ -2,7 +2,7 @@ const { chromium } = require('playwright-core');
 const http = require('http'); const fs = require('fs');
 let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':'  -> '+x)); if(!c)fails++;};
 (async () => {
-  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync('process.env.APP_HTML'));}).listen(8751);
+  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync(process.env.APP_HTML));}).listen(8751);
   const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome'});
   const ctx=await b.newContext({viewport:{width:900,height:900},acceptDownloads:true});
   const p=await ctx.newPage();
@@ -93,7 +93,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   // interval colours
   const bg = async (job) => p.locator('.task:not(.done)',{hasText:job}).first()
                              .evaluate(el=>getComputedStyle(el).backgroundColor);
-  ok('weekly card is yellow', (await bg('Air hoses'))==='rgb(255, 241, 118)', await bg('Air hoses'));
+  ok('weekly card is dull yellow', (await bg('Air hoses'))==='rgb(239, 231, 194)', await bg('Air hoses'));
   ok('3-monthly card is dull red', (await bg('Lifeboat'))==='rgb(239, 217, 212)', await bg('Lifeboat'));
   await p.fill('#inJob','Monthly greasing'); await p.fill('#inDue','2026-08-01');
   await p.selectOption('#inRepeat','monthly'); await p.click('#addBtn');

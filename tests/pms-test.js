@@ -10,7 +10,7 @@ const dayOf=(csv,job)=>{ // which WORK PLANNER FOR DATE block a job sits under
   return null;
 };
 (async () => {
-  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync('process.env.APP_HTML'));}).listen(8750);
+  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync(process.env.APP_HTML));}).listen(8750);
   const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome'});
   const ctx=await b.newContext({viewport:{width:900,height:900},acceptDownloads:true});
   const p=await ctx.newPage();

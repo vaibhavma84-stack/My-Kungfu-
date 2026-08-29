@@ -2,7 +2,7 @@ const { chromium } = require('playwright-core');
 const http=require('http'), fs=require('fs');
 let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':'  -> '+x)); if(!c)fails++;};
 (async()=>{
-  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync('process.env.APP_HTML'));}).listen(8752);
+  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync(process.env.APP_HTML));}).listen(8752);
   const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome'});
   const ctx=await b.newContext({viewport:{width:900,height:900},acceptDownloads:true});
   const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(String(e)));
@@ -39,8 +39,8 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('priority defaults to normal', c.priority==='normal', c.priority);
   ok('imported jobs start pending', c.done===false);
   ok('a row with only a job still imports', t.some(x=>/no date at all/.test(x.job)));
-  ok('weekly job shows yellow',
-     (await p.locator('.task:not(.done)',{hasText:'Lifeboat'}).first().evaluate(e=>getComputedStyle(e).backgroundColor))==='rgb(255, 241, 118)');
+  ok('weekly job shows dull yellow',
+     (await p.locator('.task:not(.done)',{hasText:'Lifeboat'}).first().evaluate(e=>getComputedStyle(e).backgroundColor))==='rgb(239, 231, 194)');
   ok('no JS errors', errs.length===0, errs.join(' | '));
   await b.close(); srv.close();
   console.log(fails===0?'\nALL PASS':'\n'+fails+' FAILED'); process.exit(fails?1:0);

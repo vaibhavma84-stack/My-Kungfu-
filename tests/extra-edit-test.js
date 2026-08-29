@@ -2,7 +2,7 @@ const { chromium } = require('playwright-core');
 const http = require('http'); const fs = require('fs');
 let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':'  -> '+x)); if(!c)fails++;};
 (async () => {
-  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync('process.env.APP_HTML'));}).listen(8747);
+  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync(process.env.APP_HTML));}).listen(8747);
   const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome'});
   const p=await (await b.newContext({viewport:{width:420,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(String(e)));

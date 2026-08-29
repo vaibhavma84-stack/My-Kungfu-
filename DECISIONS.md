@@ -109,12 +109,26 @@ it — Sunday 30-Aug resolves to week commencing 24-Aug.
   change stayed in memory, the screen looked normal, and everything since the
   failure vanished on reload. Writes are now verified and reverted to the last
   state that reached disk.
+- **Work added in the WWR tab is a job, not a second kind of record.** It is
+  pushed into `tasks` already closed out — `done`, `dateCompleted` set,
+  `weeklyReport:'yes'` — rather than into a store of its own. That is why it
+  appears on the to do list as completed, why its photos and comments travel
+  with it, why the job editor opens from either tab, and why deleting it in one
+  place deletes it in both. The AD-19 tab is the opposite case and keeps its
+  own store: those are one-off planner entries that were never jobs and should
+  not clutter the pending list.
+- **The WWR tab lists every WR job ever, banded by week.** Not just the current
+  week. Reports get asked for again months later, and a list that quietly drops
+  older weeks is a list that cannot answer that.
 
 ## Building and shipping
 
 - **Web**: `index.html` is the app. `sw.js` caches it for offline use — **bump
   `CACHE` in `sw.js` whenever `index.html` changes**, or installed devices keep
-  serving the old copy. Updates apply on the launch *after* the one that
+  serving the old copy. `build-site.py` (in the working repo) does that bump
+  along with the three transforms the hosted copy needs over the source file:
+  the home-screen meta tags, the notch-safe header padding, and the service
+  worker registration. Updates apply on the launch *after* the one that
   downloads them, because pages are served cache-first for speed at sea.
 - **Android**: `android/` is a WebView shell. GitHub Actions builds a debug APK
   on every push touching `android/` or `index.html`, and copies the current

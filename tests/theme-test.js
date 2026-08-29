@@ -1,9 +1,9 @@
-const { chromium } = require(process.env.SP + '/node_modules/playwright-core');
+const { chromium } = require('playwright-core');
 const http=require('http'), fs=require('fs');
 let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':'  -> '+x)); if(!c)fails++;};
 const lum = c => { const m=c.match(/\d+/g); return m ? (0.299*m[0]+0.587*m[1]+0.114*m[2]) : null; };
 (async()=>{
-  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync('/home/user/expenses/GasPlanet_ToDoList.html'));}).listen(8762);
+  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync(process.env.APP_HTML));}).listen(8762);
   const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome'});
 
   // --- light phone ---

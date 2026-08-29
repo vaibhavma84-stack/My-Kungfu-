@@ -1,8 +1,8 @@
-const { chromium } = require(process.env.SP + '/node_modules/playwright-core');
+const { chromium } = require('playwright-core');
 const http=require('http'), fs=require('fs');
 let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':'  -> '+x)); if(!c)fails++;};
 (async()=>{
-  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync('/home/user/expenses/GasPlanet_ToDoList.html'));}).listen(8765);
+  const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync(process.env.APP_HTML));}).listen(8765);
   const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome'});
   const p=await (await b.newContext({viewport:{width:900,height:1000}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(String(e)));
@@ -10,7 +10,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.goto('http://localhost:8765/');
 
   // a week of work with photos, so the report runs to more than one page
-  const px = 'data:image/jpeg;base64,' + fs.readFileSync(process.env.SP+'/pic.jpg').toString('base64');
+  const px = 'data:image/jpeg;base64,' + fs.readFileSync(__dirname+'/pic.jpg').toString('base64');
   const jobs = ['Final coat Paint Application of Main Mast carried out.',
                 'Derusting of Main Deck Pipeline Support in progress.',
                 'Mooring Winches covered with canvas.',

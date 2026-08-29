@@ -21,12 +21,14 @@ asserts. `OUT` is where downloads and screenshots land (a temp dir by default).
 | `auto19-test` | closing a job puts it on that day's planner with no tick |
 | `report-test` | the Weekly Work Done Report — heading wording, ordinal week range, photos two-up with repeated captions |
 | `wr-test` | the WR CSV grouped Monday to Sunday |
+| `wwr-test` | the WWR tab — work added there is a completed job on the to do list, and reaches both the WR export and the AD-19 planner |
 | `edit-test` | editing a job after completion, driven against the 109-job import |
 | `extra-edit-test` | the AD-19 tab's one-off jobs, their editor and photos |
 | `ship-test` | the Ship tab, prefill, and the particulars paste parser |
 | `blank-test` | the three-column blank sheet round-tripping through import |
 | `banner-test` | the backup reminder, its thresholds and snooze |
 | `collapse` | the entry form collapsing without clipping |
+| `marsec-test`, `newfeat-test`, `print-test`, `project-test`, `theme-test` | MARSEC defaults, later additions, printing to PDF, the project sweep, light and dark |
 
 `pic.jpg` is a tiny JPEG for photo attachment. `sample-import.csv` is the real
 109-job import, used by several suites.
@@ -37,3 +39,22 @@ Several suites broke over time because they targeted `.first()` on a job card.
 Pending jobs sort above completed ones, so after a repeat raises a new
 occurrence `.first()` is the *new pending* card, not the one just completed.
 Target `.task.done` or `.task:not(.done)` explicitly.
+
+## Keep the suites runnable
+
+Every suite reads `APP_HTML` and `OUT` from the environment. They have twice
+been committed with those reads broken — `fs.readFileSync('process.env.APP_HTML')`
+quoted as a string, and `require(process.env.SP + '/node_modules/playwright-core')`
+against a variable nothing sets — which makes the whole file fail before its
+first assertion, and a suite that cannot start looks much like a suite that
+passes if only the tail of the output is read. `run.sh` prints `FAILED` for
+both cases; read it.
+
+Ports are hardcoded, one per suite, because `run.sh` runs them in sequence.
+Two suites on the same port fail with `ERR_CONNECTION_REFUSED` on whichever
+runs second. Check the port is unused before adding a suite.
+
+Assertions that pin a colour go stale when the colour is deliberately changed —
+the weekly-job yellow was dulled on request, and two suites kept asserting the
+bright value. A failing colour check means look at the app before assuming the
+app is wrong.

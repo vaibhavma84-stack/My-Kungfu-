@@ -89,6 +89,7 @@
   :root[data-theme="dark"] .flag-tag.flag-ad34{background:#162824; color:#7FC3B2; border-color:rgba(127,195,178,.25);}
   :root[data-theme="dark"] .flag-tag.flag-ra{background:#2C1D1A; color:#E29283; border-color:rgba(226,146,131,.25);}
   :root[data-theme="dark"] .flag-tag.flag-ptw{background:#16232F; color:#9DBEDC; border-color:rgba(157,190,220,.25);}
+  :root[data-theme="dark"] .flag-tag.flag-open{background:#2E2415; color:#DFB471; border-color:rgba(223,180,113,.25);}
   :root[data-theme="dark"] .month-cell.blank{background:#0C1216;}
   :root[data-theme="dark"] .cell.istoday .dnum,
   :root[data-theme="dark"] .month-cell.is-today{border-color:var(--steel);}
@@ -479,6 +480,16 @@
   .extra-row .ex-job{font-size:14px; font-weight:600; margin-top:2px; word-break:break-word;}
   .extra-row .ex-tags{display:flex; flex-wrap:wrap; gap:5px; margin-top:5px;}
   .extra-row .ex-rem{font-size:12.5px; color:var(--ink-soft); margin-top:4px; word-break:break-word;}
+
+  /* WWR — the week band that separates one report period from the next */
+  .wwr-week{
+    font-family:ui-monospace,monospace; font-size:11px; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--ink-soft);
+    background:var(--rule); border-radius:6px;
+    padding:6px 10px; margin:14px 0 8px;
+  }
+  .wwr-week:first-child{margin-top:0;}
+  .flag-tag.flag-open{background:#FFF1DC; color:#9A5B10; border-color:rgba(154,91,16,.25);}
   #shipPaste{
     width:100%; padding:10px; border:1px solid var(--line); border-radius:8px;
     background:var(--paper); color:var(--ink); font-family:inherit; font-size:14px; resize:vertical;
@@ -701,6 +712,7 @@
 <div class="top-tabs" id="topTabs">
   <button data-tab="jobs" class="active">To Do</button>
   <button data-tab="extra">AD-19</button>
+  <button data-tab="wwr">WWR</button>
   <button data-tab="crew">Crew</button>
   <button data-tab="cargo">Cargo</button>
   <button data-tab="ship">Ship</button>
@@ -935,6 +947,51 @@
     <button class="btn btn-danger" id="extraClearBtn">Clear all</button>
   </div>
   <div id="extraListWrap"></div>
+</div>
+
+<div id="wwrSection" style="display:none;">
+  <div id="wwrAddWrap">
+    <div class="ship-note">
+      Everything ticked <b>WR</b> on the to do list lands here on its own. Add anything
+      else that was done straight in below &mdash; it is saved as an ordinary completed
+      job, so it also shows on the to do list as done, photos and all.
+    </div>
+    <div class="addForm">
+      <div class="form-row row-main">
+        <div class="field job-field">
+          <label>Work done</label>
+          <input type="text" id="wrJob" placeholder="e.g. Renewed pilot ladder side ropes" maxlength="300">
+        </div>
+        <div class="field">
+          <label>Date done</label>
+          <input type="date" id="wrDate">
+        </div>
+        <div class="field">
+          <label>Permit to Work</label>
+          <select id="wrPtw"></select>
+        </div>
+        <div class="field remarks-field">
+          <label>Comments</label>
+          <input type="text" id="wrRemarks" placeholder="Optional" maxlength="500">
+        </div>
+      </div>
+      <div class="form-row flags-row">
+        <button type="button" class="yn-toggle" id="wrRA" data-value="no">RA SF-23</button>
+        <button type="button" class="yn-toggle" id="wrAd19" data-value="no">AD 19</button>
+        <button id="wrPhotoBtn" class="yn-toggle" type="button" style="flex:1;">&#128247; Photo</button>
+        <input type="file" id="wrPhotoInput" accept="image/*" multiple style="display:none">
+        <button id="wrAddBtn" class="btn btn-primary" style="flex:2;">+ Add work done</button>
+      </div>
+      <div id="wrPendingThumbs" class="thumbstrip"></div>
+    </div>
+  </div>
+  <div class="toolbar crew-toolbar">
+    <div class="spacer"></div>
+    <span class="count-badge" id="wrCount"></span>
+    <button class="btn btn-ghost" id="wrExportBtn">Export WR</button>
+    <button class="btn btn-primary" id="wrReportBtn" style="padding:10px 14px;">Weekly Report</button>
+  </div>
+  <div id="wwrListWrap"></div>
 </div>
 
 <div id="shipSection" style="display:none;">
@@ -1506,6 +1563,7 @@
   }
 
   function render(){
+    renderWwr();
     var pendingCount = tasks.filter(function(t){return !t.done;}).length;
     document.getElementById('countBadge').textContent = pendingCount + ' pending / ' + tasks.length + ' total';
 
@@ -2626,6 +2684,128 @@
     downloadCSV('GasPlanet_WorkDoneReport_' + todayISO() + '.csv', toCSV(rows));
   }
 
+  // ---------- WWR tab ----------
+  // One place for everything that goes into the work done report: the jobs
+  // ticked WR on the to do list, plus work added straight in here. An entry
+  // added here is stored as an ordinary task, already closed out, so it shows
+  // on the to do list as completed and carries its photos and comments with it.
+  // The AD 19 tick works exactly as it does on a job card, so a job can go to
+  // the weekly report and the daily work planner from this one form.
+  var wrPendingPhotos = [];
+
+  function fillWrPtw(){
+    var sel = document.getElementById('wrPtw');
+    sel.innerHTML = PTW_TYPES.map(function(v){
+      return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+    }).join('');
+    sel.value = 'N/A';
+  }
+
+  function renderWrPendingThumbs(){
+    var wrap = document.getElementById('wrPendingThumbs');
+    wrap.innerHTML = '';
+    wrPendingPhotos.forEach(function(src, idx){
+      var d = document.createElement('div');
+      d.className = 'thumb';
+      d.innerHTML = '<img src="' + src + '"><button class="rm" data-idx="' + idx + '">×</button>';
+      wrap.appendChild(d);
+    });
+    wrap.querySelectorAll('.rm').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        wrPendingPhotos.splice(parseInt(btn.dataset.idx), 1);
+        renderWrPendingThumbs();
+      });
+    });
+  }
+
+  function addWrJob(){
+    var job = document.getElementById('wrJob').value.trim();
+    if(!job){ document.getElementById('wrJob').focus(); return; }
+    var date = document.getElementById('wrDate').value || todayISO();
+    var ptwType = document.getElementById('wrPtw').value || 'N/A';
+    tasks.push({
+      id: uid(),
+      serial: nextSerial(),
+      job: job,
+      due: date,
+      priority: 'normal',
+      remarks: document.getElementById('wrRemarks').value.trim(),
+      weeklyReport: 'yes',
+      ad34Planner: document.getElementById('wrAd19').dataset.value === 'yes' ? 'yes' : 'no',
+      ra: document.getElementById('wrRA').dataset.value === 'yes',
+      ptw: ptwType !== 'N/A',
+      ptwType: ptwType !== 'N/A' ? ptwType : '',
+      repeat: '',
+      photos: wrPendingPhotos.slice(),
+      done: true,
+      dateCompleted: date,
+      createdAt: todayISO()
+    });
+    // as everywhere else, the form is only cleared once the write has landed
+    if(!saveTasks()){ render(); return; }
+    document.getElementById('wrJob').value = '';
+    document.getElementById('wrRemarks').value = '';
+    resetYnToggle('wrRA');
+    resetYnToggle('wrAd19');
+    document.getElementById('wrPtw').value = 'N/A';
+    wrPendingPhotos = [];
+    renderWrPendingThumbs();
+    render();
+    document.getElementById('wrJob').focus();
+  }
+
+  function renderWwr(){
+    var wrap = document.getElementById('wwrListWrap');
+    if(!wrap) return;
+    var jobs = wrJobs();
+    var badge = document.getElementById('wrCount');
+    if(badge) badge.textContent = jobs.length + (jobs.length === 1 ? ' entry' : ' entries');
+    if(!jobs.length){
+      wrap.innerHTML = '<div class="empty"><div class="big">⚓</div>Nothing for the work done report yet. '
+                     + 'Tick WR on a job, or add the work straight in above.</div>';
+      return;
+    }
+    var html = '';
+    var lastWeek = null;
+    jobs.forEach(function(t){
+      var day = wrDay(t);
+      var week = day ? getMonday(day) : '';
+      if(week !== lastWeek){
+        html += '<div class="wwr-week">' +
+                (week ? fmtDate(week) + ' — ' + fmtDate(addDaysISO(week, 6)) : 'No date set') +
+                '</div>';
+        lastWeek = week;
+      }
+      html += '<div class="extra-row">';
+      html += '  <div class="ex-main">';
+      html += '    <div class="ex-date">' + (day ? fmtDate(day) : '—') + ' · #' + t.serial + '</div>';
+      html += '    <div class="ex-job">' + escapeHtml(t.job) + '</div>';
+      html += '    <div class="ex-tags">';
+      if(!t.done) html += '<span class="flag-tag flag-open">NOT YET COMPLETED</span>';
+      if(t.ad34Planner === 'yes') html += '<span class="flag-tag flag-ad34">AD 19</span>';
+      if(t.ra) html += '<span class="flag-tag flag-ra">RA SF-23</span>';
+      if(t.ptw) html += '<span class="flag-tag flag-ptw">' + escapeHtml(t.ptwType || 'PTW') + '</span>';
+      html += '    </div>';
+      if(t.remarks) html += '<div class="ex-rem">' + escapeHtml(t.remarks) + '</div>';
+      if(t.photos && t.photos.length){
+        html += '<div class="thumbstrip">';
+        t.photos.forEach(function(src, idx){
+          html += '<div class="thumb" data-wwr-view="' + t.id + ':' + idx + '"><img src="' + src + '"></div>';
+        });
+        html += '</div>';
+      }
+      html += '  </div>';
+      html += '  <div class="task-actions">';
+      html += '    <button class="icon-btn" data-wwr-action="edit" data-id="' + t.id + '" title="Edit">✎</button>';
+      html += '    <button class="icon-btn" data-wwr-action="addphoto" data-id="' + t.id + '" title="Add photo">📷'
+            + (t.photos && t.photos.length ? '<span class="photo-count">' + t.photos.length + '</span>' : '') + '</button>';
+      html += '    <button class="icon-btn" data-wwr-action="delete" data-id="' + t.id + '" title="Delete">🗑</button>';
+      html += '  </div>';
+      html += '</div>';
+    });
+    wrap.innerHTML = html;
+  }
+
   // ---------- Weekly Work Done Report ----------
   // Mirrors the ship's own Deck Weekly Workdone document: a heading block, the
   // week's work as a list of statements, then the photographs two to a row with
@@ -2903,7 +3083,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v20';
+  var APP_BUILD = 'v21';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -3348,7 +3528,10 @@
   renderShip();
   fillExtraPtw();
   renderExtras();
+  fillWrPtw();
+  renderWwr();
   document.getElementById('exDate').value = todayISO();
+  document.getElementById('wrDate').value = todayISO();
   fillPtwTypes();
   syncPtwTypeRow();
   fillRepeatSelect(document.getElementById('inRepeat'), '');
@@ -3417,6 +3600,44 @@
     if(del) deleteExtra(del.dataset.id);
   });
 
+  document.getElementById('wrAddBtn').addEventListener('click', addWrJob);
+  document.getElementById('wrJob').addEventListener('keydown', function(e){ if(e.key==='Enter') addWrJob(); });
+  document.getElementById('wrExportBtn').addEventListener('click', exportWrCSV);
+  document.getElementById('wrReportBtn').addEventListener('click', openWeeklyReport);
+  document.getElementById('wrPhotoBtn').addEventListener('click', function(){
+    document.getElementById('wrPhotoInput').click();
+  });
+  document.getElementById('wrPhotoInput').addEventListener('change', function(e){
+    var files = Array.from(e.target.files || []);
+    var left = files.length;
+    if(!left) return;
+    files.forEach(function(f){
+      fileToCompressedDataURL(f, function(u){
+        if(u) wrPendingPhotos.push(u);
+        if(--left === 0) renderWrPendingThumbs();
+      });
+    });
+    e.target.value = '';
+  });
+
+  // WWR rows are ordinary jobs, so they use the job editor, the job photo
+  // input and the job delete — one entry, one record, edited from either tab.
+  document.getElementById('wwrListWrap').addEventListener('click', function(e){
+    var edit = e.target.closest('[data-wwr-action="edit"]');
+    if(edit){ openEditJob(edit.dataset.id); return; }
+    var ph = e.target.closest('[data-wwr-action="addphoto"]');
+    if(ph){ addPhotoTargetId = ph.dataset.id; addPhotoInput.click(); return; }
+    var thumb = e.target.closest('[data-wwr-view]');
+    if(thumb){
+      var parts = thumb.dataset.wwrView.split(':');
+      var t = tasks.find(function(x){ return x.id === parts[0]; });
+      if(t && t.photos && t.photos[parts[1]]) openViewer(t.photos[parts[1]]);
+      return;
+    }
+    var del = e.target.closest('[data-wwr-action="delete"]');
+    if(del) deleteTask(del.dataset.id);
+  });
+
   document.getElementById('exPhotoBtn').addEventListener('click', function(){
     document.getElementById('exPhotoInput').click();
   });
@@ -3470,8 +3691,8 @@
     if(delBtn){ deleteCargoEntry(delBtn.dataset.id); }
   });
 
-  var tabTitles = { jobs:'To Do List', extra:'Additional AD-19 Jobs', crew:'Crew List',
-                    cargo:'Cargo Log', ship:"Ship's Particulars" };
+  var tabTitles = { jobs:'To Do List', extra:'Additional AD-19 Jobs', wwr:'Weekly Work Done',
+                    crew:'Crew List', cargo:'Cargo Log', ship:"Ship's Particulars" };
   document.getElementById('topTabs').addEventListener('click', function(e){
     var btn = e.target.closest('button[data-tab]');
     if(!btn) return;
@@ -3482,6 +3703,7 @@
     document.getElementById('cargoSection').style.display = activeTab==='cargo' ? '' : 'none';
     document.getElementById('shipSection').style.display = activeTab==='ship' ? '' : 'none';
     document.getElementById('extraSection').style.display = activeTab==='extra' ? '' : 'none';
+    document.getElementById('wwrSection').style.display = activeTab==='wwr' ? '' : 'none';
     document.getElementById('pageTitle').textContent = tabTitles[activeTab];
     document.getElementById('fabAdd').style.display = activeTab==='jobs' ? '' : 'none';
   });

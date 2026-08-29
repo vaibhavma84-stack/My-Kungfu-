@@ -1,7 +1,7 @@
 const { chromium } = require('playwright-core');
 const http = require('http');
 const fs = require('fs');
-const path = 'process.env.APP_HTML';
+const path = process.env.APP_HTML;
 
 let fails = 0;
 const ok = (name, cond, extra) => {
@@ -11,6 +11,14 @@ const ok = (name, cond, extra) => {
 
 (async () => {
   const server = http.createServer((req, res) => {
+    // the hosted copy registers a service worker; serve it with a script MIME
+    // type or the browser rejects it and the page-error check trips on the
+    // harness rather than on the app
+    if (/sw\.js$/.test(req.url)) {
+      res.writeHead(200, {'Content-Type': 'application/javascript'});
+      res.end('');
+      return;
+    }
     res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
     res.end(fs.readFileSync(path));
   }).listen(8731);
