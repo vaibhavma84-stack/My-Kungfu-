@@ -27,7 +27,8 @@ asserts. `OUT` is where downloads and screenshots land (a temp dir by default).
 | `ship-test` | the Ship tab, prefill, and the particulars paste parser |
 | `blank-test` | the three-column blank sheet round-tripping through import |
 | `banner-test` | the backup reminder, its thresholds and snooze |
-| `tools-test` | the Tools tab and converter — known conversions, the formula line, what it remembers |
+| `tools-test` | the Tools tab, the converter and the unit guide — known conversions, the formula line, search, what it remembers |
+| `eta-test` | the ETA tool — local-to-UTC conversion, half-hour and negative zones, the speed band and its arithmetic |
 | `collapse` | the entry form collapsing without clipping |
 | `marsec-test`, `newfeat-test`, `print-test`, `project-test`, `theme-test` | MARSEC defaults, later additions, printing to PDF, the project sweep, light and dark |
 

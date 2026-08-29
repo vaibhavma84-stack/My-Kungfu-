@@ -128,6 +128,20 @@ it — Sunday 30-Aug resolves to week commencing 24-Aug.
   re-derives all 70 from published definitions and compares. It is the only
   check that can catch a wrong factor: the UI renders a wrong number exactly as
   convincingly as a right one.
+- **The ETA tool lays out a band of speeds rather than answering one.** A tenth
+  of a knot moves an arrival by about an hour over an ocean passage, so the
+  useful output is the whole band — nine tenths below through one knot above, in
+  tenths — with the entered speed highlighted. Departure is typed in local time
+  and shown in UTC immediately, because UTC is the number that goes in the
+  message and the one that gets fumbled.
+- **All ETA arithmetic is done in minutes from the epoch, in UTC.** No Date
+  object is ever trusted with a time zone: the offset is applied as a number and
+  every field is read with getUTC*. Zones run the full range in half-hour steps,
+  because half-hour zones are in daily use east of Suez.
+- **The unit guide is plain text carried in the page.** Roughly 17 KB for 74
+  entries, which is nothing against working with no signal. A build check
+  asserts every unit in the converter has a guide entry and vice versa, so the
+  two lists cannot drift.
 - **The converter cannot turn mass into volume.** Tonnes to barrels needs a
   density, which depends on the product and its temperature, so there is no
   factor to carry. That is a cargo calculation, not a unit conversion, and

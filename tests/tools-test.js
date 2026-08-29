@@ -22,8 +22,11 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
      await p.locator('#toolsHome').isVisible() && !(await p.locator('#toolConvert').isVisible()));
   ok('converter tile has a drawn icon, not an emoji',
      await p.locator('[data-tool="convert"] svg').count()===1);
-  ok('a placeholder tile is there for the next tool',
-     await p.locator('.tool-tile.soon').count()===1);
+  ok('three live tools on the launcher',
+     await p.locator('.tool-tile[data-tool]').count()===3,
+     await p.locator('.tool-tile[data-tool]').count());
+  ok('no placeholder left, every tile does something',
+     await p.locator('.tool-tile.soon').count()===0);
 
   await p.click('[data-tool="convert"]');
   ok('converter opens', await p.locator('#toolConvert').isVisible());
@@ -173,6 +176,61 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await setUp('energy','GJ',1);
   ok('a big factor is grouped, not exponential',
      (await formulaFor('joule (J)'))==='J = GJ × 1 000 000 000', await formulaFor('joule (J)'));
+
+  // ---- the unit guide ----
+  // leave the tab and come back, since re-clicking the tab you are already on
+  // is not what resets the launcher
+  await p.click('#topTabs button[data-tab="jobs"]');
+  await p.click('#topTabs button[data-tab="tools"]');
+  ok('a second tile is live now', await p.locator('[data-tool="guide"]').count()===1);
+  await p.click('[data-tool="guide"]');
+  ok('guide opens', await p.locator('#toolGuide').isVisible());
+  ok('title reads Unit guide', (await p.textContent('#pageTitle')).trim()==='Unit guide');
+  ok('opens on a category with its intro', (await p.textContent('#guideIntro')).length>40);
+  ok('lists that category\'s units',
+     await p.locator('#guideOut .ug-item').count()===14, await p.locator('#guideOut .ug-item').count());
+  ok('entries start closed', await p.locator('#guideOut .ug-item.open').count()===0);
+
+  const bar = p.locator('.ug-item', { hasText:'bar' }).first();
+  await bar.locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  ok('tapping opens one', await p.locator('#guideOut .ug-item.open').count()===1);
+  ok('and it says where the unit came from', /Bjerknes/.test(await bar.textContent()));
+  await bar.locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  ok('tapping again closes it', await p.locator('#guideOut .ug-item.open').count()===0);
+
+  await p.click('#guideCats button[data-gcat="length"]');
+  await p.waitForTimeout(100);
+  ok('switching category switches the list',
+     /fathom/i.test(await p.textContent('#guideOut')));
+  await p.locator('.ug-item', { hasText:'fathom' }).first().locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  ok('the fathom entry explains the lead line',
+     /arms/.test(await p.locator('.ug-item', { hasText:'fathom' }).first().textContent()));
+
+  // search reaches across every category
+  await p.fill('#guideSearch','torricelli');
+  await p.waitForTimeout(120);
+  ok('search finds a unit by its history, not just its name',
+     await p.locator('#guideOut .ug-item').count()>=1, await p.locator('#guideOut .ug-item').count());
+  ok('search hides the category chips', !(await p.locator('#guideCats').isVisible()));
+  ok('search labels which category a hit is in', await p.locator('#guideOut .ug-cat').count()>=1);
+  await p.fill('#guideSearch','MMBTU');
+  await p.waitForTimeout(120);
+  await p.locator('#guideOut .ug-item').first().locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  ok('the MMBTU trap is spelled out',
+     /million million|not a million million/.test(await p.textContent('#guideOut')));
+  await p.fill('#guideSearch','zzzz');
+  await p.waitForTimeout(120);
+  ok('a search with no hits says so', /Nothing matches/.test(await p.textContent('#guideOut')));
+  await p.fill('#guideSearch','');
+  await p.waitForTimeout(120);
+  ok('clearing the search brings the chips back', await p.locator('#guideCats').isVisible());
+
+  await p.click('#guideBackBtn');
+  ok('back returns to the launcher', await p.locator('#toolsHome').isVisible());
 
   ok('no page errors', errs.length===0, errs.join(' | '));
   await b.close(); srv.close();

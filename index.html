@@ -551,6 +551,53 @@
   .conv-row.self{background:var(--tint-info); border-color:var(--tint-info-line);}
   .conv-row.copied .cv{color:var(--done); font-weight:700;}
   .conv-hint{font-size:11.5px; color:var(--ink-soft); text-align:center; padding:12px 0 4px;}
+
+  .eta-row{
+    display:flex; align-items:baseline; gap:10px;
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:10px 13px; margin-top:6px; cursor:pointer;
+  }
+  .eta-row .es{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:13.5px; font-weight:700; flex:0 0 62px;
+  }
+  .eta-row .et{flex:1; min-width:0; text-align:right;}
+  .eta-row .et .lt{font-size:13.5px; font-weight:650; display:block;}
+  .eta-row .et .utc{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11.5px; color:var(--ink-soft); display:block; margin-top:2px;
+  }
+  .eta-row .ed{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11.5px; color:var(--ink-soft); flex:0 0 auto;
+  }
+  .eta-row.self{background:var(--tint-info); border-color:var(--tint-info-line);}
+  .eta-row.self .es{color:var(--steel);}
+
+  #guideSearch{
+    width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px;
+    background:var(--paper); color:var(--ink); font-family:inherit; font-size:14px;
+    margin:6px 0 4px;
+  }
+  #guideSearch:focus{outline:2px solid var(--focus); outline-offset:-1px;}
+  .ug-item{
+    background:var(--card); border:1px solid var(--line);
+    border-radius:10px; margin-top:7px;
+  }
+  .ug-head{display:flex; align-items:center; gap:9px; padding:12px 13px; cursor:pointer;}
+  .ug-name{font-size:14px; font-weight:650; flex:1; min-width:0; word-break:break-word;}
+  .ug-cat{
+    font-size:10px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-soft); flex:0 0 auto;
+  }
+  .ug-sym{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:12.5px; color:var(--ink-soft); flex:0 0 auto;
+  }
+  .ug-chev{color:var(--ink-soft); flex:0 0 auto; transition:transform .15s;}
+  .ug-item.open .ug-chev{transform:rotate(180deg);}
+  .ug-body{display:none; padding:0 13px 14px; font-size:13px; line-height:1.6; color:var(--ink-soft);}
+  .ug-item.open .ug-body{display:block;}
   .flag-tag.flag-open{background:#FFF1DC; color:#9A5B10; border-color:rgba(154,91,16,.25);}
   #shipPaste{
     width:100%; padding:10px; border:1px solid var(--line); border-radius:8px;
@@ -1073,16 +1120,27 @@
         Converter
         <span class="tsub">Pressure, temperature, energy and more</span>
       </button>
-      <div class="tool-tile soon">
+      <button class="tool-tile" data-tool="guide">
         <span class="ti">
           <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                  d="M12 6v12M6 12h12"/>
+                  stroke-linejoin="round" d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H5.5A1.5 1.5 0 0 1 4 15.5Zm16 0A1.5 1.5 0 0 0 18.5 4H14a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h4.5a1.5 1.5 0 0 0 1.5-1.5Z"/>
           </svg>
         </span>
-        More to come
-        <span class="tsub">Still to be decided</span>
-      </div>
+        Unit guide
+        <span class="tsub">Where each unit came from, and why</span>
+      </button>
+      <button class="tool-tile" data-tool="eta">
+        <span class="ti">
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round" d="M12 7.2V12l3.2 2"/>
+          </svg>
+        </span>
+        ETA
+        <span class="tsub">Arrival across a range of speeds</span>
+      </button>
     </div>
   </div>
 
@@ -1105,6 +1163,53 @@
     <div class="conv-note" id="convNote"></div>
     <div id="convOut"></div>
     <div class="conv-hint">Tap a line to copy it.</div>
+  </div>
+
+  <div id="toolEta" style="display:none;">
+    <div class="tool-head">
+      <button class="btn btn-ghost" id="etaBackBtn">&lsaquo; Tools</button>
+      <div class="tool-title">ETA</div>
+    </div>
+    <div class="form-row row-main">
+      <div class="field">
+        <label>Departure date (LT)</label>
+        <input type="date" id="etaDate">
+      </div>
+      <div class="field">
+        <label>Departure time (LT)</label>
+        <input type="time" id="etaTime">
+      </div>
+      <div class="field">
+        <label>Distance to go (NM)</label>
+        <input type="number" step="any" id="etaDist" placeholder="e.g. 1450">
+      </div>
+      <div class="field">
+        <label>Speed (knots)</label>
+        <input type="number" step="0.1" id="etaSpeed" placeholder="e.g. 15">
+      </div>
+      <div class="field">
+        <label>Departure zone</label>
+        <select id="etaZoneFrom"></select>
+      </div>
+      <div class="field">
+        <label>Arrival zone</label>
+        <select id="etaZoneTo"></select>
+      </div>
+    </div>
+    <div class="conv-note" id="etaDep"></div>
+    <div id="etaOut"></div>
+    <div class="conv-hint">Tap a line to copy it. The selected speed is highlighted.</div>
+  </div>
+
+  <div id="toolGuide" style="display:none;">
+    <div class="tool-head">
+      <button class="btn btn-ghost" id="guideBackBtn">&lsaquo; Tools</button>
+      <div class="tool-title">Unit guide</div>
+    </div>
+    <input type="search" id="guideSearch" placeholder="Search every unit…">
+    <div class="conv-cats" id="guideCats"></div>
+    <div class="conv-note" id="guideIntro"></div>
+    <div id="guideOut"></div>
   </div>
 </div>
 
@@ -2697,10 +2802,204 @@
     renderConvOut();
   }
 
+  // ---------- Tools: ETA ----------
+  // Departure is entered in local time and shown in UTC straight away, because
+  // that is the number that goes in the message and the one that gets fumbled.
+  // The table is the point of the tool: a tenth of a knot either way changes an
+  // arrival by an hour over an ocean passage, so the whole band is laid out
+  // rather than made you re-enter a speed and re-read one line at a time.
+  var ETA_KEY = 'gasplanet_eta_v1';
+  var ETA_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var ETA_DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];   // getUTCDay order
+  function etaPad(n){ return String(n).padStart(2, '0'); }
+
+  // half-hour zones are real and in daily use east of Suez
+  var ETA_ZONES = (function(){
+    var out = [];
+    for(var m = -12 * 60; m <= 14 * 60; m += 30) out.push(m);
+    return out;
+  })();
+
+  function zoneLabel(mins){
+    var sign = mins < 0 ? '-' : '+';
+    var a = Math.abs(mins);
+    return 'UTC' + sign + etaPad(Math.floor(a / 60)) + ':' + etaPad(a % 60);
+  }
+
+  function fillEtaZones(){
+    var html = ETA_ZONES.map(function(m){
+      return '<option value="' + m + '">' + zoneLabel(m) + '</option>';
+    }).join('');
+    document.getElementById('etaZoneFrom').innerHTML = html;
+    document.getElementById('etaZoneTo').innerHTML   = html;
+  }
+
+  // Everything is done in minutes from the epoch in UTC, so no Date object ever
+  // has to be trusted with a time zone.
+  function etaDepartureUTC(){
+    var d = document.getElementById('etaDate').value;
+    var t = document.getElementById('etaTime').value;
+    if(!d || !t) return null;
+    var dp = d.split('-'), tp = t.split(':');
+    var localMs = Date.UTC(+dp[0], +dp[1] - 1, +dp[2], +tp[0], +tp[1]);
+    return localMs - (+document.getElementById('etaZoneFrom').value) * 60000;
+  }
+
+  // formatted in a given zone, again without leaving UTC arithmetic
+  function fmtInZone(utcMs, offsetMin, withDay){
+    var d = new Date(utcMs + offsetMin * 60000);
+    var s = etaPad(d.getUTCDate()) + '-' + ETA_MONTHS[d.getUTCMonth()] + '-' + d.getUTCFullYear() +
+            ' ' + etaPad(d.getUTCHours()) + etaPad(d.getUTCMinutes());
+    if(withDay) s = ETA_DAYS[d.getUTCDay()] + ' ' + s;
+    return s;
+  }
+
+  function fmtSteaming(hours){
+    var total = Math.round(hours * 60);
+    var d = Math.floor(total / 1440);
+    var h = Math.floor((total % 1440) / 60);
+    var m = total % 60;
+    return (d ? d + 'd ' : '') + h + 'h ' + etaPad(m) + 'm';
+  }
+
+  function saveEta(){
+    try{
+      localStorage.setItem(ETA_KEY, JSON.stringify({
+        dist:  document.getElementById('etaDist').value,
+        speed: document.getElementById('etaSpeed').value,
+        from:  document.getElementById('etaZoneFrom').value,
+        to:    document.getElementById('etaZoneTo').value
+      }));
+    }catch(e){ /* not worth an alert */ }
+  }
+
+  function renderEta(){
+    var out = document.getElementById('etaOut');
+    var dep = document.getElementById('etaDep');
+    saveEta();
+
+    var depUTC = etaDepartureUTC();
+    var zFrom  = +document.getElementById('etaZoneFrom').value;
+    var zTo    = +document.getElementById('etaZoneTo').value;
+
+    if(depUTC === null){
+      dep.textContent = 'Set the departure date and time to start.';
+      out.innerHTML = '';
+      return;
+    }
+    dep.innerHTML = 'Departure ' + escapeHtml(fmtInZone(depUTC, zFrom, true)) + ' LT' +
+                    ' &nbsp;·&nbsp; <b>' + escapeHtml(fmtInZone(depUTC, 0, true)) + ' UTC</b>';
+
+    var dist  = parseFloat(document.getElementById('etaDist').value);
+    var speed = parseFloat(document.getElementById('etaSpeed').value);
+    if(!(dist > 0) || !(speed > 0)){
+      out.innerHTML = '<div class="empty" style="padding:26px 12px;">Enter a distance and a speed.</div>';
+      return;
+    }
+
+    // the band asked for: nine tenths below through one knot above, in tenths
+    var rows = '';
+    for(var i = -9; i <= 10; i++){
+      var v = Math.round((speed + i / 10) * 10) / 10;
+      if(v <= 0) continue;
+      var hours = dist / v;
+      var arr = depUTC + Math.round(hours * 3600000);
+      var isSel = Math.abs(v - speed) < 0.001;
+      var line = fmtInZone(arr, zTo, true) + ' LT / ' + fmtInZone(arr, 0, false) + ' UTC';
+      rows += '<div class="eta-row' + (isSel ? ' self' : '') + '" data-copy="' +
+                escapeHtml(v.toFixed(1) + ' kn — ' + line) + '">' +
+                '<span class="es">' + v.toFixed(1) + ' kn</span>' +
+                '<span class="et">' +
+                  '<span class="lt">' + escapeHtml(fmtInZone(arr, zTo, true)) + '</span>' +
+                  '<span class="utc">' + escapeHtml(fmtInZone(arr, 0, false)) + ' UTC</span>' +
+                '</span>' +
+                '<span class="ed">' + escapeHtml(fmtSteaming(hours)) + '</span>' +
+              '</div>';
+    }
+    out.innerHTML = rows;
+  }
+
+  function loadEta(){
+    fillEtaZones();
+    var saved = null;
+    try{ saved = JSON.parse(localStorage.getItem(ETA_KEY) || 'null'); }catch(e){ saved = null; }
+    document.getElementById('etaZoneFrom').value = saved && saved.from !== undefined ? saved.from : '480';
+    document.getElementById('etaZoneTo').value   = saved && saved.to   !== undefined ? saved.to   : document.getElementById('etaZoneFrom').value;
+    if(saved && saved.dist)  document.getElementById('etaDist').value  = saved.dist;
+    if(saved && saved.speed) document.getElementById('etaSpeed').value = saved.speed;
+    if(!document.getElementById('etaDate').value) document.getElementById('etaDate').value = todayISO();
+  }
+
+  // ---------- Tools: unit guide ----------
+  // Where each unit came from and why it is the size it is. Plain text, so
+  // it costs nothing at sea. Keyed to exactly the same unit keys the
+  // converter uses, and a build check asserts the two lists stay in step.
+  var CAT_NOTES = {"pressure": "Pressure is force spread over an area, so most of these units are some force divided by some area. Three of them are not: mercury and water columns state pressure as the height of liquid it will hold up, which is how pressure was first measured and why it is still the natural way to think about a sounding.", "temperature": "Temperature is the one quantity here that is not a simple count of something, so its scales were each anchored to whatever their inventor could reproduce reliably in a workshop. Two of them start at an arbitrary point and two start at absolute zero.", "energy": "Every unit here measures the same thing, and most exist because heat and mechanical work were studied separately for a century before anyone proved they were the same. The calorie and the BTU come from the heat side, the joule and the foot-pound from the work side.", "volume": "The metric units are all decimal steps from the cubic metre. The others are survivals of a time when every trade had its own cask, and the ones that lasted did so because a large industry standardised on them.", "mass": "Mass is what cargo is actually bought and sold in, being the one quantity that does not change with temperature. The three tons in this list are all different sizes, which is why a figure quoted as 'tons' and nothing else is worth querying.", "length": "The metric units descend from a single attempt to measure the Earth. The others are body measurements and Roman road-building units that were standardised centuries later, which is why their sizes look arbitrary and their definitions are now exact conversions to the metre.", "density": "Density ties volume to mass, which is the calculation most of cargo work turns on. It changes with temperature, so a density figure without the temperature it was measured at cannot be used. Relative density, or specific gravity, is this figure divided by the density of water, and so has no units at all.", "flow": "Flow units are simply a volume unit and a time unit put together. Which pairing is used depends on the industry a pump was built for rather than on anything about the pump.", "speed": "Distance over time. The knot is the odd one out and the one that matters at sea, because it is built from the nautical mile and so agrees with a chart."};
+
+  var UNIT_NOTES = {"pressure": {"bar": "One bar is 100 000 pascals, a size chosen deliberately to sit within about one percent of the air pressure at sea level. The Norwegian meteorologist Vilhelm Bjerknes, who put weather forecasting on a mathematical footing, introduced it early in the twentieth century and took the name from the Greek baros, meaning weight. It is not an SI unit but is accepted alongside them. It survives at sea for a practical reason: one bar is very nearly the pressure of ten metres of water, so a sounding and a pressure gauge can be compared in your head.", "mbar": "A thousandth of a bar, and the unit barometric pressure was reported in for most of the twentieth century. It is exactly the same size as the hectopascal, which is why the changeover to SI naming in weather reporting changed nothing on the chart: 1013 millibars simply became 1013 hectopascals, the same number under a new name.", "hPa": "A hundred pascals, which is exactly the same size as the millibar. When meteorology moved to SI units it chose this particular multiple on purpose, because it left every published pressure unchanged. A barometer marked in millibars is already reading hectopascals.", "Pa": "The SI unit: one newton of force spread over one square metre. It is named for Blaise Pascal, who in 1648 had his brother-in-law carry a barometer up the Puy de Dome and showed that the mercury fell as he climbed, proving that air has weight and that the atmosphere does not go on forever. The unit itself was adopted in 1971. One pascal is very small, roughly the pressure of a sheet of paper lying on a desk, so it is almost never used without a prefix.", "kPa": "A thousand pascals, and the everyday working size of the SI pressure unit. One bar is exactly 100 kPa, which makes moving between the two easy enough to do in your head.", "MPa": "A million pascals, or ten bar. Used wherever pressures are high: hydraulic systems, pressure vessel design, class rules and most modern engineering drawings.", "kgcm2": "A kilogram of force pressing on a square centimetre, from the older metric-technical system that built itself on force rather than mass. Its real usefulness is an accident of arithmetic: it works out at 0.98 bar, so a gauge marked in kg/cm2 can be read as bar for rough work with about two percent in hand. Common on older machinery and on Japanese-built equipment. Superseded by the bar and the pascal, but still found in plenty of engine rooms.", "psi": "Pounds of force on a square inch, the pressure unit of British and American engineering. It survived the American metric changeover and remains standard throughout the United States oil and gas industry, which is why it still appears on cargo documents, imported machinery and charterers' paperwork long after most of the world moved on.", "atm": "The standard atmosphere, fixed by international agreement in 1954 at exactly 101 325 pascals. It began as an attempt to write down the average air pressure at sea level. Real sea-level pressure wanders either side of it, so the number is now a definition rather than a measurement.", "mmHg": "The height of a column of mercury that the pressure will hold up. It comes directly from Evangelista Torricelli, a pupil of Galileo, who in 1643 filled a glass tube with mercury, upended it in a dish and found the column settled at about 760 mm with an empty space above it. That space was the first man-made vacuum and the tube was the first barometer. Mercury was used because it is dense: the same experiment with water needs a tube over ten metres tall. The unit is also called the torr, after him.", "inHg": "Torricelli's mercury column measured in inches rather than millimetres. A standard atmosphere is 29.92 inHg, a number every pilot knows because American aviation sets altimeters in it, and it remains the pressure quoted in United States weather reports.", "mmH2O": "The height of a column of water, used where pressures are far too small for a mercury scale to resolve: draught in a funnel or a duct, ventilation systems, filter differentials and tank gauging. Being water, it is directly intuitive, because the pressure is simply how deep you are.", "mH2O": "Metres of water column, and probably the most intuitive pressure unit on a ship, because it is a depth rather than an abstraction. Ten metres of water is almost exactly one bar, so a sounding converts to a pressure with no arithmetic worth writing down.", "inH2O": "A water column measured in inches, used in American practice for the same very low pressures as the millimetre of water: ventilation, furnace draught and filter differentials."}, "temperature": {"C": "Anders Celsius, a Swedish astronomer, proposed a hundred-step scale between the freezing and boiling points of water in 1742, but he put zero at boiling and a hundred at freezing. It was turned the right way up within a few years of his death, and exactly who did it is still argued over. The scale was called centigrade until 1948, when it was renamed after him, partly because centigrade already meant a unit of angle in several languages.", "F": "Daniel Gabriel Fahrenheit was an instrument maker, and his scale exists because he was the first to build thermometers accurate and repeatable enough for fixed points to be worth arguing about. Around 1724 he set zero at the coldest temperature he could reach reliably, a mixture of ice, water and salt, and put roughly body temperature near 96. Water freezing at 32 and boiling at 212 fell out of those two choices rather than being chosen themselves.", "K": "The absolute scale, counting up from the point where there is no thermal energy left to remove. William Thomson, later Lord Kelvin, worked out in 1848 that such a point had to exist and where it lay. A kelvin is the same size as a degree Celsius, so the two differ only by a shift of 273.15, and it is written K with no degree sign because it is not a degree of anything. Since 2019 it has been defined by fixing a constant of nature rather than by the properties of water.", "R": "An absolute scale like the kelvin, but built from Fahrenheit-sized degrees, proposed by the Scottish engineer William Rankine in 1859. Zero is absolute zero and water freezes at 491.67. It survives in parts of American thermodynamic and engineering practice, where it allows absolute-temperature calculations without leaving Fahrenheit."}, "energy": {"J": "The SI unit of energy, named for James Prescott Joule, a Manchester brewer who ran some of the most careful experiments of the nineteenth century in his spare time. By stirring water with a paddle wheel driven by falling weights, he showed that a fixed amount of mechanical work always produced the same amount of heat, and so that work and heat are two forms of one thing. One joule is small: roughly the energy of dropping an apple one metre.", "kJ": "A thousand joules. The size most everyday energy quantities land in, which is why it appears far more often than the bare joule.", "MJ": "A million joules. The usual size for fuel calorific values, which is why bunker specifications are often quoted in MJ per kilogram.", "GJ": "A thousand million joules. Used for cargo-scale quantities of energy, particularly in the gas trade where it competes with the MMBTU.", "kWh": "One kilowatt drawn for one hour. It is not really an SI unit, it is a billing unit, and it survives because it maps onto how people actually buy and use electrical power. In SI terms it is 3.6 megajoules.", "MWh": "A thousand kilowatt-hours. The size used for generating plant output and for larger electrical accounts.", "cal": "The heat needed to warm one gram of water by one degree Celsius. It was the natural unit while heat was still believed to be a substance in its own right, and it lost its place once Joule showed that heat was simply energy. It is now defined as exactly 4.184 joules and survives mainly in nutrition, where the Calorie written with a capital C confusingly means a thousand of these.", "kcal": "A thousand calories. This is what is meant by a food Calorie, and it is also the unit older heat-transfer and refrigeration tables were written in.", "BTU": "The British thermal unit is the heat needed to warm one pound of water by one degree Fahrenheit, which is the calorie's idea in imperial clothing. Despite the name it is now used far more in the United States than in Britain, and it is the unit the gas trade runs on.", "MMBTU": "A million BTU, and the unit LNG and natural gas cargoes are priced in. The abbreviation is a trap worth knowing. The MM here is old commercial notation in which M means a thousand, so MM is a thousand thousand. It does not follow the SI convention where M means mega. An MMBTU is a million BTU, not a million million.", "therm": "A hundred thousand BTU, used for billing gas. It is a convenient size for an invoice rather than a scientific quantity.", "ftlbf": "The work done in raising one pound through one foot, the imperial counterpart to the joule. Still met in torque figures and in older engineering tables."}, "volume": {"m3": "The SI unit and the working unit of cargo. A cubic metre holds a tonne of fresh water, which is exactly what makes it convenient: volume and mass line up whenever density is close to one.", "L": "Originally defined as the volume of one kilogram of water, which tied it to a measurement rather than to a definition and made it very slightly wrong. It was cut loose in 1964 and made exactly one cubic decimetre, a thousandth of a cubic metre.", "mL": "A thousandth of a litre, and the same thing as a cubic centimetre. Laboratory and dosing quantities rather than cargo ones.", "ft3": "The cubic foot. Still the working unit for gas volumes in American practice, where standard cubic feet are used to state quantities of natural gas.", "in3": "The cubic inch. Rarely used for volume in its own right, but it matters because the US gallon is defined as exactly 231 of them.", "galUS": "Exactly 231 cubic inches, because it is the English wine gallon of Queen Anne's day, fixed by statute in 1707. When the United States separated it kept that gallon, and Britain later replaced it with something else. Neither side has changed back, which is why the two gallons still differ by about a fifth.", "galUK": "Defined in 1824 as the volume of ten pounds of water, which is where its awkward size comes from. It replaced the older wine, ale and corn gallons that Britain had been using side by side for centuries. It is about twenty percent larger than the US gallon, a difference that has caught out more than one bunkering calculation.", "bbl": "Forty-two US gallons, and the unit the entire oil trade counts in. The size was settled in the Pennsylvania oil fields in the 1860s, when producers agreed on a common measure so that buyers knew what they were paying for. Forty-two gallons matched a cask size already in use in other trades. The abbreviation bbl rather than bl is old and its origin is genuinely disputed; the frequently repeated blue barrel explanation is not well evidenced. No physical barrel has been involved for well over a century. Oil moves in tanks, and the barrel is now purely a unit of account."}, "mass": {"kg": "The SI base unit of mass, and the last of them to be defined by a physical object. From 1889 the kilogram was one particular cylinder of platinum and iridium kept outside Paris, and every kilogram in the world was ultimately a copy of it. Since 2019 it has been defined by fixing the Planck constant instead, so that cylinder is now simply an object whose mass is very well known.", "g": "A thousandth of a kilogram. The odd position of the gram, being a subdivision of the base unit rather than the base unit itself, is a leftover from the original metric system, where the gram came first and proved too small to be practical as a standard.", "t": "A thousand kilograms, also called the metric ton or MT to distinguish it from the long and short tons it sits between. It is the unit cargo is bought and sold in.", "lb": "The pound has been defined since 1959 as exactly 0.45359237 kilograms, under an agreement between the English-speaking countries that finally made the American and British pounds identical after centuries of them differing slightly. The abbreviation lb comes from libra, a Roman unit of weight.", "oz": "A sixteenth of a pound. This is the avoirdupois ounce used for ordinary weight, and it is not the same as the troy ounce used for precious metals, which is heavier.", "tonLong": "2240 pounds, being twenty hundredweight of 112 pounds each. The traditional British ton, and the reason a ship's deadweight was quoted in long tons for most of the history of merchant shipping. It is larger than a tonne by about 1.6 percent.", "tonShort": "2000 pounds, the ton used in the United States. Its existence alongside the long ton is exactly why a cargo figure should always say which ton is meant."}, "length": {"m": "Defined in 1791 as one ten-millionth of the distance from the equator to the North Pole along the meridian through Paris, an attempt to base measurement on the Earth itself rather than on the length of some king's arm. Surveying that distance took years and the answer came out very slightly wrong. The metre is now defined by fixing the speed of light: it is the distance light travels in one 299 792 458th of a second.", "mm": "A thousandth of a metre, and the working unit of engineering drawing and machining almost everywhere outside the United States.", "cm": "A hundredth of a metre. Common in everyday use but deliberately avoided in engineering, where millimetres and metres leave less room for a misplaced decimal point.", "km": "A thousand metres. Distance over land; at sea the nautical mile does the same job and agrees with the chart.", "in": "Exactly 25.4 millimetres since the 1959 agreement. Before that the British and American inches differed very slightly, which mattered in surveying and in precision manufacture.", "ft": "Exactly 0.3048 metres. One of the oldest units in use anywhere, being originally a human foot, and standardised into an exact fraction of the metre only in 1959.", "yd": "Three feet, and exactly 0.9144 metres since 1959. That single agreement fixed the foot and the inch as well, since both are defined from it.", "fath": "Six feet, and the traditional unit of sounding depth. The word comes from the Old English for the span of a man's outstretched arms, which is exactly how a lead line was hauled in and counted: arm span by arm span, in the dark, by feel.", "nm": "One minute of arc of latitude, which is what makes it the natural unit at sea. A distance can be stepped off the latitude scale at the side of the chart with dividers and needs no conversion at all. Because the Earth is not a perfect sphere that minute varies slightly with latitude, so it was fixed by international agreement in 1929 at exactly 1852 metres.", "mi": "The statute mile is 5280 feet, a number that looks arbitrary because it is a compromise. The Romans left England a mile of a thousand paces and English farming left it the furlong, and the two did not divide evenly. Parliament settled the argument in 1593 by making the mile eight furlongs, and the odd figure has stood ever since."}, "density": {"kgm3": "The SI unit. Awkward for liquids, because everything of interest lands in the hundreds, which is why cargo work usually shifts to tonnes per cubic metre or kilograms per litre instead.", "kgL": "Kilograms per litre, numerically the same as tonnes per cubic metre and as grams per cubic centimetre, since all three are a thousand times the SI unit. Fresh water is very close to 1, which is what makes this the easy scale to think in.", "gcm3": "Grams per cubic centimetre. The same number as kilograms per litre and as tonnes per cubic metre. Common in laboratory work and in reference tables.", "tm3": "Tonnes per cubic metre, the form density is usually quoted in for cargo work, because it turns a volume straight into a weight. Density changes with temperature, so a cargo density figure is meaningless without the temperature it was measured at.", "lbft3": "Pounds per cubic foot, the density unit of American engineering practice. Water is about 62.4 in these units.", "lbgal": "Pounds per US gallon, used in the American oil industry and in drilling work, where mud weight is quoted this way."}, "flow": {"m3h": "Cubic metres per hour, the standard rating for cargo, ballast and fire pumps, and the unit a discharge rate is agreed in.", "m3min": "Cubic metres per minute. A convenient size for fast-moving bulk transfers and for air handling.", "m3s": "Cubic metres per second, the SI form. Large enough that it is mostly seen in hydraulics theory and in river and channel work rather than aboard.", "Lmin": "Litres per minute. The usual size for lubricating oil, fresh water and hydraulic circuits, where cubic metres per hour would be an unhelpfully large number.", "Ls": "Litres per second. Common in fire-fighting and pumping calculations, particularly in European practice.", "gpm": "US gallons per minute, the rating on American-built pumps. Worth noting that a pump rated in imperial gallons per minute delivers about twenty percent more than the same number in US gallons.", "ft3h": "Cubic feet per hour, used for gas flows in American practice, particularly in burner and boiler ratings.", "bblh": "Barrels per hour, the discharge rate the oil trade states, being simply the trade's volume unit divided by an hour."}, "speed": {"kn": "One nautical mile in an hour, and the only unit in this list named after a piece of equipment. Speed used to be measured with a chip log: a weighted board thrown over the stern on a line with knots tied at set intervals, and a sandglass to time it. You counted the knots that ran out before the glass emptied, and that was your speed. It is why a ship makes knots and never knots per hour, because the per hour is already inside the word.", "ms": "Metres per second, the SI unit. Wind speed in meteorological reports is usually given this way, which is worth remembering when comparing it against a wind speed in knots.", "kmh": "Kilometres per hour. Speed over land almost everywhere outside the United States and the United Kingdom.", "mph": "Miles per hour, using the statute mile. Road speed in the United States and Britain, and not to be confused with knots, which are about fifteen percent larger.", "fts": "Feet per second. Used in American engineering for flow velocity in pipes, where a rule of thumb limit is usually stated in these units."}};
+
+  var guideCat  = CONV_CATS[0];
+  var guideOpen = {};
+
+  var CHEVRON = '<svg class="ug-chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
+                '<path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" ' +
+                'stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>';
+
+  function renderGuideCats(){
+    document.getElementById('guideCats').innerHTML = CONV_CATS.map(function(c){
+      return '<button data-gcat="' + c.key + '"' + (c.key === guideCat.key ? ' class="active"' : '') +
+             '>' + escapeHtml(c.name) + '</button>';
+    }).join('');
+  }
+
+  // A search runs across every category at once and ignores the chips, because
+  // half the time you know the unit and not which drawer it lives in.
+  function renderGuide(){
+    var q    = document.getElementById('guideSearch').value.trim().toLowerCase();
+    var out  = document.getElementById('guideOut');
+    var intro= document.getElementById('guideIntro');
+    var cats = document.getElementById('guideCats');
+
+    cats.style.display  = q ? 'none' : '';
+    intro.style.display = q ? 'none' : '';
+    if(!q) intro.textContent = CAT_NOTES[guideCat.key] || '';
+
+    var rows = [];
+    (q ? CONV_CATS : [guideCat]).forEach(function(cat){
+      cat.units.forEach(function(u){
+        var text = (UNIT_NOTES[cat.key] || {})[u[0]] || '';
+        if(q && (u[1] + ' ' + u[3] + ' ' + text).toLowerCase().indexOf(q) < 0) return;
+        rows.push({ id: cat.key + ':' + u[0], cat: cat.name, label: u[1], sym: u[3], text: text });
+      });
+    });
+
+    if(!rows.length){
+      out.innerHTML = '<div class="empty" style="padding:26px 12px;">Nothing matches that.</div>';
+      return;
+    }
+    out.innerHTML = rows.map(function(r){
+      return '<div class="ug-item' + (guideOpen[r.id] ? ' open' : '') + '" data-ug="' + escapeHtml(r.id) + '">' +
+               '<div class="ug-head">' +
+                 '<span class="ug-name">' + escapeHtml(r.label) + '</span>' +
+                 (q ? '<span class="ug-cat">' + escapeHtml(r.cat) + '</span>' : '') +
+                 '<span class="ug-sym">' + escapeHtml(r.sym) + '</span>' +
+                 CHEVRON +
+               '</div>' +
+               '<div class="ug-body">' + escapeHtml(r.text) + '</div>' +
+             '</div>';
+    }).join('');
+  }
+
+  var TOOL_TITLES = { convert:'Converter', guide:'Unit guide', eta:'ETA' };
+
   function showTool(name){
     document.getElementById('toolsHome').style.display   = name ? 'none' : '';
     document.getElementById('toolConvert').style.display = name === 'convert' ? '' : 'none';
-    document.getElementById('pageTitle').textContent = name === 'convert' ? 'Converter' : 'Tools';
+    document.getElementById('toolGuide').style.display   = name === 'guide' ? '' : 'none';
+    document.getElementById('toolEta').style.display     = name === 'eta' ? '' : 'none';
+    document.getElementById('pageTitle').textContent = TOOL_TITLES[name] || 'Tools';
+    if(name === 'guide') renderGuide();
+    if(name === 'eta')   renderEta();
   }
 
   // ---------- ship's particulars ----------
@@ -3488,7 +3787,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v23';
+  var APP_BUILD = 'v25';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -3936,6 +4235,8 @@
   fillWrPtw();
   renderWwr();
   loadConv();
+  renderGuideCats();
+  loadEta();
   document.getElementById('exDate').value = todayISO();
   document.getElementById('wrDate').value = todayISO();
   fillPtwTypes();
@@ -4011,6 +4312,34 @@
     if(tile) showTool(tile.dataset.tool);
   });
   document.getElementById('toolBackBtn').addEventListener('click', function(){ showTool(null); });
+  document.getElementById('guideBackBtn').addEventListener('click', function(){ showTool(null); });
+  document.getElementById('etaBackBtn').addEventListener('click', function(){ showTool(null); });
+  ['etaDate','etaTime','etaDist','etaSpeed','etaZoneFrom','etaZoneTo'].forEach(function(id){
+    document.getElementById(id).addEventListener('input', renderEta);
+    document.getElementById(id).addEventListener('change', renderEta);
+  });
+  document.getElementById('etaOut').addEventListener('click', function(e){
+    var row = e.target.closest('[data-copy]');
+    if(!row) return;
+    if(!copyText(row.dataset.copy)) return;
+    row.classList.add('copied');
+    setTimeout(function(){ row.classList.remove('copied'); }, 700);
+  });
+  document.getElementById('guideCats').addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-gcat]');
+    if(!btn) return;
+    guideCat = convCatByKey(btn.dataset.gcat);
+    renderGuideCats();
+    renderGuide();
+  });
+  document.getElementById('guideSearch').addEventListener('input', renderGuide);
+  document.getElementById('guideOut').addEventListener('click', function(e){
+    var item = e.target.closest('[data-ug]');
+    if(!item) return;
+    var id = item.dataset.ug;
+    guideOpen[id] = !guideOpen[id];
+    item.classList.toggle('open', guideOpen[id]);
+  });
   document.getElementById('convCats').addEventListener('click', function(e){
     var btn = e.target.closest('button[data-cat]');
     if(!btn) return;
