@@ -19,7 +19,30 @@ android {
         versionName = System.getenv("BUILD_NAME") ?: "dev"
     }
 
+    // A fixed signing key, so every build carries the same signature and Android
+    // accepts a new APK as an upgrade to the one already on the phone.
+    //
+    // Without this the Android plugin generates a debug key on the fly, and a
+    // CI runner starts with none — so every build was signed by a different
+    // stranger, Android refused every upgrade, and the only way to install was
+    // to uninstall first, which wipes all the data the app holds.
+    //
+    // This is a DEBUG key carrying Android's published default password. It is
+    // not a secret and must never be used to publish anything. A real release
+    // key is supplied through the environment instead, and never committed.
+    signingConfigs {
+        getByName("debug") {
+            storeFile     = file(System.getenv("SIGNING_STORE_FILE") ?: "../decklog-debug.keystore")
+            storePassword = System.getenv("SIGNING_STORE_PASSWORD") ?: "android"
+            keyAlias      = System.getenv("SIGNING_KEY_ALIAS") ?: "androiddebugkey"
+            keyPassword   = System.getenv("SIGNING_KEY_PASSWORD") ?: "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
         }

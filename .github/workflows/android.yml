@@ -43,6 +43,17 @@ jobs:
           BUILD_NAME: ${{ steps.ver.outputs.name }}
         run: gradle assembleDebug --no-daemon --stacktrace
 
+      # Signing is invisible from the outside: a wrongly signed APK builds green,
+      # publishes fine, and only fails on the phone, where the app has to be
+      # uninstalled to take the update — destroying every job, photo and log it
+      # holds. So it is checked before anything is published.
+      - name: Check the APK is signed by the expected key
+        working-directory: android
+        run: |
+          python3 verify-signing.py \
+            app/build/outputs/apk/debug/app-debug.apk \
+            decklog-debug.keystore android
+
       - name: Name the APK by date
         id: name
         run: echo "stamp=$(date +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
