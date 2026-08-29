@@ -9,6 +9,7 @@ committed here.
 |---|---|
 | `GX-8000.json` | Riken Keiki GX-8000 **TYPE A** — `PT0E-09811` Operating Manual and `H4E-0050` User Maintenance Manual |
 | `GX-8000-TYPE-O2.json` | Riken Keiki GX-8000 **TYPE O2** — `PT0E-1089` Operating Manual and `H4E-0050` |
+| `RX-8000.json` | Riken Keiki RX-8000 — `PT0E-11911` Operating Manual (it carries its own calibration procedure; there is no separate maintenance manual) |
 
 Every step carries the document and page it came from, so anyone using it
 aboard can check it against the paper copy. Nothing in these files is written
@@ -49,12 +50,30 @@ a limit the multi-gas manual does not state — and it splits again into `L`
 Writing one file for "a GX-8000" would have been wrong for whichever unit was
 picked up.
 
+## The RX-8000 is not a GX-8000 with different sensors
+
+Its switches differ, and working from memory of the other instrument would send
+someone to keys that do nothing. The display/setting mode cycles with **PEAK**,
+not DISPLAY. A failed air calibration is reset with **▼**, not a RESET switch.
+Span adjustment is entered by holding **▲ and ▼ together for about a second**.
+There is an **ESC** switch, and IDs stop at 127 rather than 255.
+
+Two things carry more weight than the keystrokes. Its **gas alarm is an optional
+setting** — `[ALARM-P]` is marked as such and the specification table has no
+setpoint row at all, so nobody should assume the detector will alarm. And its
+combustible sensor is **non-dispersive infrared, not catalytic**, which is why
+it reads in an inerted tank; through the 30 m hose its response time is **two
+minutes**, against 20-30 seconds at the main unit inlet.
+
 ## What is deliberately left blank
 
 The bump test interval. Neither manual states one — they specify a *monthly
 alarm test* and *regular maintenance at least every six months*, which is not
 the same thing. It comes from company and flag requirements, so the ship sets
 it rather than inheriting a number nobody wrote down.
+
+The RX-8000 has no bump test at all: neither a procedure in its manual nor a
+separate maintenance manual to hold one. Only span adjustment is documented.
 
 Serial numbers, calibration dates and logs are also absent: those belong to a
 physical unit, not to a model.

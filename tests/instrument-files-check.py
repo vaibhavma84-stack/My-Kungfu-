@@ -43,10 +43,15 @@ for path in files:
            [t for t in titles if not re.search(r'\[[A-Z0-9]', t)][:2])
 
         body = inst.get('notes', '') + ' '.join(s['text'] for s in steps)
-        # both approval tables must survive - keeping only one is wrong half the time
-        ok('%s: both setpoint tables recorded' % m,
-           ('19.5' in body and '18 vol%' in body) or 'no gas alarm' in body.lower(),
-           'ATEX and TIIS values must both appear')
+        # Where the manual publishes factory setpoints it gives two tables, ATEX
+        # and TIIS, whose oxygen values differ - keeping only one is wrong half
+        # the time. Where it publishes none, the file must say so outright
+        # rather than leave a reader assuming the instrument alarms.
+        both_tables = '19.5' in body and '18 vol%' in body
+        says_none = 'GAS ALARM IS AN OPTIONAL SETTING' in body or 'has NO gas alarm' in body
+        ok('%s: setpoints either give both tables or state there are none' % m,
+           both_tables or says_none,
+           'neither the ATEX/TIIS pair nor an explicit "no published setpoints" statement')
         # the arrow keys must be arrows, never the letters the PDF extracts to
         ok('%s: no mis-read S/T switch names' % m,
            not re.search(r'\b(the )?[ST] (switch|switches)\b', body),

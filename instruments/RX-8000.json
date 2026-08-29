@@ -1,0 +1,278 @@
+{
+  "format": "gasplanet-instruments",
+  "version": 1,
+  "source": "Transcribed from PT0E-11911 (RX-8000 Operating Manual), Riken Keiki.",
+  "instruments": [
+    {
+      "model": "Riken Keiki RX-8000",
+      "serial": "",
+      "location": "",
+      "sensors": "Combustible HC or CH4 (infrared) + O2 — confirm which of the four variants from the model plate",
+      "calDays": 180,
+      "lastCal": "",
+      "bumpDays": 0,
+      "lastBump": "",
+      "notes": "WHICH RX-8000 IS THIS? There are four, and two of them have no oxygen sensor.\n  RX-8000 (HC/O2)    combustible HC  + oxygen\n  RX-8000 (CH4/O2)   combustible CH4 + oxygen\n  RX-8000 (HC)       combustible HC  only\n  RX-8000 (CH4)      combustible CH4 only\nHC is isobutane (i-C4H10) calibration. The factory default is either CH4 or HC,\nspecified when ordered. Confirm from the model plate before using the span\nprocedure — an O2 step on a unit with no O2 sensor does not exist.  [§1-2 p.2, §9-1 p.48]\n\nTHE GAS ALARM IS AN OPTIONAL SETTING ON THIS INSTRUMENT.  [§4-6 p.23, §4-8 p.26]\n[ALARM-P] is marked \"[Optional Setting]\" in the manual, and the specification\ntable carries NO alarm setpoint row at all — unlike the GX-8000, which lists\nfactory presets. Do not assume this detector will alarm. Read [ALARM-P] on the\ninstrument itself and record what it actually shows here.\n\nWHAT IT IS FOR  Measuring combustible gas and oxygen in crude oil vapours, in\ninert gas or in atmosphere. The combustible sensor is NON-DISPERSIVE INFRARED\n(RI), not catalytic, which is why it reads in an inerted tank.  [§1-2 p.2, §9-1 p.47]\n\nRANGES  [§9-1 p.47]\n  O2   0-25 vol%, service to 40 vol%, resolution 0.1 vol%, within ±0.7 vol%\n  HC   0-100 %LEL / to 100 vol%, resolution 0.5 %LEL and 0.5 vol%\n       within ±5 %LEL, and ±5 vol% or ±10% of reading in the vol% range\n\nRESPONSE TIME — THIS MATTERS WHEN GAUGING THROUGH A LONG HOSE  [§9-1 p.47]\n  From the inlet on the main unit: O2 within 20 s, combustible within 30 s.\n  From the tip of the 30 m sampling hose: within 2 MINUTES, both.\n  Always fit filter tube CF-8385 with the 30 m hose and plummet — without it,\n  drawing water puts water inside the body.  [§9-2 p.48]\n\nSWITCHES DIFFER FROM THE GX-8000. Do not work from memory of the other unit.\n  The display/setting mode is cycled with the PEAK switch, not DISPLAY.\n  A failed air calibration is reset with the ▼ switch, not a RESET switch.\n  Span adjustment is entered by pressing ▲ and ▼ together for about a second.\n  There is an ESC switch, which aborts the running operation.\n  IDs run ST-ID000 to ST-ID127 (the GX-8000 runs to 255).  [§4-7, §4-8, §6-2]\n\nNO BUMP TEST PROCEDURE IS GIVEN IN THIS MANUAL, and there is no separate\nmaintenance manual for the RX-8000 — the calibration procedure is in §6-2 here.\nThe manual specifies a monthly alarm test and span adjustment at least every six\nmonths. Any bump test regime comes from company and flag requirements.\n  [§6-1 p.34, §6-2 p.36]\n\nTranscribed from PT0E-11911 supplied by the vessel. Check against the paper copy\nbefore use.",
+      "parts": [
+        {
+          "name": "Oxygen sensor",
+          "partNo": "OS-BM1",
+          "qty": "check 6 months, replace 1 year [§6-4 p.42]"
+        },
+        {
+          "name": "Combustible gas sensor (infrared)",
+          "partNo": "DE-3123-4 / DE-3113-13",
+          "qty": "check 6 months, replace 5 years [§6-4 p.42]"
+        },
+        {
+          "name": "Dust filter (gas sampling probe)",
+          "partNo": "4181 9573 10",
+          "qty": "replace 6 months - 1 year [§6-4 p.42]"
+        },
+        {
+          "name": "Water-proof filter (filter tube)",
+          "partNo": "4777 9022 50",
+          "qty": "10 pcs per set, 6 months - 1 year [§6-4 p.42]"
+        },
+        {
+          "name": "Absorbent cotton (filter tube)",
+          "partNo": "1879 0011 10",
+          "qty": "25 g pack, 1.3 g per change [§6-4 p.42]"
+        },
+        {
+          "name": "Internal filter",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "replace 6 months - 1 year [§6-4 p.42]"
+        },
+        {
+          "name": "Pump unit",
+          "partNo": "RP-11",
+          "qty": "check 6 months, replace 1-2 years [§6-4 p.42]"
+        },
+        {
+          "name": "Tubes (set)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "check 6 months, replace 3-8 years [§6-4 p.42]"
+        },
+        {
+          "name": "Rubber seals (set)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "replace 2 years [§6-4 p.42]"
+        },
+        {
+          "name": "Li-ion battery unit (standard)",
+          "partNo": "BUL-8000(R) / BUL-8000(R1)",
+          "qty": "approx 15 h run time [§9-1 p.47]"
+        },
+        {
+          "name": "Dry battery unit (optional)",
+          "partNo": "BUD-8000(R)",
+          "qty": "3x AA alkaline, approx 10 h [§9-1 p.47]"
+        },
+        {
+          "name": "Li-ion battery pack",
+          "partNo": "for BUL-8000(R)/(R1)",
+          "qty": "about 500 charge cycles [§6-4 p.42]"
+        },
+        {
+          "name": "Filter tube",
+          "partNo": "CF-8385",
+          "qty": "MANDATORY with the 30 m hose [§9-2 p.48]"
+        }
+      ],
+      "procedures": [
+        {
+          "title": "Daily check before work  [PT0E-11911 RX-8000 Operating Manual §6-1 p.34]",
+          "steps": [
+            {
+              "text": "Check that the battery level is sufficient.  [PT0E-11911 RX-8000 Operating Manual §6-1 p.34]"
+            },
+            {
+              "text": "Make the gas detector draw in fresh air. Check the concentration display reads zero (or 20.9 vol% on the oxygen deficiency meter).  [PT0E-11911 RX-8000 Operating Manual §6-1 p.34]"
+            },
+            {
+              "text": "If the reading is incorrect, perform the air calibration after ensuring that no other gases exist around it.  [PT0E-11911 RX-8000 Operating Manual §6-1 p.34]"
+            },
+            {
+              "text": "See the flow rate indicator to check for abnormalities.  [PT0E-11911 RX-8000 Operating Manual §6-1 p.34]"
+            },
+            {
+              "text": "Check the dust filter for dust or clogging.  [PT0E-11911 RX-8000 Operating Manual §6-1 p.34]"
+            }
+          ]
+        },
+        {
+          "title": "Air calibration  [AIR CAL]  [PT0E-11911 RX-8000 Operating Manual §4-7 p.24-25]",
+          "steps": [
+            {
+              "text": "WARNING: when air calibration is performed in the atmosphere, check the atmosphere for freshness first. If other gases exist the adjustment cannot be performed properly, leading to danger when gas leaks.  [PT0E-11911 RX-8000 Operating Manual §4-7 p.24]"
+            },
+            {
+              "text": "Perform it under pressure, temperature and humidity close to the operating environment, in fresh air, and after the reading has stabilized.  [PT0E-11911 RX-8000 Operating Manual §4-7 p.24]"
+            },
+            {
+              "text": "If there is a sudden temperature change of 15 °C or more between storage and operation, turn the detector on, leave it about 10 minutes in an environment similar to the operating location, then air calibrate in fresh air before use.  [PT0E-11911 RX-8000 Operating Manual §4-7 p.24]"
+            },
+            {
+              "text": "In the detection mode, keep the AIR switch pressed. The display changes to [AdJ HOLD AIR].  [PT0E-11911 RX-8000 Operating Manual §4-7 p.24]"
+            },
+            {
+              "text": "When [RELEASE] is displayed, release the AIR switch.  [PT0E-11911 RX-8000 Operating Manual §4-7 p.24]"
+            },
+            {
+              "text": "When the air calibration completes successfully it returns to the detection mode.  [PT0E-11911 RX-8000 Operating Manual §4-7 p.24]"
+            },
+            {
+              "text": "IF IT FAILS: [FAIL AIR CAL] is displayed with the name of the faulty gas sensor. Press the ▼ SWITCH to reset the fault alarm — not a RESET switch as on the GX-8000. The value before calibration is then displayed.  [PT0E-11911 RX-8000 Operating Manual §4-7 p.25]"
+            }
+          ]
+        },
+        {
+          "title": "Span adjustment  [ONE CAL]  [PT0E-11911 RX-8000 Operating Manual §6-2 p.36-39]",
+          "steps": [
+            {
+              "text": "Perform span adjustment of sensors using a calibration gas AT LEAST ONCE EVERY SIX MONTHS.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.36]"
+            },
+            {
+              "text": "Required: calibration gas — low-concentration combustible for %LEL, high-concentration combustible for vol%, and nitrogen for O2 — plus a set of gas sampling bags for %LEL/vol% and a set for O2.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.36]"
+            },
+            {
+              "text": "WARNING: the span gas is hazardous (combustible, toxic, oxygen deficient). Handle the gas and jigs with due care — it must not be inhaled and the bags must be free of holes.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.36]"
+            },
+            {
+              "text": "Perform the adjustment where no silicon, organic solvent or spray can gases are used; indoors at normal temperature without fluctuation beyond ±5 °C; and in an exhaust booth, or collect the exhaust gas with a sampling bag.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.36]"
+            },
+            {
+              "text": "CAUTION: the gas outlet (GAS OUT) must be left open with no pipe connected, for atmosphere release.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.36]"
+            },
+            {
+              "text": "(1) Prepare the calibration gases (%LEL, vol% and O2) and a set of gas sampling bags.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.37]"
+            },
+            {
+              "text": "(2) Remove the filter tube, gas sampling hose etc. so the gas sampling bag connects DIRECTLY to the gas inlet (GAS IN).  [PT0E-11911 RX-8000 Operating Manual §6-2 p.37]"
+            },
+            {
+              "text": "(3) Check that the gas detector is in the detection mode.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.37]"
+            },
+            {
+              "text": "(4) Perform the air calibration first — see the air calibration procedure.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.37]"
+            },
+            {
+              "text": "(5) Collect each calibration gas in its own gas sampling bag.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.37]"
+            },
+            {
+              "text": "(6) Press the ▲ and ▼ switches SIMULTANEOUSLY for about a second to enter the span adjustment mode [ONE CAL]. The menu order is HC %LEL, HC vol%, O2, ESCAPE.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.37]"
+            },
+            {
+              "text": "NOTE: if the Air Calibration Mode screen appears instead, the timing of the two switches was off — release both and try again.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.37]"
+            },
+            {
+              "text": "(7) Use ▲ or ▼ to select [HC %LEL] and press ENTER. The concentration display blinks.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.38]"
+            },
+            {
+              "text": "(8) Connect the bag holding the %LEL calibration gas to the gas inlet and supply the gas. Wait for the reading to stabilize.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.38]"
+            },
+            {
+              "text": "(9) When stable, press ▲ or ▼ to adjust the displayed value to the calibration gas concentration, then press ENTER to confirm. [END] means that channel is done. Remove the bag.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.38]"
+            },
+            {
+              "text": "(10-12) Repeat for [HC vol%]: select it, ENTER, supply the vol% gas, wait for a stable reading, adjust with ▲ or ▼, ENTER, [END], remove the bag.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.38]"
+            },
+            {
+              "text": "(13-15) Repeat for [O2]: select it, ENTER, supply the O2 calibration gas (nitrogen), wait for a stable reading, adjust with ▲ or ▼, ENTER, [END], remove the bag.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.39]"
+            },
+            {
+              "text": "(16) Use ▲ or ▼ to select [ESCAPE] and press ENTER to return to the detection mode.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.39]"
+            },
+            {
+              "text": "Press the ESC switch at any point to abort the running operation.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.37]"
+            },
+            {
+              "text": "WARNING: after the adjustment is completed, do not forget to return to the detection mode. It does not return automatically.  [PT0E-11911 RX-8000 Operating Manual §6-2 p.37]"
+            }
+          ]
+        },
+        {
+          "title": "Gas sampling probe filter replacement  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]",
+          "steps": [
+            {
+              "text": "Replace especially when the probe shows a sign of water absorption, low flow rate or contamination.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]"
+            },
+            {
+              "text": "Rotate the end of the probe counterclockwise and remove it.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]"
+            },
+            {
+              "text": "Take out the round dust filter and replace it with a new one. Part number 4181 9573 10.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41-42]"
+            },
+            {
+              "text": "Reattach the filter case.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]"
+            },
+            {
+              "text": "NOTE: use only the filters specified by RIKEN KEIKI.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]"
+            }
+          ]
+        },
+        {
+          "title": "Filter tube CF-8385 — dry cotton replacement  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]",
+          "steps": [
+            {
+              "text": "Cut dry cotton to size: 85-90 mm long, with the absorbent cotton 5-10 mm, in a pipe of 70 ±3 mm. Weight approximately 1.3 g.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]"
+            },
+            {
+              "text": "Loosen and remove the black cap.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]"
+            },
+            {
+              "text": "Replace the dry cotton with new, and fill the interspace with dry cotton.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]"
+            },
+            {
+              "text": "Tighten the cap again.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]"
+            },
+            {
+              "text": "Absorbent cotton part number 1879 0011 10 (25 g for filter tube), 1.3 g used per change.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.42]"
+            }
+          ]
+        },
+        {
+          "title": "Filter tube CF-8385 — waterproof filter replacement  [PT0E-11911 RX-8000 Operating Manual §6-4 p.42]",
+          "steps": [
+            {
+              "text": "Loosen the black cap.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.42]"
+            },
+            {
+              "text": "Remove the filter and replace it with a new one. THE MESH SIDE MUST BE ON THE O-RING SIDE.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.42]"
+            },
+            {
+              "text": "Tighten the cap again.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.42]"
+            },
+            {
+              "text": "Waterproof filter part number 4777 9022 50 (10 pcs for filter tube).  [PT0E-11911 RX-8000 Operating Manual §6-4 p.42]"
+            },
+            {
+              "text": "WARNING: always connect the filter tube (CF-8385) when using the 30 m gas sampling hose with plummet. Without it, sucking water can put water inside the RX-8000 body and cause system trouble.  [PT0E-11911 RX-8000 Operating Manual §9-2 p.48]"
+            }
+          ]
+        },
+        {
+          "title": "Sensor replacement  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41-42]",
+          "steps": [
+            {
+              "text": "The manual states the built-in sensors must be replaced regularly (WITHIN ONE YEAR), and separately gives recommended replacement intervals of FIVE YEARS for the combustible gas sensor and ONE YEAR for the oxygen sensor. Both statements are in §6-4 — follow company policy where they appear to differ.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]"
+            },
+            {
+              "text": "The sensor life has expired if the sensors cannot be calibrated in span adjustment, the readings do not come back after fresh air calibration, or the readings fluctuate.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41]"
+            },
+            {
+              "text": "Combustible gas sensor: DE-3123-4 / DE-3113-13. Oxygen sensor: OS-BM1.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.42]"
+            },
+            {
+              "text": "Request RIKEN KEIKI for repair. The operation must be checked after replacement by a qualified service engineer.  [PT0E-11911 RX-8000 Operating Manual §6-4 p.41-42]"
+            },
+            {
+              "text": "Calibrate before returning the detector to service.  [PT0E-11911 RX-8000 Operating Manual §7-2 p.44]"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
