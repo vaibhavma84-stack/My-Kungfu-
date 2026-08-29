@@ -30,6 +30,7 @@ asserts. `OUT` is where downloads and screenshots land (a temp dir by default).
 | `tools-test` | the Tools tab, the converter and the unit guide — known conversions, the formula line, search, what it remembers |
 | `eta-test` | the ETA tool — local-to-UTC conversion, half-hour and negative zones, the speed band and its arithmetic |
 | `instr-test` | the Instruments tool — procedures, steps, spares, the log, and the due-date states |
+| `photostore-test` | photographs in IndexedDB — migration from inline storage without loss, and far past the old ceiling |
 | `report-layout-test` | prints the weekly report to a real PDF and reads it back — repeating header, statements alone on page one, four photos a page, page numbers |
 | `collapse` | the entry form collapsing without clipping |
 | `marsec-test`, `newfeat-test`, `print-test`, `project-test`, `theme-test` | MARSEC defaults, later additions, printing to PDF, the project sweep, light and dark |

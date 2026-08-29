@@ -1460,10 +1460,11 @@
         try{ restore(JSON.parse(lastGood[key])); }catch(e2){}
       }
       alert('STORAGE FULL — that change to the ' + label + ' was NOT saved, and has been undone.\n\n' +
-            'Photos take up the most room. To free space:\n' +
+            'Photographs are held separately and are not what filled this up, so ' +
+            'this is the written record itself: jobs, log entries, instrument notes.\n\n' +
             '  1. Export a CSV backup now\n' +
-            '  2. Delete some photos, or clear completed jobs\n\n' +
-            'If this keeps happening, make sure you opened this file directly in your browser rather than inside another app.');
+            '  2. Clear completed jobs you no longer need\n\n' +
+            'Settings shows how much room is in use.');
       return false;
     }
   }
@@ -1627,7 +1628,7 @@
     pendingPhotos.forEach(function(src, idx){
       var d = document.createElement('div');
       d.className = 'thumb';
-      d.innerHTML = '<img src="'+src+'"><button class="rm" data-idx="'+idx+'">×</button>';
+      d.innerHTML = '<img src="'+photoSrc(src)+'"><button class="rm" data-idx="'+idx+'">×</button>';
       wrap.appendChild(d);
     });
     document.getElementById('photoBtn').className = pendingPhotos.length ? 'has-photos' : '';
@@ -1702,6 +1703,133 @@
     };
     tasks.push(copy);
     return copy;
+  }
+
+  // ---------- photo store ----------
+  // localStorage is capped near 5 MB, and a photograph costs about a third more
+  // than its file size once it is base64 encoded — so roughly thirty photos and
+  // the whole app is full, jobs and crew list included. IndexedDB on the same
+  // device offers hundreds of megabytes, so the photographs live there and
+  // localStorage keeps only their ids.
+  //
+  // A stored photo is referenced as "p:xxxx". Anything else is passed through
+  // untouched, which is what keeps photographs saved by older versions working
+  // while they are migrated across.
+  var PHOTO_DB = 'gasplanet_media';
+  var PHOTO_STORE = 'photos';
+  var photoDB = null;
+  var photoCache = {};
+  var PHOTO_MISSING = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="90">' +
+    '<rect width="120" height="90" fill="#e8e8e8"/></svg>');
+
+  function isPhotoRef(v){ return typeof v === 'string' && v.slice(0, 2) === 'p:'; }
+  function isDataURL(v){ return typeof v === 'string' && v.slice(0, 5) === 'data:'; }
+
+  function photoSrc(v){
+    if(!isPhotoRef(v)) return v || '';
+    return photoCache[v] || PHOTO_MISSING;
+  }
+
+  function openPhotoDB(cb){
+    if(!window.indexedDB){ cb(null); return; }
+    var req;
+    try{ req = indexedDB.open(PHOTO_DB, 1); }
+    catch(e){ cb(null); return; }
+    req.onupgradeneeded = function(){
+      var db = req.result;
+      if(!db.objectStoreNames.contains(PHOTO_STORE)) db.createObjectStore(PHOTO_STORE);
+    };
+    req.onsuccess = function(){ cb(req.result); };
+    req.onerror   = function(){ cb(null); };
+    req.onblocked = function(){ cb(null); };
+  }
+
+  // Falls back to handing the data URL straight back, so a device without
+  // IndexedDB behaves exactly as the app did before — smaller, but working.
+  function keepPhoto(dataUrl, cb){
+    if(!photoDB || !dataUrl){ cb(dataUrl); return; }
+    var id = 'p:' + uid();
+    try{
+      var tx = photoDB.transaction(PHOTO_STORE, 'readwrite');
+      tx.objectStore(PHOTO_STORE).put(dataUrl, id);
+      tx.oncomplete = function(){ photoCache[id] = dataUrl; cb(id); };
+      tx.onerror    = function(){ cb(dataUrl); };
+      tx.onabort    = function(){ cb(dataUrl); };
+    }catch(e){ cb(dataUrl); }
+  }
+
+  function loadPhotoCache(cb){
+    if(!photoDB){ cb(); return; }
+    try{
+      var tx  = photoDB.transaction(PHOTO_STORE, 'readonly');
+      var req = tx.objectStore(PHOTO_STORE).openCursor();
+      req.onsuccess = function(){
+        var c = req.result;
+        if(!c){ cb(); return; }
+        photoCache[c.key] = c.value;
+        c.continue();
+      };
+      req.onerror = function(){ cb(); };
+    }catch(e){ cb(); }
+  }
+
+  // every array of photographs in the app, so migration and collection can
+  // walk the lot without either of them being told about a new one later
+  function eachPhotoArray(fn){
+    tasks.forEach(function(t){ if(t.photos) fn(t.photos); });
+    extras.forEach(function(x){ if(x.photos) fn(x.photos); });
+    instruments.forEach(function(x){
+      (x.log || []).forEach(function(e){ if(e.photos) fn(e.photos); });
+      (x.procedures || []).forEach(function(pr){
+        (pr.steps || []).forEach(function(st){ if(st.photos) fn(st.photos); });
+      });
+    });
+  }
+
+  // Photographs saved inline by an older version are moved across on first run.
+  // localStorage is rewritten only after every one has landed in IndexedDB, so
+  // an interrupted migration loses nothing — it just runs again next time.
+  function migratePhotos(done){
+    if(!photoDB){ done(); return; }
+    var jobs = [];
+    eachPhotoArray(function(arr){
+      arr.forEach(function(v, i){ if(isDataURL(v)) jobs.push({ arr: arr, i: i, v: v }); });
+    });
+    if(!jobs.length){ done(); return; }
+    var left = jobs.length;
+    jobs.forEach(function(j){
+      keepPhoto(j.v, function(ref){
+        if(isPhotoRef(ref)) j.arr[j.i] = ref;
+        if(--left === 0){
+          saveTasks(); saveExtras(); saveInstruments();
+          done(jobs.length);
+        }
+      });
+    });
+  }
+
+  // A deleted photograph would otherwise sit in IndexedDB forever. Only safe at
+  // startup, before anything is queued in a form and not yet attached to a job.
+  function collectPhotos(){
+    if(!photoDB) return;
+    var used = {};
+    eachPhotoArray(function(arr){
+      arr.forEach(function(v){ if(isPhotoRef(v)) used[v] = 1; });
+    });
+    var dead = Object.keys(photoCache).filter(function(k){ return !used[k]; });
+    if(!dead.length) return;
+    try{
+      var tx = photoDB.transaction(PHOTO_STORE, 'readwrite');
+      var os = tx.objectStore(PHOTO_STORE);
+      dead.forEach(function(k){ os.delete(k); delete photoCache[k]; });
+    }catch(e){ /* space not reclaimed is not worth interrupting anyone */ }
+  }
+
+  function photoBytes(){
+    var n = 0;
+    Object.keys(photoCache).forEach(function(k){ n += photoCache[k].length; });
+    return n;
   }
 
   // ---------- add task ----------
@@ -1905,7 +2033,7 @@
     if(t.photos && t.photos.length){
       html += '      <div class="thumbstrip">';
       t.photos.forEach(function(src, idx){
-        html += '<div class="thumb" data-view="'+t.id+':'+idx+'"><img src="'+src+'"></div>';
+        html += '<div class="thumb" data-view="'+t.id+':'+idx+'"><img src="'+photoSrc(src)+'"></div>';
       });
       html += '      </div>';
     }
@@ -2494,7 +2622,7 @@
     exPendingPhotos.forEach(function(src, idx){
       var d = document.createElement('div');
       d.className = 'thumb';
-      d.innerHTML = '<img src="' + src + '"><button class="rm" data-idx="' + idx + '">×</button>';
+      d.innerHTML = '<img src="' + photoSrc(src) + '"><button class="rm" data-idx="' + idx + '">×</button>';
       wrap.appendChild(d);
     });
     wrap.querySelectorAll('.rm').forEach(function(btn){
@@ -2543,7 +2671,7 @@
       working.forEach(function(src, i){
         var d = document.createElement('div');
         d.className = 'thumb';
-        d.innerHTML = '<img src="' + src + '"><button class="rm" data-rm="' + i + '">×</button>';
+        d.innerHTML = '<img src="' + photoSrc(src) + '"><button class="rm" data-rm="' + i + '">×</button>';
         w.appendChild(d);
       });
     }
@@ -2558,8 +2686,10 @@
       if(!left) return;
       files.forEach(function(f){
         fileToCompressedDataURL(f, function(u){
-          if(u) working.push(u);
-          if(--left === 0) drawThumbs();
+          keepPhoto(u, function(ref){
+            if(ref) working.push(ref);
+            if(--left === 0) drawThumbs();
+          });
         });
       });
       e.target.value = '';
@@ -2632,7 +2762,7 @@
       if(x.photos && x.photos.length){
         html += '<div class="thumbstrip">';
         x.photos.forEach(function(src, idx){
-          html += '<div class="thumb" data-extra-view="' + x.id + ':' + idx + '"><img src="' + src + '"></div>';
+          html += '<div class="thumb" data-extra-view="' + x.id + ':' + idx + '"><img src="' + photoSrc(src) + '"></div>';
         });
         html += '</div>';
       }
@@ -3078,7 +3208,7 @@
                    (e.gas ? '  ·  ' + escapeHtml(e.gas) : '') +
                    (e.remarks ? '<br>' + escapeHtml(e.remarks) : '') + '</div>' +
                  (e.photos && e.photos.length ? '<div class="thumbstrip">' + e.photos.map(function(src,i){
-                    return '<div class="thumb" data-iview="log:' + e.id + ':' + i + '"><img src="' + src + '"></div>';
+                    return '<div class="thumb" data-iview="log:' + e.id + ':' + i + '"><img src="' + photoSrc(src) + '"></div>';
                   }).join('') + '</div>' : '') +
                '</div>' +
                '<button class="icon-btn" data-ia="del-log" data-id="' + e.id + '">🗑</button>' +
@@ -3098,7 +3228,7 @@
                  '<div class="irm">' +
                    '<div class="irs" style="font-size:13px;color:var(--ink);">' + escapeHtml(st.text) + '</div>' +
                    (st.photos && st.photos.length ? '<div class="thumbstrip">' + st.photos.map(function(src,j){
-                      return '<div class="thumb" data-iview="step:' + pr.id + ':' + st.id + ':' + j + '"><img src="' + src + '"></div>';
+                      return '<div class="thumb" data-iview="step:' + pr.id + ':' + st.id + ':' + j + '"><img src="' + photoSrc(src) + '"></div>';
                     }).join('') + '</div>' : '') +
                  '</div>' +
                  '<button class="icon-btn" data-ia="step-photo" data-proc="' + pr.id + '" data-step="' + st.id + '">📷</button>' +
@@ -3796,7 +3926,7 @@
     wrPendingPhotos.forEach(function(src, idx){
       var d = document.createElement('div');
       d.className = 'thumb';
-      d.innerHTML = '<img src="' + src + '"><button class="rm" data-idx="' + idx + '">×</button>';
+      d.innerHTML = '<img src="' + photoSrc(src) + '"><button class="rm" data-idx="' + idx + '">×</button>';
       wrap.appendChild(d);
     });
     wrap.querySelectorAll('.rm').forEach(function(btn){
@@ -3879,7 +4009,7 @@
       if(t.photos && t.photos.length){
         html += '<div class="thumbstrip">';
         t.photos.forEach(function(src, idx){
-          html += '<div class="thumb" data-wwr-view="' + t.id + ':' + idx + '"><img src="' + src + '"></div>';
+          html += '<div class="thumb" data-wwr-view="' + t.id + ':' + idx + '"><img src="' + photoSrc(src) + '"></div>';
         });
         html += '</div>';
       }
@@ -4078,7 +4208,7 @@
                   (idx === t.photos.length - 1 ? ' disabled' : '') + ' title="Later in this job">' + rvArrow('right') + '</button>' +
               '</div>';
       }
-      return '<div class="rv-cell"><img src="' + src + '" alt="">' + ctl + '</div>';
+      return '<div class="rv-cell"><img src="' + photoSrc(src) + '" alt="">' + ctl + '</div>';
     }
 
     var perSheet = RV_PHOTOS_PER_SHEET / 2;   // pairs to a page
@@ -4301,7 +4431,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v28';
+  var APP_BUILD = 'v29';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -4348,17 +4478,29 @@
       '</div>';
     document.body.appendChild(bg);
 
-    // how much room the photos are taking, since that is what fills the quota
+    // The two stores have very different ceilings and fill for different
+    // reasons, so they are reported apart rather than added together.
     try {
       var bytes = 0;
-      ['gasplanet_todo_v1','gasplanet_crew_v1','gasplanet_cargo_v1','gasplanet_ship_v1','gasplanet_extra_v1']
+      ['gasplanet_todo_v1','gasplanet_crew_v1','gasplanet_cargo_v1','gasplanet_ship_v1',
+       'gasplanet_extra_v1','gasplanet_instr_v1']
         .forEach(function(k){ var v = localStorage.getItem(k); if(v) bytes += v.length; });
-      var photos = tasks.reduce(function(n,t){ return n + ((t.photos||[]).length); }, 0)
-                 + extras.reduce(function(n,x){ return n + ((x.photos||[]).length); }, 0);
-      bg.querySelector('#setStorage').textContent =
-        tasks.length + ' jobs, ' + crew.length + ' crew, ' + cargoLogs.length + ' cargo entries, ' +
-        photos + ' photos — about ' + Math.round(bytes/1024) + ' KB used. ' +
-        'Everything is stored on this device only; Export CSV is the backup.';
+      var photos = Object.keys(photoCache).length;
+      var el = bg.querySelector('#setStorage');
+      el.textContent =
+        tasks.length + ' jobs, ' + crew.length + ' crew, ' + cargoLogs.length + ' cargo entries — ' +
+        Math.round(bytes / 1024) + ' KB of about 5 MB. ' +
+        photos + ' photograph' + (photos === 1 ? '' : 's') + ' — ' +
+        Math.round(photoBytes() / 1048576 * 10) / 10 + ' MB' +
+        (photoDB ? '.' : ', held in the written record because this device has no separate photo store.') +
+        ' Everything is on this device only; Export CSV is the backup.';
+      if(photoDB && navigator.storage && navigator.storage.estimate){
+        navigator.storage.estimate().then(function(est){
+          if(!est || !est.quota) return;
+          el.textContent += ' Photographs may use up to about ' +
+            Math.round(est.quota / 1048576) + ' MB here.';
+        }).catch(function(){});
+      }
     } catch(e){}
 
     bg.addEventListener('click', function(e){
@@ -4530,7 +4672,7 @@
   function openViewer(src){
     var bg = document.createElement('div');
     bg.className = 'modal-bg';
-    bg.innerHTML = '<button class="modal-close">×</button><img src="'+src+'">';
+    bg.innerHTML = '<button class="modal-close">×</button><img src="'+photoSrc(src)+'">';
     bg.addEventListener('click', function(e){ if(e.target===bg || e.target.className==='modal-close') bg.remove(); });
     document.body.appendChild(bg);
   }
@@ -4557,9 +4699,10 @@
     if(!remaining) return;
     files.forEach(function(f){
       fileToCompressedDataURL(f, function(dataUrl){
-        pendingPhotos.push(dataUrl);
-        remaining--;
-        if(remaining===0) renderPendingThumbs();
+        keepPhoto(dataUrl, function(ref){
+          if(ref) pendingPhotos.push(ref);
+          if(--remaining === 0) renderPendingThumbs();
+        });
       });
     });
     e.target.value = '';
@@ -4686,9 +4829,10 @@
     var remaining = files.length;
     files.forEach(function(f){
       fileToCompressedDataURL(f, function(dataUrl){
-        t.photos.push(dataUrl);
-        remaining--;
-        if(remaining===0){ saveTasks(); render(); }
+        keepPhoto(dataUrl, function(ref){
+          if(ref) t.photos.push(ref);
+          if(--remaining === 0){ saveTasks(); render(); }
+        });
       });
     });
     e.target.value = '';
@@ -4765,6 +4909,24 @@
   loadEta();
   loadInstruments();
   loadReportOrder();
+  // Photographs come from IndexedDB, which is asynchronous, so the first paint
+  // happens without them and everything is drawn again once they are in hand.
+  openPhotoDB(function(db){
+    photoDB = db;
+    loadPhotoCache(function(){
+      migratePhotos(function(moved){
+        collectPhotos();
+        render();
+        renderExtras();
+        renderWwr();
+        if(activeTab === 'instr' && instrOpenId) renderInstrDetail();
+        updateStoragePill();
+        if(moved){
+          console.log('moved ' + moved + ' photo(s) out of localStorage into IndexedDB');
+        }
+      });
+    });
+  });
   document.getElementById('exDate').value = todayISO();
   document.getElementById('wrDate').value = todayISO();
   fillPtwTypes();
@@ -4813,8 +4975,10 @@
     var left = files.length;
     files.forEach(function(f){
       fileToCompressedDataURL(f, function(u){
-        if(u) x.photos.push(u);
-        if(--left === 0){ saveExtras(); renderExtras(); }
+        keepPhoto(u, function(ref){
+          if(ref) x.photos.push(ref);
+          if(--left === 0){ saveExtras(); renderExtras(); }
+        });
       });
     });
     e.target.value = '';
@@ -4867,8 +5031,10 @@
     var left = files.length;
     files.forEach(function(f){
       fileToCompressedDataURL(f, function(url){
-        if(url) t.photos.push(url);
-        if(--left === 0){ saveInstruments(); renderInstrDetail(); }
+        keepPhoto(url, function(ref){
+          if(ref) t.photos.push(ref);
+          if(--left === 0){ saveInstruments(); renderInstrDetail(); }
+        });
       });
     });
     e.target.value = '';
@@ -5051,8 +5217,10 @@
     if(!left) return;
     files.forEach(function(f){
       fileToCompressedDataURL(f, function(u){
-        if(u) wrPendingPhotos.push(u);
-        if(--left === 0) renderWrPendingThumbs();
+        keepPhoto(u, function(ref){
+          if(ref) wrPendingPhotos.push(ref);
+          if(--left === 0) renderWrPendingThumbs();
+        });
       });
     });
     e.target.value = '';
@@ -5085,8 +5253,10 @@
     if(!left) return;
     files.forEach(function(f){
       fileToCompressedDataURL(f, function(u){
-        if(u) exPendingPhotos.push(u);
-        if(--left === 0) renderExPendingThumbs();
+        keepPhoto(u, function(ref){
+          if(ref) exPendingPhotos.push(ref);
+          if(--left === 0) renderExPendingThumbs();
+        });
       });
     });
     e.target.value = '';

@@ -139,6 +139,21 @@ it — Sunday 30-Aug resolves to week commencing 24-Aug.
   two due tags are rewritten. The first version re-rendered on change, which
   destroyed the field being typed into and made every edit land one step behind
   the one after it.
+- **Photographs live in IndexedDB; localStorage keeps only their ids.**
+  Measured, not guessed: localStorage stops at **4.94 MB** on this engine, and a
+  photo costs about a third more than its file size once base64 encoded. At the
+  80-150 KB the app compresses to, that is roughly **thirty photographs for the
+  whole app** — jobs, crew and cargo included, since they share the one quota.
+  IndexedDB on the same engine offered **1067 MB**. A photo is stored as
+  `p:<id>`; anything else is passed through untouched, which is what keeps
+  photos written by older versions working until they are migrated.
+- **Migration rewrites localStorage only after every photo has landed.** An
+  interrupted migration therefore loses nothing — it simply runs again next
+  time. Deleted photos are collected at startup only, before anything can be
+  sitting queued in a form and not yet attached to a job.
+- **Without IndexedDB the app behaves exactly as before.** `keepPhoto` hands the
+  data URL straight back, and every render path already accepts one. Smaller,
+  but working, rather than broken.
 - **The weekly report is a table, because that is what repeats a header.** The
   letterhead sits in a real `<thead>`. A fixed-position header is dropped by
   print engines and a plain div prints once, at the top of page one. Each page
