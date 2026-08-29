@@ -185,6 +185,9 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
        (body.match(/PT0E-09811|H4E-0050/g)||[]).length > 50,
        (body.match(/PT0E-09811|H4E-0050/g)||[]).length);
     ok('the sensor torque figure came across', /49 to 54 N·cm/.test(body));
+    ok('TYPE A carries its vol%-only no-alarm warning',
+       /NO GAS ALARM IS TRIGGERED IN THE vol% RANGE-ONLY SETTING/.test(body));
+    ok('and the four-step span order', /ORDER MATTERS ON THIS TYPE/.test(body));
     ok('the pump part number came across', /RP-11/.test(body));
     ok('bump interval left unset, since the manuals do not state one',
        (await p.inputValue('#fBumpDays'))==='', await p.inputValue('#fBumpDays'));

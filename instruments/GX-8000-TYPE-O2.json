@@ -1,0 +1,303 @@
+{
+  "format": "gasplanet-instruments",
+  "version": 1,
+  "source": "Transcribed from PT0E-1089 (GX-8000 TYPE O2 Operating Manual) and H4E-0050 (User Maintenance Manual), Riken Keiki.",
+  "instruments": [
+    {
+      "model": "Riken Keiki GX-8000 TYPE O2",
+      "serial": "",
+      "location": "",
+      "sensors": "O2 only (galvanic cell) — confirm L or N from the model plate",
+      "calDays": 180,
+      "lastCal": "",
+      "bumpDays": 0,
+      "lastBump": "",
+      "notes": "WHICH SUB-TYPE IS THIS? It changes whether the instrument alarms at all.\n  TYPE O2, L  has a gas alarm.\n  TYPE O2, N  has NO gas alarm. Its setpoint display reads [OFF], there is no\n              alarm accuracy or delay figure, and the monthly alarm test and gas\n              alarm check do not apply.\n  [PT0E-1089 §9-1 p.45-46, §4-8 p.30, §6-1 p.37]\n\nALARM SETPOINTS — TYPE O2, L ONLY. Two tables again; the values differ.\n  ATEX / IECEx   19.5 vol% (L) / 23.5 vol% (H) / 40 vol% (OVER)  [§9-1 p.46]\n  TIIS (Japan)   18 vol% (L)   / 25 vol% (H)   / 40 vol% (OVER)  [§9-1 p.45]\nThese are the factory presets quoted in the manual, not necessarily what is set\nin your instrument. Read the actual values on [ALARM-P] and record them here.\n\nRANGE  0 - 25 vol%, service range up to 40 vol%. Resolution 0.1 vol%.\nAccuracy within ±0.7 vol%. 90% response within 20 seconds.\nAlarm accuracy within ±1 vol%, alarm delay 5 seconds or less (L only).  [§9-1]\n\nHOW THIS TYPE DIFFERS FROM THE MULTI-GAS GX-8000\n  - Sensor must be replaced WITHIN TWO YEARS. The multi-gas manual gives no\n    such limit.  [§6-4 p.39]\n  - Standard power is the DRY battery unit (BUD-8000); Li-ion is the option.\n    On the multi-gas unit it is the other way round. Run times are also\n    reversed: dry about 12 h, Li-ion about 20 h.  [§9-1 p.45, §9-2 p.47]\n  - No STEL or TWA. No HC RANGE menu. No VOL Z.CAL step. No 30-second AIR CAL\n    countdown. No activated carbon filter, since no CO is measured.\n  - PEAK shows the MINIMUM concentration reached, not the maximum.  [§4-6 p.26]\n  - Switch off only after the display returns to 20.9 %.  [§4-9 p.33]\n\nINTERVALS  [§6-1 p.37, §6-2 p.38]\n  Daily   before beginning work\n  Monthly alarm test (TYPE O2 L only)\n  Span adjustment at least once every six months\n  The manuals state no bump test interval. Take it from company and flag\n  requirements and set it on the card above.\n\nThe calibration and setpoint procedures here come from H4E-0050, the GX-8000\nUser Maintenance Manual, which §6-2 of this manual directs you to. Its menus are\nwritten for the multi-gas instrument, so the gas selection list will be shorter\non this one — confirm against the instrument.\n\nTranscribed from PT0E-1089 and H4E-0050 supplied by the vessel. Check against\nthe paper copy before use.",
+      "parts": [
+        {
+          "name": "O2 sensor (galvanic cell, OS)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "replace within 2 years, warranty 1 year [O2 §6-4 p.39]"
+        },
+        {
+          "name": "Pump unit",
+          "partNo": "RP-11",
+          "qty": "check 6 months, replace 1-2 years [O2 §6-4 p.40]"
+        },
+        {
+          "name": "Rubber seal (set)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "replace 2 years [O2 §6-4 p.40]"
+        },
+        {
+          "name": "Tube (set)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "check 6 months, replace 3-8 years [O2 §6-4 p.40]"
+        },
+        {
+          "name": "Dry battery unit (STANDARD on this type)",
+          "partNo": "BUD-8000(G) / BUD-8000(G1)",
+          "qty": "3x AA alkaline, approx 12 h [O2 §9-1 p.45]"
+        },
+        {
+          "name": "Li-ion battery unit (optional here)",
+          "partNo": "BUL-8000(G) / BUL-8000(G1)",
+          "qty": "approx 20 h [O2 §9-1 p.45]"
+        },
+        {
+          "name": "Li-ion battery pack",
+          "partNo": "BP-8000 / BP-8000(1)",
+          "qty": "about 500 charge cycles, Li-ion unit only [O2 §6-4 p.40]"
+        },
+        {
+          "name": "Filter tube",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "optional accessory [O2 §9-2 p.47]"
+        }
+      ],
+      "procedures": [
+        {
+          "title": "Daily check before work  [PT0E-1089 TYPE O2 Operating Manual §6-1 p.37]",
+          "steps": [
+            {
+              "text": "Check that the battery level is sufficient.  [PT0E-1089 TYPE O2 Operating Manual §6-1 p.37]"
+            },
+            {
+              "text": "Make the gas monitor draw in fresh air and check the concentration display reads 20.9 vol%.  [PT0E-1089 TYPE O2 Operating Manual §6-1 p.37]"
+            },
+            {
+              "text": "If the reading is incorrect, perform the zero adjustment (fresh air adjustment) after ensuring that no other gases exist around it.  [PT0E-1089 TYPE O2 Operating Manual §6-1 p.37]"
+            },
+            {
+              "text": "See the flow rate indicator to check for abnormalities.  [PT0E-1089 TYPE O2 Operating Manual §6-1 p.37]"
+            },
+            {
+              "text": "Check the dust filter for dust or clogging.  [PT0E-1089 TYPE O2 Operating Manual §6-1 p.37]"
+            }
+          ]
+        },
+        {
+          "title": "Monthly alarm test — TYPE O2 L only, display only  [PT0E-1089 TYPE O2 Operating Manual §4-8 p.29-30]",
+          "steps": [
+            {
+              "text": "TYPE O2 N has no gas alarm at all. On an N unit the alarm setpoint display shows [OFF] and there is nothing to test.  [PT0E-1089 TYPE O2 Operating Manual §4-8 p.30, §9-1 p.45]"
+            },
+            {
+              "text": "NOTE: this menu DISPLAYS the setpoints and tests the alarm. It does not change any setpoint.  [PT0E-1089 TYPE O2 Operating Manual §4-8 p.30]"
+            },
+            {
+              "text": "Press the DISPLAY switch and select the full scale display / alarm setpoint display / alarm test [ALARM-P] from the display/setting mode menu.  [PT0E-1089 TYPE O2 Operating Manual §4-8 p.30]"
+            },
+            {
+              "text": "Press the ENTER switch to enter the alarm setpoint display.  [PT0E-1089 TYPE O2 Operating Manual §4-8 p.30]"
+            },
+            {
+              "text": "Press ▲ or ▼ to step through: full scale display, first alarm setpoint [WARNING], second alarm setpoint [ALARM]. There is no STEL or TWA on this type.  [PT0E-1089 TYPE O2 Operating Manual §4-8 p.30]"
+            },
+            {
+              "text": "Press the ENTER switch to perform the alarm test. Press any switch to stop the alarm operation.  [PT0E-1089 TYPE O2 Operating Manual §4-8 p.30]"
+            },
+            {
+              "text": "Press the DISPLAY switch to exit, then press it several times until it returns to the detection mode.  [PT0E-1089 TYPE O2 Operating Manual §4-8 p.30]"
+            }
+          ]
+        },
+        {
+          "title": "Fresh air adjustment  [AIR CAL]  [PT0E-1089 TYPE O2 Operating Manual §4-7 p.27-28]",
+          "steps": [
+            {
+              "text": "WARNING: when air calibration is performed in the atmosphere, check the atmosphere for freshness first. If other gases exist the adjustment cannot be performed properly, leading to danger when gas leaks.  [PT0E-1089 TYPE O2 Operating Manual §4-7 p.27]"
+            },
+            {
+              "text": "Perform air calibration under pressure, temperature and humidity close to the operating environment, in fresh air, and after the reading has stabilized.  [PT0E-1089 TYPE O2 Operating Manual §4-7 p.27]"
+            },
+            {
+              "text": "If there is a sudden temperature change of 15 °C or more between storage and operation, turn the monitor on, leave it about 10 minutes in an environment similar to the operating location, then air calibrate in fresh air before use.  [PT0E-1089 TYPE O2 Operating Manual §4-7 p.27]"
+            },
+            {
+              "text": "Press and keep pressing the AIR switch. The display changes to [Adj HOLD AIR].  [PT0E-1089 TYPE O2 Operating Manual §4-7 p.27]"
+            },
+            {
+              "text": "When [RELEASE] is displayed, release the AIR switch.  [PT0E-1089 TYPE O2 Operating Manual §4-7 p.27]"
+            },
+            {
+              "text": "NOTE: there is NO 30-second countdown on this type. The countdown exists only on TYPE-A and TYPE-E of the multi-gas GX-8000.  [PT0E-1089 TYPE O2 Operating Manual §4-7 p.27]"
+            },
+            {
+              "text": "When the zero adjustment completes successfully the monitor returns to the detection mode.  [PT0E-1089 TYPE O2 Operating Manual §4-7 p.27]"
+            },
+            {
+              "text": "IF IT FAILS: [FAIL AIR CAL] is displayed with the faulty sensor. Press the RESET switch to reset the fault alarm. The value before calibration is displayed.  [PT0E-1089 TYPE O2 Operating Manual §4-7 p.28]"
+            },
+            {
+              "text": "Air calibration can be performed even when there is a gas alarm — TYPE O2 L only.  [PT0E-1089 TYPE O2 Operating Manual §4-7 p.28]"
+            }
+          ]
+        },
+        {
+          "title": "Change the alarm setpoint  [ALARM-P, maintenance mode]  [H4E-0050 User Maintenance Manual p.9-12]",
+          "steps": [
+            {
+              "text": "TYPE O2 L only. TYPE O2 N has no gas alarm and no setpoints.  [PT0E-1089 TYPE O2 Operating Manual §9-1 p.45]"
+            },
+            {
+              "text": "This procedure is from the User Maintenance Manual, which PT0E-1089 §6-2 directs you to for adjustment. The maintenance mode holds settings not normally used — be careful not to change them by mistake, and record any change in a log.  [PT0E-1089 TYPE O2 Operating Manual §6-2 p.38; H4E-0050 User Maintenance Manual p.9]"
+            },
+            {
+              "text": "With the power OFF, keep ▲ and ▼ pressed and press the POWER switch. Release the switches when the buzzer beeps.  [H4E-0050 User Maintenance Manual p.9]"
+            },
+            {
+              "text": "The password field blinks. Press ▲ or ▼ to select a number and press ENTER to confirm. Enter four digits from the left. Password: 0008.  [H4E-0050 User Maintenance Manual p.9]"
+            },
+            {
+              "text": "Press ▲ or ▼ until [ALARM-P] is displayed, then press ENTER.  [H4E-0050 User Maintenance Manual p.10, p.12]"
+            },
+            {
+              "text": "Select the target gas with ▲ or ▼. The maintenance manual lists Combustible, O2, H2S, CO and ESCAPE because it is written for the multi-gas unit; on this O2-only instrument expect only the channel it has. Confirm on the instrument.  [H4E-0050 User Maintenance Manual p.12]"
+            },
+            {
+              "text": "With O2 selected, press ENTER to make the setpoint display blink, prompting for input.  [H4E-0050 User Maintenance Manual p.12]"
+            },
+            {
+              "text": "Press ▲ or ▼ to change the value, then ENTER to enter it. Continue through WARNING then ALARM. STEL and TWA are set only for CO and H2S, so they do not apply here.  [H4E-0050 User Maintenance Manual p.12]"
+            },
+            {
+              "text": "After the settings are confirmed and [END] is displayed, the monitor returns to the selection menu. Press ▲ or ▼ until [ESCAPE] and press ENTER.  [H4E-0050 User Maintenance Manual p.12]"
+            },
+            {
+              "text": "Exit: press ▲ or ▼ until [START] and press ENTER to leave the maintenance mode and enter the detection mode.  [H4E-0050 User Maintenance Manual p.10]"
+            },
+            {
+              "text": "WARNING: after adjustment, do not forget to return to the detection mode — the monitor does not do it by itself.  [H4E-0050 User Maintenance Manual p.3]"
+            },
+            {
+              "text": "Record the change in the log and verify the new values on the [ALARM-P] display in the ordinary display/setting mode.  [H4E-0050 User Maintenance Manual p.9; PT0E-1089 TYPE O2 Operating Manual §4-8 p.30]"
+            }
+          ]
+        },
+        {
+          "title": "Bump test  [BUMP]  [H4E-0050 User Maintenance Manual p.5-8]",
+          "steps": [
+            {
+              "text": "Prepare the bump test gas collected in a gas sampling bag.  [H4E-0050 User Maintenance Manual p.6]"
+            },
+            {
+              "text": "WARNING: the test gas is hazardous (oxygen deficient). Handle the gas and jigs with due care — it must not be inhaled and the bag must not have any hole.  [H4E-0050 User Maintenance Manual p.6]"
+            },
+            {
+              "text": "Connect the gas sampling bag to the gas sampling probe and GAS IN. The GAS OUT side must be left OPEN with no pipe connected; supplied gas must go to a safe place.  [H4E-0050 User Maintenance Manual p.6]"
+            },
+            {
+              "text": "Enter calibration mode: in the detection mode, keep ▼ pressed and press the DISPLAY switch. Release when the buzzer beeps.  [H4E-0050 User Maintenance Manual p.5]"
+            },
+            {
+              "text": "Press ▲ or ▼ until [BUMP] is displayed, then press ENTER. The test gas concentration is displayed and must match the gas prepared.  [H4E-0050 User Maintenance Manual p.7]"
+            },
+            {
+              "text": "Supply the test gas and press ENTER. [BUMP] and [APPLY] alternate and the countdown starts.  [H4E-0050 User Maintenance Manual p.7]"
+            },
+            {
+              "text": "IF PASS: the result is shown in about 30 seconds. Stop the gas. Results and values alternate each time ▲ or ▼ is pressed. P = Pass, F = Fail. Press ENTER to return to the menu.  [H4E-0050 User Maintenance Manual p.7]"
+            },
+            {
+              "text": "IF FAIL: keep supplying gas — span adjustment starts automatically, [CAL] and [APPLY] alternate. In about 30 seconds the result appears. Left: test result, Right: adjustment result. Stop the gas, then press ENTER.  [H4E-0050 User Maintenance Manual p.8]"
+            },
+            {
+              "text": "NOTE: if \"F\" (Fail) is displayed after the span adjustment, replace the sensor with a new one.  [H4E-0050 User Maintenance Manual p.8]"
+            },
+            {
+              "text": "Return to the detection mode when finished.  [H4E-0050 User Maintenance Manual p.3]"
+            }
+          ]
+        },
+        {
+          "title": "Span adjustment  [AUTO CAL / ONE CAL]  [H4E-0050 User Maintenance Manual §3 p.14-19]",
+          "steps": [
+            {
+              "text": "Perform span adjustment of the sensor using a calibration gas AT LEAST ONCE EVERY SIX MONTHS.  [PT0E-1089 TYPE O2 Operating Manual §6-2 p.38]"
+            },
+            {
+              "text": "Warm up the gas monitor for 60 minutes or longer before the fresh air adjustment for a more accurate adjustment.  [H4E-0050 User Maintenance Manual §3-1 p.15]"
+            },
+            {
+              "text": "Perform the adjustment where no silicon, organic solvent or spray can gases are used; indoors at normal temperature without fluctuation beyond ±5 °C; and in an exhaust booth.  [H4E-0050 User Maintenance Manual §3-1 p.14]"
+            },
+            {
+              "text": "Connect the gas bag to the probe and GAS IN. GAS OUT must be left OPEN, discharging to a safe place.  [H4E-0050 User Maintenance Manual §3-1 p.14]"
+            },
+            {
+              "text": "Do the fresh air adjustment first, then the span adjustment. The high-concentration combustible steps (VOL Z.CAL) do not apply to this type — they are TYPE-A and E only.  [H4E-0050 User Maintenance Manual §3-1 p.15]"
+            },
+            {
+              "text": "Enter calibration mode: keep ▼ pressed and press DISPLAY; release when the buzzer beeps.  [H4E-0050 User Maintenance Manual p.5]"
+            },
+            {
+              "text": "AUTO CAL — all channels at once: press ENTER; the span gas concentration is displayed and must match the prepared gas. To change it, press ▼ and DISPLAY simultaneously, select the gas, press ENTER, set with ▲ or ▼, ENTER to confirm, then [ESCAPE].  [H4E-0050 User Maintenance Manual §3-3 p.18]"
+            },
+            {
+              "text": "Press the MODE switch. [AUTO CAL] blinks and the current reading is shown, prompting for supply. Supply the span gas.  [H4E-0050 User Maintenance Manual §3-3 p.18]"
+            },
+            {
+              "text": "60 seconds after supplying the gas, with the reading stable, press ENTER to adjust. [PASS] means it succeeded. Stop the gas.  [H4E-0050 User Maintenance Manual §3-3 p.18]"
+            },
+            {
+              "text": "ONE CAL — single channel: press ENTER, select the gas with ▲ or ▼, press ENTER, supply the gas, wait 60 seconds for a stable reading, use ▲ or ▼ to adjust to the gas concentration, then ENTER. [END] confirms. Stop the gas and select [ESCAPE].  [H4E-0050 User Maintenance Manual §3-3 p.19]"
+            },
+            {
+              "text": "CAUTION: do not use a lighter gas to check sensitivity — a constituent of lighter gas may deteriorate the sensor performance.  [PT0E-1089 TYPE O2 Operating Manual §6-2 p.38]"
+            }
+          ]
+        },
+        {
+          "title": "Sensor replacement  [PT0E-1089 TYPE O2 Operating Manual §6-4 p.39; H4E-0050 User Maintenance Manual §4 p.21-22]",
+          "steps": [
+            {
+              "text": "The sensor has a validity period and MUST BE REPLACED WITHIN TWO YEARS. (The multi-gas manual does not state this two-year limit — it is specific to this type.)  [PT0E-1089 TYPE O2 Operating Manual §6-4 p.39]"
+            },
+            {
+              "text": "The sensor life has also expired if it cannot be calibrated in span adjustment, the readings do not come back after fresh air adjustment, or the readings fluctuate. Warranty period is one year.  [PT0E-1089 TYPE O2 Operating Manual §6-4 p.39]"
+            },
+            {
+              "text": "Loosen the four captive screws on the sensor cover and remove the cover.  [H4E-0050 User Maintenance Manual §4 p.21]"
+            },
+            {
+              "text": "Remove the sensor rubber seal, taking care not to damage it or the seal surface inside the cover. Peel it off if it sticks to the cover.  [H4E-0050 User Maintenance Manual §4 p.21]"
+            },
+            {
+              "text": "Replace the sensor. Pay attention to the installation direction and check the pins are inserted firmly all the way.  [H4E-0050 User Maintenance Manual §4 p.21]"
+            },
+            {
+              "text": "Replace the rubber seals as required — any damage impairs the waterproof property.  [H4E-0050 User Maintenance Manual §4 p.21]"
+            },
+            {
+              "text": "Reinstall the seal and cover in the reverse order. Screw tightening torque: 5 to 5.5 kgf·cm (49 to 54 N·cm).  [H4E-0050 User Maintenance Manual §4 p.22]"
+            },
+            {
+              "text": "Calibrate before returning the instrument to service.  [PT0E-1089 TYPE O2 Operating Manual §7-2 p.41]"
+            }
+          ]
+        },
+        {
+          "title": "Gas sampling probe filter replacement  [PT0E-1089 TYPE O2 Operating Manual §6-4 p.39]",
+          "steps": [
+            {
+              "text": "Replace especially when the probe shows a sign of water absorption, low flow rate or contamination.  [PT0E-1089 TYPE O2 Operating Manual §6-4 p.39]"
+            },
+            {
+              "text": "Rotate the end of the probe counterclockwise and remove it.  [PT0E-1089 TYPE O2 Operating Manual §6-4 p.39]"
+            },
+            {
+              "text": "Take out the filter and replace it with a new one.  [PT0E-1089 TYPE O2 Operating Manual §6-4 p.39]"
+            },
+            {
+              "text": "Reattach the filter case.  [PT0E-1089 TYPE O2 Operating Manual §6-4 p.39]"
+            },
+            {
+              "text": "NOTE: use only the filters specified by RIKEN KEIKI. There is no activated carbon filter on this type — that is fitted only where carbon monoxide is measured.  [PT0E-1089 TYPE O2 Operating Manual §6-4 p.39]"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -7,7 +7,8 @@ committed here.
 
 | File | Transcribed from |
 |---|---|
-| `GX-8000.json` | Riken Keiki GX-8000 — `PT0E-09811` Operating Manual and `H4E-0050` User Maintenance Manual, supplied by the vessel |
+| `GX-8000.json` | Riken Keiki GX-8000 **TYPE A** — `PT0E-09811` Operating Manual and `H4E-0050` User Maintenance Manual |
+| `GX-8000-TYPE-O2.json` | Riken Keiki GX-8000 **TYPE O2** — `PT0E-1089` Operating Manual and `H4E-0050` |
 
 Every step carries the document and page it came from, so anyone using it
 aboard can check it against the paper copy. Nothing in these files is written
@@ -26,6 +27,27 @@ single apex at the top (▲) while `T` has a single apex at the bottom (▼).
 factory presets for TIIS (Japan) and ATEX/IECEx approvals, and the oxygen
 setpoints differ — 18/25 vol% against 19.5/23.5 vol%. Both are recorded in the
 instrument notes, because picking one would be wrong half the time.
+
+`instrument-files-check.py` runs in `run.sh` and checks every file here: that
+each step cites a document, that both approval tables survive, that no step
+tells anyone to press an "S" or "T" switch, and that no bump interval has been
+invented.
+
+## The variant is not a detail
+
+TYPE A and TYPE O2 are different instruments behind the same model name.
+TYPE A has the vol% combustible range, and with `HC RANGE` set to vol%-only
+**no gas alarm is triggered at all** — the screen shows `[No ALARM]`, and the
+%LEL-only screen looks identical to auto-range. TYPE A also has the four-step
+span order (the high-concentration sensor reads differently on an air base than
+an N2 base), the 30-second AIR CAL countdown, and STEL/TWA.
+
+TYPE O2 has none of that, but its sensor **must be replaced within two years** —
+a limit the multi-gas manual does not state — and it splits again into `L`
+(has a gas alarm) and `N` (none at all; its setpoint display reads `[OFF]`).
+
+Writing one file for "a GX-8000" would have been wrong for whichever unit was
+picked up.
 
 ## What is deliberately left blank
 

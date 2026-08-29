@@ -4,15 +4,15 @@
   "source": "Transcribed from PT0E-09811 (Operating Manual) and H4E-0050 (User Maintenance Manual), Riken Keiki.",
   "instruments": [
     {
-      "model": "Riken Keiki GX-8000",
+      "model": "Riken Keiki GX-8000 (TYPE A)",
       "serial": "",
       "location": "",
-      "sensors": "O2 / Combustible (%LEL) / H2S / CO — confirm Type from the model plate",
+      "sensors": "O2 / Combustible HC+CH4 (%LEL and vol%) / H2S / CO — TYPE A",
       "calDays": 180,
       "lastCal": "",
       "bumpDays": 0,
       "lastBump": "",
-      "notes": "FACTORY ALARM PRESET POINTS — CHECK WHICH APPROVAL YOUR UNIT CARRIES.\nThe manual gives TWO DIFFERENT tables and the oxygen setpoints are not the same.\n\nATEX / IECEx  [OP §9-1 p.54]\n  O2   19.5 vol% (L) / 23.5 vol% (H) / 40 vol% (OVER)\n  LEL  10 %LEL (1st) / 50 %LEL (2nd) / 100 %LEL (OVER)\n  H2S  5 ppm (1st) / 30 ppm (2nd) / 10 ppm TWA / 15 ppm STEL / 100 ppm (OVER)\n  CO   25 ppm (1st) / 50 ppm (2nd) / 25 ppm TWA / 200 ppm STEL / 500 ppm (OVER)\n\nTIIS (Japan)  [OP §9-1 p.53]\n  O2   18 vol% (L) / 25 vol% (H) / 40 vol% (OVER)\n  LEL, H2S and CO as above.\n\nThese are the factory presets quoted in the manual, not necessarily what is set\nin your instrument. Read the actual values on the [ALARM-P] display and record\nthem here. Company and flag requirements may differ from both tables.\n\nMEASURING RANGES  [OP §9-1 p.53]\n  O2 0-25 vol% (service to 40) | LEL 0-100 %LEL / to 100 vol% | H2S 0-30 ppm\n  (service to 100) | CO 0-150 ppm (service to 500)\n\nTYPE — confirm from the model plate  [OP §9-1 p.54]\n  TypeA  O2, Combustible (HC and CH4)*, H2S, CO\n  TypeB  O2, Combustible (HC and CH4),  H2S, CO\n  TypeC  O2, Combustible (HC, CH4, C2H2), H2S\n  TypeD  O2, Combustible (HC and CH4), CO\n  TypeE  O2, Combustible (HC, CH4, H2)*\n  TypeF  O2, Combustible (HC, CH4, C2H2)\n  TypeG  O2, Combustible (H2)\n  * = has the vol% (TE) range as well as %LEL. TYPE-A and E only have the\n  HC RANGE menu, the 30-second AIR CAL countdown, and the VOL Z.CAL step.\n  STEL and TWA exist on TYPE-A, B, C and D only.\n\nINTERVALS  [OP §6-1 p.44 / MN §1 p.2]\n  Daily   before beginning work\n  Monthly alarm test\n  Regular at least once every six months - span adjustment and gas alarm check\n  The manuals do not state a bump test interval. Take it from company and flag\n  requirements, then set it on the card above.\n\nCAUTION  Do not use a lighter gas to check sensitivity - a constituent of\nlighter gas may deteriorate the sensor performance.  [OP §6-2 p.45]\n\nTranscribed from PT0E-09811 and H4E-0050 supplied by the vessel. Check against\nthe paper copy before use. Riken Keiki also offer this as a service.",
+      "notes": "FACTORY ALARM PRESET POINTS — CHECK WHICH APPROVAL YOUR UNIT CARRIES.\nThe manual gives TWO DIFFERENT tables and the oxygen setpoints are not the same.\n\nATEX / IECEx  [OP §9-1 p.54]\n  O2   19.5 vol% (L) / 23.5 vol% (H) / 40 vol% (OVER)\n  LEL  10 %LEL (1st) / 50 %LEL (2nd) / 100 %LEL (OVER)\n  H2S  5 ppm (1st) / 30 ppm (2nd) / 10 ppm TWA / 15 ppm STEL / 100 ppm (OVER)\n  CO   25 ppm (1st) / 50 ppm (2nd) / 25 ppm TWA / 200 ppm STEL / 500 ppm (OVER)\n\nTIIS (Japan)  [OP §9-1 p.53]\n  O2   18 vol% (L) / 25 vol% (H) / 40 vol% (OVER)\n  LEL, H2S and CO as above.\n\nThese are the factory presets quoted in the manual, not necessarily what is set\nin your instrument. Read the actual values on the [ALARM-P] display and record\nthem here. Company and flag requirements may differ from both tables.\n\nMEASURING RANGES  [OP §9-1 p.53]\n  O2 0-25 vol% (service to 40) | LEL 0-100 %LEL / to 100 vol% | H2S 0-30 ppm\n  (service to 100) | CO 0-150 ppm (service to 500)\n\nTYPE — THIS INSTRUMENT IS TYPE A  [OP §9-1 p.54]\n  TypeA  O2, Combustible (HC and CH4)*, H2S, CO   <-- this one\n  TypeB  O2, Combustible (HC and CH4),  H2S, CO\n  TypeC  O2, Combustible (HC, CH4, C2H2), H2S\n  TypeD  O2, Combustible (HC and CH4), CO\n  TypeE  O2, Combustible (HC, CH4, H2)*\n  TypeF  O2, Combustible (HC, CH4, C2H2)\n  TypeG  O2, Combustible (H2)\n  * = has the vol% (TE) range as well as %LEL.\n  Because this is TYPE A, all of the following DO apply to it: the HC RANGE\n  menu, the 30-second AIR CAL countdown, the VOL Z.CAL step and the four-step\n  span order, and the STEL and TWA displays.\n  The single most dangerous setting on this type is HC RANGE set to vol% only:\n  NO GAS ALARM IS TRIGGERED at all, and the screen shows [No ALARM].\n  [OP §4-8 p.36]\n\nINTERVALS  [OP §6-1 p.44 / MN §1 p.2]\n  Daily   before beginning work\n  Monthly alarm test\n  Regular at least once every six months - span adjustment and gas alarm check\n  The manuals do not state a bump test interval. Take it from company and flag\n  requirements, then set it on the card above.\n\nCAUTION  Do not use a lighter gas to check sensitivity - a constituent of\nlighter gas may deteriorate the sensor performance.  [OP §6-2 p.45]\n\nTranscribed from PT0E-09811 and H4E-0050 supplied by the vessel. Check against\nthe paper copy before use. Riken Keiki also offer this as a service.",
       "parts": [
         {
           "name": "Pump unit",
@@ -219,7 +219,7 @@
               "text": "In the detection mode, press and keep pressing the AIR switch. The display changes to [Adj HOLD AIR].  [PT0E-09811 Operating Manual §4-7 p.31]"
             },
             {
-              "text": "When [RELEASE] is displayed, release the AIR switch. On TYPE-A and TYPE-E a 30-second countdown starts; no countdown on other types.  [PT0E-09811 Operating Manual §4-7 p.31; H4E-0050 User Maintenance Manual p.17]"
+              "text": "When [RELEASE] is displayed, release the AIR switch. On this instrument (TYPE-A) a 30-second countdown then runs on the LCD.  [PT0E-09811 Operating Manual §4-7 p.31; H4E-0050 User Maintenance Manual p.17]"
             },
             {
               "text": "When the zero adjustment completes successfully [END] is displayed and the monitor returns to the detection mode.  [PT0E-09811 Operating Manual §4-7 p.31]"
@@ -233,7 +233,10 @@
           "title": "Span adjustment — all channels at once  [AUTO CAL]  [H4E-0050 User Maintenance Manual §3-3 p.18]",
           "steps": [
             {
-              "text": "Order matters. Perform in this order: (1) fresh air adjustment, (2) span adjustment, (3) zero adjustment for high-concentration combustible gases, (4) span adjustment for high-concentration combustible gases. Steps 3 and 4 are TYPE-A and E only.  [H4E-0050 User Maintenance Manual §3-1 p.15]"
+              "text": "ORDER MATTERS ON THIS TYPE. Perform: (1) fresh air adjustment, (2) span adjustment, (3) zero adjustment for high-concentration combustible gases [VOL Z.CAL], (4) span adjustment for high-concentration combustible gases. All four apply to TYPE-A.  [H4E-0050 User Maintenance Manual §3-1 p.15]"
+            },
+            {
+              "text": "The high-concentration combustible sensor gives different outputs depending on whether the base gas is air or N2. Adjusting in any other order adversely influences the reading when a combustible gas (vol%) is drawn in.  [H4E-0050 User Maintenance Manual §3-1 p.15]"
             },
             {
               "text": "Warm up the gas monitor for 60 minutes or longer before the fresh air adjustment for a more accurate adjustment.  [H4E-0050 User Maintenance Manual §3-1 p.15]"
@@ -319,6 +322,64 @@
             },
             {
               "text": "When finished press ▲ or ▼ until [ESCAPE] is displayed and press ENTER to return to the maintenance mode menu.  [H4E-0050 User Maintenance Manual p.13]"
+            }
+          ]
+        },
+        {
+          "title": "Combustible range setting  [HC RANGE]  — TYPE-A  [PT0E-09811 Operating Manual §4-8 p.35-36]",
+          "steps": [
+            {
+              "text": "This menu exists only on TYPE-A and TYPE-E. It selects how the combustible reading behaves: automatic switching between %LEL and vol%, or fixed to one of them.  [PT0E-09811 Operating Manual §4-8 p.35]"
+            },
+            {
+              "text": "CAUTION — NO GAS ALARM IS TRIGGERED IN THE vol% RANGE-ONLY SETTING. The screen shows [No ALARM] and [vol%] blinking. Nothing will alarm while it is set this way.  [PT0E-09811 Operating Manual §4-8 p.36]"
+            },
+            {
+              "text": "CAUTION — the %LEL range-only screen looks the same as the auto range screen. In %LEL-only, the reading will NOT switch to vol% even if the concentration exceeds full scale.  [PT0E-09811 Operating Manual §4-8 p.36]"
+            },
+            {
+              "text": "Press the DISPLAY switch and select the combustible gas measurement range setting from the display/setting mode menu.  [PT0E-09811 Operating Manual §4-8 p.35]"
+            },
+            {
+              "text": "Press the ENTER switch.  [PT0E-09811 Operating Manual §4-8 p.35]"
+            },
+            {
+              "text": "Each press of ▲ or ▼ steps through [AUTO RANGE] (automatic switching), [ONLY VOL] (fixed vol%), and [ONLY LEL] (fixed %LEL). Select one and press ENTER.  [PT0E-09811 Operating Manual §4-8 p.35]"
+            },
+            {
+              "text": "When [END] is displayed the setting is complete and the menu returns.  [PT0E-09811 Operating Manual §4-8 p.35]"
+            },
+            {
+              "text": "Press the DISPLAY switch several times until it returns to the detection mode, and confirm which range the instrument is now in before using it.  [PT0E-09811 Operating Manual §4-8 p.35]"
+            }
+          ]
+        },
+        {
+          "title": "Zero adjustment, high-concentration combustible  [VOL Z.CAL]  — TYPE-A  [H4E-0050 User Maintenance Manual §3-3 p.20]",
+          "steps": [
+            {
+              "text": "TYPE-A and TYPE-E only. It is step 3 of the four-step span sequence and must be done in order — see the span adjustment procedure.  [H4E-0050 User Maintenance Manual §3-1 p.15]"
+            },
+            {
+              "text": "Prepare the zero adjustment gas for high-concentration combustible gases (N2), collected in a gas sampling bag.  [H4E-0050 User Maintenance Manual §3-1 p.14, p.15]"
+            },
+            {
+              "text": "Enter calibration mode: in the detection mode, keep ▼ pressed and press DISPLAY. Release when the buzzer beeps.  [H4E-0050 User Maintenance Manual p.5]"
+            },
+            {
+              "text": "Press ▲ or ▼ until [VOL Z.CAL] is displayed, then press ENTER.  [H4E-0050 User Maintenance Manual §3-3 p.20]"
+            },
+            {
+              "text": "The [VOL Z.CAL] display blinks. Until the combustible range switches to vol%, the combustible concentration shows as ---.  [H4E-0050 User Maintenance Manual §3-3 p.20]"
+            },
+            {
+              "text": "The current combustible and oxygen readings are displayed, prompting for supply. Supply the zero gas.  [H4E-0050 User Maintenance Manual §3-3 p.20]"
+            },
+            {
+              "text": "About 60 seconds after supplying the zero gas, with the readings stabilized, press ENTER to perform the adjustment.  [H4E-0050 User Maintenance Manual §3-3 p.20]"
+            },
+            {
+              "text": "When [END] is displayed the adjustment is complete and the monitor returns to the menu. Stop supplying the zero gas.  [H4E-0050 User Maintenance Manual §3-3 p.20]"
             }
           ]
         },
