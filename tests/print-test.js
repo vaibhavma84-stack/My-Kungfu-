@@ -1,5 +1,6 @@
 const { chromium } = require('playwright-core');
 const http=require('http'), fs=require('fs');
+const OUTDIR = process.env.OUT || fs.mkdtempSync('/tmp/print-');
 let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':'  -> '+x)); if(!c)fails++;};
 (async()=>{
   const srv=http.createServer((q,r)=>{r.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});r.end(fs.readFileSync(process.env.APP_HTML));}).listen(8765);
@@ -46,10 +47,10 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
 
   // the real proof: print it
   await p.emulateMedia({media:'print'});
-  const pdf = await p.pdf({ path: process.env.SP+'/report.pdf', format:'A4',
+  const pdf = await p.pdf({ path: OUTDIR+'/report.pdf', format:'A4',
                             printBackground:true, margin:{top:'12mm',bottom:'12mm',left:'12mm',right:'12mm'} });
-  const bytes = fs.statSync(process.env.SP+'/report.pdf').size;
-  const raw = fs.readFileSync(process.env.SP+'/report.pdf');
+  const bytes = fs.statSync(OUTDIR+'/report.pdf').size;
+  const raw = fs.readFileSync(OUTDIR+'/report.pdf');
   const pages = (raw.toString('latin1').match(/\/Type\s*\/Page[^s]/g)||[]).length;
   ok('a PDF was produced', bytes>5000, bytes+' bytes');
   ok('it runs to more than one page', pages>1, pages+' pages');

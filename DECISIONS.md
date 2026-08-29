@@ -117,6 +117,21 @@ it — Sunday 30-Aug resolves to week commencing 24-Aug.
   place deletes it in both. The AD-19 tab is the opposite case and keeps its
   own store: those are one-off planner entries that were never jobs and should
   not clutter the pending list.
+- **The converter shows every unit at once, not a from/to pair.** On a phone,
+  picking two dropdowns to get one number is slower than reading the answer off
+  a list. Each line carries its own working — `psi = bar × 14.50377` — because a
+  number with no arithmetic behind it cannot be checked, and a factor below 1 is
+  shown as a division so the printed number is always the readable one.
+- **Conversion factors are stated against the base unit, never chained.** Each
+  is written out in full against Pa, J, m³, kg, m, kg/m³, m³/h or m/s, so an
+  error in one factor cannot travel into the others. `tests/factor-check.py`
+  re-derives all 70 from published definitions and compares. It is the only
+  check that can catch a wrong factor: the UI renders a wrong number exactly as
+  convincingly as a right one.
+- **The converter cannot turn mass into volume.** Tonnes to barrels needs a
+  density, which depends on the product and its temperature, so there is no
+  factor to carry. That is a cargo calculation, not a unit conversion, and
+  putting a single number on it would be wrong more often than right.
 - **The WWR tab lists every WR job ever, banded by week.** Not just the current
   week. Reports get asked for again months later, and a list that quietly drops
   older weeks is a list that cannot answer that.

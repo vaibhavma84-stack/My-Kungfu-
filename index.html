@@ -485,10 +485,72 @@
   .wwr-week{
     font-family:ui-monospace,monospace; font-size:11px; letter-spacing:.06em;
     text-transform:uppercase; color:var(--ink-soft);
-    background:var(--rule); border-radius:6px;
+    background:var(--paper-2); border-radius:6px;
     padding:6px 10px; margin:14px 0 8px;
   }
   .wwr-week:first-child{margin-top:0;}
+
+  /* ---------- Tools ---------- */
+  /* A launcher of tiles rather than one more form. The icons are drawn, not
+     emoji — Android glyph coverage is patchy and the settings gear once
+     rendered as nothing at all. */
+  .tool-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+    gap:12px; padding:14px 0;
+  }
+  .tool-tile{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:11px; background:var(--card); border:1px solid var(--line);
+    border-radius:14px; padding:22px 12px; color:var(--ink);
+    font-family:inherit; font-size:14px; font-weight:650; text-align:center;
+    cursor:pointer;
+  }
+  .tool-tile .ti{
+    width:46px; height:46px; border-radius:13px; flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--tint-info); color:var(--steel);
+  }
+  .tool-tile .tsub{font-size:11.5px; font-weight:500; color:var(--ink-soft);}
+  .tool-tile:active{background:var(--paper-2);}
+  .tool-tile.soon{opacity:.5; cursor:default; border-style:dashed;}
+  .tool-tile.soon:active{background:var(--card);}
+
+  .tool-head{display:flex; align-items:center; gap:10px; padding:12px 0 4px;}
+  .tool-head .tool-title{font-size:16px; font-weight:700;}
+
+  .conv-cats{display:flex; gap:7px; flex-wrap:wrap; padding:6px 0 12px;}
+  .conv-cats button{
+    background:var(--card); border:1px solid var(--line); color:var(--ink-soft);
+    border-radius:999px; padding:7px 13px; font-size:12.5px; font-weight:650;
+    font-family:inherit; cursor:pointer;
+  }
+  .conv-cats button.active{background:var(--steel); border-color:var(--steel); color:#fff;}
+
+  .conv-input{display:flex; gap:10px; align-items:flex-end;}
+  .conv-input .field{flex:1; min-width:0;}
+  .conv-note{
+    font-size:12px; color:var(--ink-soft); background:var(--tint-info);
+    border:1px solid var(--tint-info-line); border-radius:8px;
+    padding:8px 10px; margin:12px 0 4px; line-height:1.45;
+  }
+  .conv-row{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:11px 13px; margin-top:7px; cursor:pointer;
+  }
+  .conv-top{display:flex; align-items:baseline; gap:10px;}
+  .conv-row .cf{
+    font-size:11.5px; color:var(--ink-soft); margin-top:6px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    word-break:break-word;
+  }
+  .conv-row .cu{font-size:13px; font-weight:650; flex:0 0 40%; word-break:break-word;}
+  .conv-row .cv{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:14.5px; text-align:right; flex:1; min-width:0; word-break:break-all;
+  }
+  .conv-row.self{background:var(--tint-info); border-color:var(--tint-info-line);}
+  .conv-row.copied .cv{color:var(--done); font-weight:700;}
+  .conv-hint{font-size:11.5px; color:var(--ink-soft); text-align:center; padding:12px 0 4px;}
   .flag-tag.flag-open{background:#FFF1DC; color:#9A5B10; border-color:rgba(154,91,16,.25);}
   #shipPaste{
     width:100%; padding:10px; border:1px solid var(--line); border-radius:8px;
@@ -713,6 +775,7 @@
   <button data-tab="jobs" class="active">To Do</button>
   <button data-tab="extra">AD-19</button>
   <button data-tab="wwr">WWR</button>
+  <button data-tab="tools">Tools</button>
   <button data-tab="crew">Crew</button>
   <button data-tab="cargo">Cargo</button>
   <button data-tab="ship">Ship</button>
@@ -992,6 +1055,57 @@
     <button class="btn btn-primary" id="wrReportBtn" style="padding:10px 14px;">Weekly Report</button>
   </div>
   <div id="wwrListWrap"></div>
+</div>
+
+<div id="toolsSection" style="display:none;">
+  <div id="toolsHome">
+    <div class="ship-note">
+      Everything here works with no signal, like the rest of the app.
+    </div>
+    <div class="tool-grid">
+      <button class="tool-tile" data-tool="convert">
+        <span class="ti">
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round" d="M4 8h13m0 0-3.5-3.5M17 8l-3.5 3.5M20 16H7m0 0 3.5-3.5M7 16l3.5 3.5"/>
+          </svg>
+        </span>
+        Converter
+        <span class="tsub">Pressure, temperature, energy and more</span>
+      </button>
+      <div class="tool-tile soon">
+        <span class="ti">
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  d="M12 6v12M6 12h12"/>
+          </svg>
+        </span>
+        More to come
+        <span class="tsub">Still to be decided</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="toolConvert" style="display:none;">
+    <div class="tool-head">
+      <button class="btn btn-ghost" id="toolBackBtn">&lsaquo; Tools</button>
+      <div class="tool-title">Converter</div>
+    </div>
+    <div class="conv-cats" id="convCats"></div>
+    <div class="conv-input">
+      <div class="field">
+        <label>Value</label>
+        <input type="number" step="any" id="convValue" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Unit</label>
+        <select id="convUnit"></select>
+      </div>
+    </div>
+    <div class="conv-note" id="convNote"></div>
+    <div id="convOut"></div>
+    <div class="conv-hint">Tap a line to copy it.</div>
+  </div>
 </div>
 
 <div id="shipSection" style="display:none;">
@@ -2298,6 +2412,297 @@
     renderExtras();
   }
 
+  // ---------- Tools: unit converter ----------
+  // Every factor is written out in full rather than chained through another
+  // conversion, so a rounding error in one unit cannot spread to the rest.
+  // Base units: Pa, J, m3, kg, m, kg/m3, m3/h, m/s. Temperature is the odd one
+  // out — it has offsets, not factors, so it is converted through Celsius.
+  var CONV_CATS = [
+    { key:'pressure', name:'Pressure', base:'Pa',
+      note:'Pressure conversion is a straight multiplication, so gauge converts to gauge and absolute to absolute. Mixing the two is the only trap: 1 barg is 2.01325 bara.',
+      units:[
+        ['bar', 'bar',              100000, 'bar'],
+        ['mbar', 'mbar',             100, 'mbar'],
+        ['Pa', 'pascal (Pa)',      1, 'Pa'],
+        ['kPa', 'kilopascal (kPa)', 1000, 'kPa'],
+        ['MPa', 'megapascal (MPa)', 1000000, 'MPa'],
+        ['hPa', 'hectopascal (hPa)',100, 'hPa'],
+        ['kgcm2', 'kg/cm²',           98066.5, 'kg/cm²'],
+        ['psi', 'psi (lbf/in²)',    6894.757293168361, 'psi'],
+        ['atm', 'atmosphere (atm)', 101325, 'atm'],
+        ['mmHg', 'mmHg / torr',      133.322387415, 'mmHg'],
+        ['inHg', 'inHg',             3386.388640341, 'inHg'],
+        ['mmH2O', 'mmH₂O',            9.80665, 'mmH₂O'],
+        ['mH2O', 'metres water (mWC)', 9806.65, 'mWC'],
+        ['inH2O', 'inH₂O',            249.08891, 'inH₂O']
+      ] },
+    { key:'temperature', name:'Temperature', base:'C',
+      note:'The only category with offsets rather than factors — a temperature difference does not convert the same way as a temperature.',
+      units:[
+        ['C','Celsius (°C)',0,'°C'], ['F','Fahrenheit (°F)',0,'°F'],
+        ['K','Kelvin (K)',0,'K'],   ['R','Rankine (°R)',0,'°R']
+      ] },
+    { key:'energy', name:'Energy', base:'J',
+      units:[
+        ['J', 'joule (J)',            1, 'J'],
+        ['kJ', 'kilojoule (kJ)',       1000, 'kJ'],
+        ['MJ', 'megajoule (MJ)',       1000000, 'MJ'],
+        ['GJ', 'gigajoule (GJ)',       1000000000, 'GJ'],
+        ['kWh', 'kilowatt-hour (kWh)',  3600000, 'kWh'],
+        ['MWh', 'megawatt-hour (MWh)',  3600000000, 'MWh'],
+        ['cal', 'calorie (cal)',        4.184, 'cal'],
+        ['kcal', 'kilocalorie (kcal)',   4184, 'kcal'],
+        ['BTU', 'BTU',                  1055.05585262, 'BTU'],
+        ['MMBTU', 'MMBTU',                1055055852.62, 'MMBTU'],
+        ['therm', 'therm',                105505585.262, 'therm'],
+        ['ftlbf', 'foot-pound (ft·lbf)',  1.3558179483314004, 'ft·lbf']
+      ] },
+    { key:'volume', name:'Volume', base:'m3',
+      units:[
+        ['m3', 'cubic metre (m³)',     1, 'm³'],
+        ['L', 'litre (L)',            0.001, 'L'],
+        ['mL', 'millilitre (mL)',      0.000001, 'mL'],
+        ['ft3', 'cubic foot (ft³)',     0.028316846592, 'ft³'],
+        ['in3', 'cubic inch (in³)',     0.000016387064, 'in³'],
+        ['galUS', 'US gallon',            0.003785411784, 'US gal'],
+        ['galUK', 'Imperial gallon',      0.00454609, 'imp gal'],
+        ['bbl', 'barrel (42 US gal)',   0.158987294928, 'bbl']
+      ] },
+    { key:'mass', name:'Mass', base:'kg',
+      units:[
+        ['kg', 'kilogram (kg)',       1, 'kg'],
+        ['g', 'gram (g)',            0.001, 'g'],
+        ['t', 'tonne (MT)',          1000, 't'],
+        ['lb', 'pound (lb)',          0.45359237, 'lb'],
+        ['oz', 'ounce (oz)',          0.028349523125, 'oz'],
+        ['tonLong', 'long ton',            1016.0469088, 'long ton'],
+        ['tonShort', 'short ton',           907.18474, 'short ton']
+      ] },
+    { key:'length', name:'Length', base:'m',
+      units:[
+        ['m', 'metre (m)',          1, 'm'],
+        ['mm', 'millimetre (mm)',    0.001, 'mm'],
+        ['cm', 'centimetre (cm)',    0.01, 'cm'],
+        ['km', 'kilometre (km)',     1000, 'km'],
+        ['in', 'inch (in)',          0.0254, 'in'],
+        ['ft', 'foot (ft)',          0.3048, 'ft'],
+        ['yd', 'yard (yd)',          0.9144, 'yd'],
+        ['fath', 'fathom',             1.8288, 'fathom'],
+        ['nm', 'nautical mile',      1852, 'NM'],
+        ['mi', 'statute mile',       1609.344, 'mile']
+      ] },
+    { key:'density', name:'Density', base:'kg/m3',
+      units:[
+        ['kgm3', 'kg/m³',      1, 'kg/m³'],
+        ['kgL', 'kg/L',       1000, 'kg/L'],
+        ['gcm3', 'g/cm³',      1000, 'g/cm³'],
+        ['tm3', 't/m³',       1000, 't/m³'],
+        ['lbft3', 'lb/ft³',     16.018463373960142, 'lb/ft³'],
+        ['lbgal', 'lb/US gal',  119.82642731689663, 'lb/US gal']
+      ] },
+    { key:'flow', name:'Flow', base:'m3/h',
+      units:[
+        ['m3h', 'm³/h',        1, 'm³/h'],
+        ['m3min', 'm³/min',      60, 'm³/min'],
+        ['m3s', 'm³/s',        3600, 'm³/s'],
+        ['Lmin', 'L/min',       0.06, 'L/min'],
+        ['Ls', 'L/s',         3.6, 'L/s'],
+        ['gpm', 'US gal/min',  0.22712470704, 'US gpm'],
+        ['ft3h', 'ft³/h',       0.028316846592, 'ft³/h'],
+        ['bblh', 'barrel/h',    0.158987294928, 'bbl/h']
+      ] },
+    { key:'speed', name:'Speed', base:'m/s',
+      units:[
+        ['kn', 'knot',        0.5144444444444445, 'kn'],
+        ['ms', 'm/s',         1, 'm/s'],
+        ['kmh', 'km/h',        0.2777777777777778, 'km/h'],
+        ['mph', 'mph',         0.44704, 'mph'],
+        ['fts', 'ft/s',        0.3048, 'ft/s']
+      ] }
+  ];
+
+  var CONV_KEY = 'gasplanet_conv_v1';
+  var convCat  = CONV_CATS[0];
+
+  function convSym(cat, key){
+    for(var i=0; i<cat.units.length; i++) if(cat.units[i][0] === key) return cat.units[i][3];
+    return key;
+  }
+
+  // Temperature is the only category where the working is not a single number,
+  // so each pair is written out in full. Everything else is one multiplication.
+  var TEMP_FORMULA = {
+    'C>F':'°F = (°C × 9 ÷ 5) + 32',
+    'C>K':'K = °C + 273.15',
+    'C>R':'°R = (°C + 273.15) × 9 ÷ 5',
+    'F>C':'°C = (°F − 32) × 5 ÷ 9',
+    'F>K':'K = (°F − 32) × 5 ÷ 9 + 273.15',
+    'F>R':'°R = °F + 459.67',
+    'K>C':'°C = K − 273.15',
+    'K>F':'°F = (K − 273.15) × 9 ÷ 5 + 32',
+    'K>R':'°R = K × 9 ÷ 5',
+    'R>C':'°C = (°R − 491.67) × 5 ÷ 9',
+    'R>F':'°F = °R − 459.67',
+    'R>K':'K = °R × 5 ÷ 9'
+  };
+
+  // The working, written the way it would be on paper. A factor below 1 is
+  // turned into a division so the number on the page is always the larger,
+  // more readable one — "÷ 158 987.3" rather than "× 0.00000629".
+  function convFormula(cat, fromU, toU){
+    if(fromU === toU) return 'same unit';
+    var a = convSym(cat, fromU), b = convSym(cat, toU);
+    if(cat.key === 'temperature') return TEMP_FORMULA[fromU + '>' + toU] || '';
+    var from = 1, to = 1;
+    cat.units.forEach(function(u){
+      if(u[0] === fromU) from = u[2];
+      if(u[0] === toU)   to   = u[2];
+    });
+    var f = from / to;
+    if(f >= 1) return b + ' = ' + a + ' × ' + convFmt(f);
+    return b + ' = ' + a + ' ÷ ' + convFmt(1 / f);
+  }
+
+  function convCatByKey(k){
+    for(var i=0; i<CONV_CATS.length; i++) if(CONV_CATS[i].key === k) return CONV_CATS[i];
+    return CONV_CATS[0];
+  }
+
+  // temperature is converted through Celsius; everything else through its base
+  function tempToC(v, u){
+    if(u === 'C') return v;
+    if(u === 'F') return (v - 32) * 5 / 9;
+    if(u === 'K') return v - 273.15;
+    return (v - 491.67) * 5 / 9;            // Rankine
+  }
+  function tempFromC(c, u){
+    if(u === 'C') return c;
+    if(u === 'F') return c * 9 / 5 + 32;
+    if(u === 'K') return c + 273.15;
+    return (c + 273.15) * 9 / 5;            // Rankine
+  }
+
+  function convertValue(cat, value, fromU, toU){
+    if(cat.key === 'temperature') return tempFromC(tempToC(value, fromU), toU);
+    var from = 1, to = 1;
+    cat.units.forEach(function(u){
+      if(u[0] === fromU) from = u[2];
+      if(u[0] === toU)   to   = u[2];
+    });
+    return value * from / to;
+  }
+
+  // Seven significant figures, trailing zeros trimmed, thousands grouped, and
+  // exponential only where a fixed number would be unreadable.
+  function convFmt(v){
+    if(v === null || v === undefined || !isFinite(v)) return '—';
+    if(v === 0) return '0';
+    var a = Math.abs(v);
+    if(a >= 1e10 || a < 1e-5) return v.toExponential(5);
+    var dp = 7 - Math.floor(Math.log10(a)) - 1;
+    if(dp < 0)  dp = 0;
+    if(dp > 15) dp = 15;
+    var str = v.toFixed(dp);
+    if(str.indexOf('.') >= 0) str = str.replace(/0+$/, '').replace(/\.$/, '');
+    var neg = str.charAt(0) === '-';
+    if(neg) str = str.slice(1);
+    var parts = str.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return (neg ? '-' : '') + parts.join('.');
+  }
+
+  function renderConvCats(){
+    document.getElementById('convCats').innerHTML = CONV_CATS.map(function(c){
+      return '<button data-cat="' + c.key + '"' + (c.key === convCat.key ? ' class="active"' : '') +
+             '>' + escapeHtml(c.name) + '</button>';
+    }).join('');
+  }
+
+  function renderConvUnits(selected){
+    var sel = document.getElementById('convUnit');
+    sel.innerHTML = convCat.units.map(function(u){
+      return '<option value="' + escapeHtml(u[0]) + '">' + escapeHtml(u[1]) + '</option>';
+    }).join('');
+    sel.value = selected && convCat.units.some(function(u){ return u[0] === selected; })
+              ? selected : convCat.units[0][0];
+  }
+
+  function renderConvOut(){
+    var out  = document.getElementById('convOut');
+    var note = document.getElementById('convNote');
+    note.textContent = convCat.note || '';
+    note.style.display = convCat.note ? '' : 'none';
+
+    var raw  = document.getElementById('convValue').value;
+    var from = document.getElementById('convUnit').value;
+    saveConv();
+
+    if(raw === '' || isNaN(parseFloat(raw))){
+      out.innerHTML = '<div class="empty" style="padding:26px 12px;">Enter a value to convert.</div>';
+      return;
+    }
+    var value = parseFloat(raw);
+    out.innerHTML = convCat.units.map(function(u){
+      var v = convertValue(convCat, value, from, u[0]);
+      return '<div class="conv-row' + (u[0] === from ? ' self' : '') + '" data-copy="' + escapeHtml(convFmt(v)) + '">' +
+               '<div class="conv-top">' +
+                 '<span class="cu">' + escapeHtml(u[1]) + '</span>' +
+                 '<span class="cv">' + escapeHtml(convFmt(v)) + '</span>' +
+               '</div>' +
+               '<div class="cf">' + escapeHtml(convFormula(convCat, from, u[0])) + '</div>' +
+             '</div>';
+    }).join('');
+  }
+
+  // The Android shell serves the page from file://, which is not a secure
+  // context, so the clipboard API is not always there. execCommand still is.
+  function copyText(text){
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text);
+        return true;
+      }
+    }catch(e){ /* fall through */ }
+    try{
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    }catch(e){ return false; }
+  }
+
+  function saveConv(){
+    try{
+      localStorage.setItem(CONV_KEY, JSON.stringify({
+        cat: convCat.key,
+        unit: document.getElementById('convUnit').value,
+        value: document.getElementById('convValue').value
+      }));
+    }catch(e){ /* the converter remembering nothing is not worth an alert */ }
+  }
+
+  function loadConv(){
+    var saved = null;
+    try{ saved = JSON.parse(localStorage.getItem(CONV_KEY) || 'null'); }catch(e){ saved = null; }
+    convCat = convCatByKey(saved && saved.cat);
+    renderConvCats();
+    renderConvUnits(saved && saved.unit);
+    if(saved && saved.value) document.getElementById('convValue').value = saved.value;
+    renderConvOut();
+  }
+
+  function showTool(name){
+    document.getElementById('toolsHome').style.display   = name ? 'none' : '';
+    document.getElementById('toolConvert').style.display = name === 'convert' ? '' : 'none';
+    document.getElementById('pageTitle').textContent = name === 'convert' ? 'Converter' : 'Tools';
+  }
+
   // ---------- ship's particulars ----------
   // One profile per device. Signing off one ship and joining another means
   // "New ship", then pasting that vessel's particulars in.
@@ -3083,7 +3488,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v21';
+  var APP_BUILD = 'v23';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -3530,6 +3935,7 @@
   renderExtras();
   fillWrPtw();
   renderWwr();
+  loadConv();
   document.getElementById('exDate').value = todayISO();
   document.getElementById('wrDate').value = todayISO();
   fillPtwTypes();
@@ -3598,6 +4004,29 @@
     }
     var del = e.target.closest('[data-extra-action="delete"]');
     if(del) deleteExtra(del.dataset.id);
+  });
+
+  document.querySelector('#toolsHome .tool-grid').addEventListener('click', function(e){
+    var tile = e.target.closest('[data-tool]');
+    if(tile) showTool(tile.dataset.tool);
+  });
+  document.getElementById('toolBackBtn').addEventListener('click', function(){ showTool(null); });
+  document.getElementById('convCats').addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-cat]');
+    if(!btn) return;
+    convCat = convCatByKey(btn.dataset.cat);
+    renderConvCats();
+    renderConvUnits(null);
+    renderConvOut();
+  });
+  document.getElementById('convValue').addEventListener('input', renderConvOut);
+  document.getElementById('convUnit').addEventListener('change', renderConvOut);
+  document.getElementById('convOut').addEventListener('click', function(e){
+    var row = e.target.closest('[data-copy]');
+    if(!row) return;
+    if(!copyText(row.dataset.copy)) return;
+    row.classList.add('copied');
+    setTimeout(function(){ row.classList.remove('copied'); }, 700);
   });
 
   document.getElementById('wrAddBtn').addEventListener('click', addWrJob);
@@ -3692,7 +4121,7 @@
   });
 
   var tabTitles = { jobs:'To Do List', extra:'Additional AD-19 Jobs', wwr:'Weekly Work Done',
-                    crew:'Crew List', cargo:'Cargo Log', ship:"Ship's Particulars" };
+                    tools:'Tools', crew:'Crew List', cargo:'Cargo Log', ship:"Ship's Particulars" };
   document.getElementById('topTabs').addEventListener('click', function(e){
     var btn = e.target.closest('button[data-tab]');
     if(!btn) return;
@@ -3704,6 +4133,9 @@
     document.getElementById('shipSection').style.display = activeTab==='ship' ? '' : 'none';
     document.getElementById('extraSection').style.display = activeTab==='extra' ? '' : 'none';
     document.getElementById('wwrSection').style.display = activeTab==='wwr' ? '' : 'none';
+    document.getElementById('toolsSection').style.display = activeTab==='tools' ? '' : 'none';
+    // leaving the tab and coming back lands on the launcher, not the last tool
+    if(activeTab !== 'tools') showTool(null);
     document.getElementById('pageTitle').textContent = tabTitles[activeTab];
     document.getElementById('fabAdd').style.display = activeTab==='jobs' ? '' : 'none';
   });

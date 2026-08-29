@@ -1,5 +1,6 @@
 const { chromium } = require('playwright-core');
 const http=require('http'), fs=require('fs');
+const OUTDIR = process.env.OUT || fs.mkdtempSync('/tmp/theme-');
 let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':'  -> '+x)); if(!c)fails++;};
 const lum = c => { const m=c.match(/\d+/g); return m ? (0.299*m[0]+0.587*m[1]+0.114*m[2]) : null; };
 (async()=>{
@@ -55,9 +56,9 @@ const lum = c => { const m=c.match(/\d+/g); return m ? (0.299*m[0]+0.587*m[1]+0.
   await p.click('#weeklyReportBtn'); await p.waitForTimeout(300);
   const rep = await p.evaluate(()=>getComputedStyle(document.getElementById('reportView')).backgroundColor);
   ok('weekly report stays light in dark mode', lum(rep)>240, rep);
-  await p.screenshot({path:process.env.SP+'/shot-dark-report.png'});
+  await p.screenshot({path:OUTDIR+'/shot-dark-report.png'});
   await p.click('[data-rv="close"]');
-  await p.screenshot({path:process.env.SP+'/shot-dark.png'});
+  await p.screenshot({path:OUTDIR+'/shot-dark.png'});
 
   // choice persists
   await p.reload(); await p.waitForTimeout(200);

@@ -1,3 +1,4 @@
 tests/node_modules/
 tests/package-lock.json
 tests/package.json
+tests/undefined/

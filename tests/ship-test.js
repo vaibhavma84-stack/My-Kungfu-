@@ -10,7 +10,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   const dialogs=[]; p.on('dialog',async d=>{dialogs.push(d.message()); await d.accept();});
   await p.goto('http://localhost:8743/');
 
-  ok('six tabs now', (await p.locator('#topTabs button').count())===6);
+  ok('seven tabs now', (await p.locator('#topTabs button').count())===7);
   await p.click('#topTabs button[data-tab="ship"]');
   ok('ship section shows', await p.isVisible('#shipSection'));
   ok('other sections hidden', !(await p.isVisible('#jobsSection')) && !(await p.isVisible('#cargoSection')));

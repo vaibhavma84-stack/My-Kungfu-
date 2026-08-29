@@ -27,8 +27,20 @@ asserts. `OUT` is where downloads and screenshots land (a temp dir by default).
 | `ship-test` | the Ship tab, prefill, and the particulars paste parser |
 | `blank-test` | the three-column blank sheet round-tripping through import |
 | `banner-test` | the backup reminder, its thresholds and snooze |
+| `tools-test` | the Tools tab and converter — known conversions, the formula line, what it remembers |
 | `collapse` | the entry form collapsing without clipping |
 | `marsec-test`, `newfeat-test`, `print-test`, `project-test`, `theme-test` | MARSEC defaults, later additions, printing to PDF, the project sweep, light and dark |
+
+`factor-check.py` is not a browser test: it re-derives all 70 conversion
+factors from published definitions (231 cubic inches to the US gallon, 0.45359237
+kg to the pound) and compares them with what the page carries. Run it after
+touching `CONV_CATS` — a wrong factor produces a plausible-looking number that
+no UI test would catch. It found two errors in the eighth significant figure
+on its first run.
+
+```bash
+python3 tests/factor-check.py
+```
 
 `pic.jpg` is a tiny JPEG for photo attachment. `sample-import.csv` is the real
 109-job import, used by several suites.
