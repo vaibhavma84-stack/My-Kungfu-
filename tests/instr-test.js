@@ -150,6 +150,48 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('and the copy has the new one', names.some(n=>/TYPE O2/.test(n)), names.join(' | '));
 
   ok('back to the list', await p.locator('#instrListView').isVisible());
+  // ---- import and export ----
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#instrExportBtn')]);
+  const exported = path.join(OUT, dl.suggestedFilename());
+  await dl.saveAs(exported);
+  const doc = JSON.parse(fs.readFileSync(exported,'utf8'));
+  ok('export writes an instruments file', doc.format==='gasplanet-instruments', doc.format);
+  ok('and contains both instruments', doc.instruments.length===2, doc.instruments.length);
+
+  // the real transcription file must import cleanly
+  const gx = path.join(__dirname, '..', 'instruments', 'GX-8000.json');
+  if(fs.existsSync(gx)){
+    const src = JSON.parse(fs.readFileSync(gx,'utf8'));
+    const before = await p.locator('.instr-card').count();
+    await p.setInputFiles('#instrImportInput', gx);
+    await p.waitForTimeout(600);
+    ok('the GX-8000 file imports', await p.locator('.instr-card').count()===before+1,
+       await p.locator('.instr-card').count());
+    ok('it does not replace what was already there',
+       (await p.locator('.instr-card .im').allTextContents()).some(n=>/TYPE O2/.test(n)));
+    const gxCard = p.locator('.instr-card', { hasText:'Riken Keiki GX-8000' }).last();
+    ok('with all its procedures',
+       new RegExp(src.instruments[0].procedures.length + ' procedures').test(await gxCard.textContent()),
+       await gxCard.textContent());
+    await gxCard.click();
+    await p.waitForTimeout(300);
+    const body = await p.textContent('#instrDetail');
+    ok('the maintenance-mode password came across', /Password: 0008/.test(body));
+    ok('the arrow keys are real arrows, not mis-read letters',
+       /keep ▲ and ▼ pressed/.test(body));
+    ok('both alarm preset tables are recorded',
+       /19\.5 vol%/.test(body) && /18 vol%/.test(body));
+    ok('every step cites its document',
+       (body.match(/PT0E-09811|H4E-0050/g)||[]).length > 50,
+       (body.match(/PT0E-09811|H4E-0050/g)||[]).length);
+    ok('the sensor torque figure came across', /49 to 54 N·cm/.test(body));
+    ok('the pump part number came across', /RP-11/.test(body));
+    ok('bump interval left unset, since the manuals do not state one',
+       (await p.inputValue('#fBumpDays'))==='', await p.inputValue('#fBumpDays'));
+    await p.click('#instrListBtn');
+    await p.waitForTimeout(200);
+  }
+
   await p.click('#instrBackBtn');
   ok('back to the launcher', await p.locator('#toolsHome').isVisible());
 

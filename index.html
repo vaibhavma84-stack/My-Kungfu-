@@ -1295,6 +1295,12 @@
       <div class="form-row flags-row">
         <button id="instrAddBtn" class="btn btn-primary" style="flex:1;">+ Add instrument</button>
       </div>
+      <div class="toolbar crew-toolbar">
+        <div class="spacer"></div>
+        <button class="btn btn-ghost" id="instrExportBtn">Export</button>
+        <button class="btn btn-ghost" id="instrImportBtn">Import</button>
+        <input type="file" id="instrImportInput" accept=".json,application/json" style="display:none">
+      </div>
       <div id="instrList"></div>
     </div>
 
@@ -3270,6 +3276,68 @@
     wrap.innerHTML = h;
   }
 
+  // Instruments are exported and imported as a file rather than typed twice.
+  // A transcription of a maker's manual is a long document; nobody should have
+  // to key it into a phone, and the same file serves as the backup.
+  function exportInstruments(){
+    if(!instruments.length){ alert('No instruments to export yet.'); return; }
+    var payload = { format: 'gasplanet-instruments', version: 1,
+                    exported: todayISO(), instruments: instruments };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'GasPlanet_Instruments_' + todayISO() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  // Imports add to the list, they never replace it, and every id is reissued so
+  // an import can never overwrite an instrument already on the device.
+  function importInstrumentsFile(file){
+    var r = new FileReader();
+    r.onload = function(){
+      var data;
+      try{ data = JSON.parse(r.result); }
+      catch(e){ alert('That file could not be read as instrument data.'); return; }
+      var list = data && data.instruments;
+      if(!list || !list.length){ alert('No instruments found in that file.'); return; }
+      var added = 0;
+      list.forEach(function(x){
+        if(!x || !x.model) return;
+        instruments.push({
+          id: uid(),
+          model: String(x.model),
+          serial: String(x.serial || ''),
+          location: String(x.location || ''),
+          sensors: String(x.sensors || ''),
+          calDays: parseInt(x.calDays, 10) || 0,  lastCal: String(x.lastCal || ''),
+          bumpDays: parseInt(x.bumpDays, 10) || 0, lastBump: String(x.lastBump || ''),
+          notes: String(x.notes || ''),
+          parts: (x.parts || []).map(function(p){
+            return { id: uid(), name: String(p.name || ''),
+                     partNo: String(p.partNo || ''), qty: String(p.qty || '') };
+          }),
+          procedures: (x.procedures || []).map(function(pr){
+            return { id: uid(), title: String(pr.title || ''),
+                     steps: (pr.steps || []).map(function(st){
+                       return { id: uid(), text: String(st.text || ''), photos: [] };
+                     }) };
+          }),
+          log: [],
+          created: todayISO()
+        });
+        added++;
+      });
+      if(!saveInstruments()){ renderInstruments(); return; }
+      showInstrList();
+      alert(added + ' instrument' + (added === 1 ? '' : 's') + ' added.\n\n' +
+            'Photographs are not carried in this file — add them on the steps ' +
+            'that need one. Nothing already on the device was changed.');
+    };
+    r.readAsText(file);
+  }
+
   function showInstrList(){
     instrOpenId = null;
     document.getElementById('instrListView').style.display = '';
@@ -4432,7 +4500,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v30';
+  var APP_BUILD = 'v31';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -5010,6 +5078,15 @@
   document.getElementById('instrBackBtn').addEventListener('click', function(){ showTool(null); });
   document.getElementById('instrListBtn').addEventListener('click', showInstrList);
   document.getElementById('instrAddBtn').addEventListener('click', addInstrument);
+  document.getElementById('instrExportBtn').addEventListener('click', exportInstruments);
+  document.getElementById('instrImportBtn').addEventListener('click', function(){
+    document.getElementById('instrImportInput').click();
+  });
+  document.getElementById('instrImportInput').addEventListener('change', function(e){
+    var f = e.target.files[0];
+    if(f) importInstrumentsFile(f);
+    e.target.value = '';
+  });
   document.getElementById('inInstrModel').addEventListener('keydown', function(e){
     if(e.key === 'Enter') addInstrument();
   });

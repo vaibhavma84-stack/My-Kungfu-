@@ -1,0 +1,406 @@
+{
+  "format": "gasplanet-instruments",
+  "version": 1,
+  "source": "Transcribed from PT0E-09811 (Operating Manual) and H4E-0050 (User Maintenance Manual), Riken Keiki.",
+  "instruments": [
+    {
+      "model": "Riken Keiki GX-8000",
+      "serial": "",
+      "location": "",
+      "sensors": "O2 / Combustible (%LEL) / H2S / CO — confirm Type from the model plate",
+      "calDays": 180,
+      "lastCal": "",
+      "bumpDays": 0,
+      "lastBump": "",
+      "notes": "FACTORY ALARM PRESET POINTS — CHECK WHICH APPROVAL YOUR UNIT CARRIES.\nThe manual gives TWO DIFFERENT tables and the oxygen setpoints are not the same.\n\nATEX / IECEx  [OP §9-1 p.54]\n  O2   19.5 vol% (L) / 23.5 vol% (H) / 40 vol% (OVER)\n  LEL  10 %LEL (1st) / 50 %LEL (2nd) / 100 %LEL (OVER)\n  H2S  5 ppm (1st) / 30 ppm (2nd) / 10 ppm TWA / 15 ppm STEL / 100 ppm (OVER)\n  CO   25 ppm (1st) / 50 ppm (2nd) / 25 ppm TWA / 200 ppm STEL / 500 ppm (OVER)\n\nTIIS (Japan)  [OP §9-1 p.53]\n  O2   18 vol% (L) / 25 vol% (H) / 40 vol% (OVER)\n  LEL, H2S and CO as above.\n\nThese are the factory presets quoted in the manual, not necessarily what is set\nin your instrument. Read the actual values on the [ALARM-P] display and record\nthem here. Company and flag requirements may differ from both tables.\n\nMEASURING RANGES  [OP §9-1 p.53]\n  O2 0-25 vol% (service to 40) | LEL 0-100 %LEL / to 100 vol% | H2S 0-30 ppm\n  (service to 100) | CO 0-150 ppm (service to 500)\n\nTYPE — confirm from the model plate  [OP §9-1 p.54]\n  TypeA  O2, Combustible (HC and CH4)*, H2S, CO\n  TypeB  O2, Combustible (HC and CH4),  H2S, CO\n  TypeC  O2, Combustible (HC, CH4, C2H2), H2S\n  TypeD  O2, Combustible (HC and CH4), CO\n  TypeE  O2, Combustible (HC, CH4, H2)*\n  TypeF  O2, Combustible (HC, CH4, C2H2)\n  TypeG  O2, Combustible (H2)\n  * = has the vol% (TE) range as well as %LEL. TYPE-A and E only have the\n  HC RANGE menu, the 30-second AIR CAL countdown, and the VOL Z.CAL step.\n  STEL and TWA exist on TYPE-A, B, C and D only.\n\nINTERVALS  [OP §6-1 p.44 / MN §1 p.2]\n  Daily   before beginning work\n  Monthly alarm test\n  Regular at least once every six months - span adjustment and gas alarm check\n  The manuals do not state a bump test interval. Take it from company and flag\n  requirements, then set it on the card above.\n\nCAUTION  Do not use a lighter gas to check sensitivity - a constituent of\nlighter gas may deteriorate the sensor performance.  [OP §6-2 p.45]\n\nTranscribed from PT0E-09811 and H4E-0050 supplied by the vessel. Check against\nthe paper copy before use. Riken Keiki also offer this as a service.",
+      "parts": [
+        {
+          "name": "Pump unit",
+          "partNo": "RP-11",
+          "qty": "check 6 months, replace 1-2 years [OP §6-4 p.48]"
+        },
+        {
+          "name": "Rubber seal (set)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "replace 2 years [OP §6-4 p.48]"
+        },
+        {
+          "name": "Tube (set)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "check 6 months, replace 3-8 years [OP §6-4 p.48]"
+        },
+        {
+          "name": "Li-ion battery pack",
+          "partNo": "BP-8000 / BP-8000(1)",
+          "qty": "about 500 charge-discharge cycles [OP §6-4 p.48]"
+        },
+        {
+          "name": "Li-ion battery unit (standard)",
+          "partNo": "BUL-8000(G) / BUL-8000(G1)",
+          "qty": "approx 12 h run time [OP §9-1 p.53]"
+        },
+        {
+          "name": "Dry battery unit (option, 3x AA)",
+          "partNo": "BUD-8000(G) / BUD-8000(G1)",
+          "qty": "approx 6 h run time [OP §9-1 p.53]"
+        },
+        {
+          "name": "Filter tube (for 30 m hose)",
+          "partNo": "CF-8385",
+          "qty": "mandatory with 30 m hose + plummet [OP §9-2 p.55]"
+        },
+        {
+          "name": "Activated carbon filter",
+          "partNo": "GX-8000 dedicated",
+          "qty": "2 per filter case [OP §6-4 p.47]"
+        },
+        {
+          "name": "O2 sensor (galvanic cell, OS)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "warranty 1 year [OP §6-4 p.46]"
+        },
+        {
+          "name": "Combustible sensor NC (%LEL)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "warranty 1 year [OP §6-4 p.46]"
+        },
+        {
+          "name": "Combustible sensor TE (vol%)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "warranty 1 year, TYPE-A/E [OP §9-1 p.53]"
+        },
+        {
+          "name": "H2S sensor (electrochemical, ES)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "warranty 1 year [OP §6-4 p.46]"
+        },
+        {
+          "name": "CO sensor (electrochemical, ES)",
+          "partNo": "— (from RIKEN KEIKI)",
+          "qty": "warranty 1 year [OP §6-4 p.46]"
+        }
+      ],
+      "procedures": [
+        {
+          "title": "Daily check before work  [PT0E-09811 Operating Manual §6-1 p.44]",
+          "steps": [
+            {
+              "text": "Check that the battery level is sufficient.  [PT0E-09811 Operating Manual §6-1 p.44]"
+            },
+            {
+              "text": "Make the gas monitor draw in fresh air and check the concentration display reads zero (or 20.9 vol% on the oxygen deficiency meter).  [PT0E-09811 Operating Manual §6-1 p.44]"
+            },
+            {
+              "text": "If the reading is incorrect, perform the zero adjustment (fresh air adjustment) after ensuring that no other gases exist around it.  [PT0E-09811 Operating Manual §6-1 p.44]"
+            },
+            {
+              "text": "See the flow rate indicator to check for abnormalities.  [PT0E-09811 Operating Manual §6-1 p.44]"
+            },
+            {
+              "text": "Check the dust filter for dust or clogging.  [PT0E-09811 Operating Manual §6-1 p.44]"
+            }
+          ]
+        },
+        {
+          "title": "Monthly alarm test — display only  [PT0E-09811 Operating Manual §4-8 p.37]",
+          "steps": [
+            {
+              "text": "NOTE: this menu DISPLAYS the setpoints and tests the alarm. It does not change any setpoint. To change a setpoint use the maintenance-mode procedure.  [PT0E-09811 Operating Manual §4-8 p.37]"
+            },
+            {
+              "text": "Press the DISPLAY switch and select \"full scale display / alarm setpoint display / alarm test\" [ALARM-P] from the display/setting mode menu.  [PT0E-09811 Operating Manual §4-8 p.37]"
+            },
+            {
+              "text": "Press the ENTER switch to enter the alarm setpoint display.  [PT0E-09811 Operating Manual §4-8 p.37]"
+            },
+            {
+              "text": "Press ▲ or ▼ to step through: full scale, first alarm setpoint [WARNING], second alarm setpoint [ALARM], STEL alarm setpoint, TWA alarm setpoint. STEL and TWA are TYPE-A, B, C and D only.  [PT0E-09811 Operating Manual §4-8 p.37]"
+            },
+            {
+              "text": "Press the ENTER switch to perform the alarm test. The alarm operation on this screen can be checked. Press any switch to stop the alarm operation.  [PT0E-09811 Operating Manual §4-8 p.37]"
+            },
+            {
+              "text": "Press the DISPLAY switch to exit, then press it several times until it returns to the detection mode.  [PT0E-09811 Operating Manual §4-8 p.37]"
+            }
+          ]
+        },
+        {
+          "title": "Bump test  [BUMP]  [H4E-0050 User Maintenance Manual p.5-8]",
+          "steps": [
+            {
+              "text": "Prepare the bump test gas collected in a gas sampling bag.  [H4E-0050 User Maintenance Manual p.6]"
+            },
+            {
+              "text": "WARNING: the bump test gas is a hazardous gas (toxic, oxygen deficient, etc.). Handle the gas and jigs with due care — the gas must not be inhaled and the sampling bag must not have any hole.  [H4E-0050 User Maintenance Manual p.6]"
+            },
+            {
+              "text": "Connect the gas sampling bag to the gas sampling probe (with a tube) and to GAS IN. CAUTION: the GAS OUT side must be left OPEN with no pipe connected; supplied gas must be discharged to a safe place.  [H4E-0050 User Maintenance Manual p.6]"
+            },
+            {
+              "text": "Enter calibration mode: in the detection mode, keep ▼ pressed and press the DISPLAY switch. Release the switches when the buzzer beeps.  [H4E-0050 User Maintenance Manual p.5]"
+            },
+            {
+              "text": "Press ▲ or ▼ until [BUMP] is displayed, then press the ENTER switch.  [H4E-0050 User Maintenance Manual p.7]"
+            },
+            {
+              "text": "The bump test gas concentration is displayed. The concentration of the prepared test gas must be consistent with the displayed test gas concentration. (The test gas concentration is set to the same value as the span gas concentration; change it in the span adjustment menu.)  [H4E-0050 User Maintenance Manual p.7]"
+            },
+            {
+              "text": "Supply the test gas and press ENTER. [BUMP] and [APPLY] are displayed alternately and the countdown starts.  [H4E-0050 User Maintenance Manual p.7]"
+            },
+            {
+              "text": "IF ALL CHANNELS PASS: the result is displayed in about 30 seconds. Stop supplying the gas. Results and values are displayed alternately each time ▲ or ▼ is pressed. P = Pass, F = Fail. Press ENTER to return to the calibration mode menu.  [H4E-0050 User Maintenance Manual p.7]"
+            },
+            {
+              "text": "IF ANY CHANNEL FAILS: continue supplying the gas. The result is not displayed and the span adjustment starts automatically — [CAL] and [APPLY] alternate with a countdown. In about 30 seconds the result is displayed. Left: test result, Right: adjustment result (P: Pass, F: Fail). Stop supplying the gas, then press ENTER.  [H4E-0050 User Maintenance Manual p.8]"
+            },
+            {
+              "text": "NOTE: if \"F\" (Fail) is displayed after the span adjustment, replace the sensor with a new one.  [H4E-0050 User Maintenance Manual p.8]"
+            },
+            {
+              "text": "WARNING: after the adjustment is completed, do not forget to return to the detection mode. The gas monitor does NOT return automatically from regular maintenance mode.  [H4E-0050 User Maintenance Manual p.3]"
+            }
+          ]
+        },
+        {
+          "title": "Change an alarm setpoint  [ALARM-P, maintenance mode]  [H4E-0050 User Maintenance Manual p.9-12]",
+          "steps": [
+            {
+              "text": "This is in the password-protected maintenance mode. The maintenance mode includes settings which are usually not used — be careful not to change them by mistake. It is recommended that setting changes be recorded in a log.  [H4E-0050 User Maintenance Manual p.9]"
+            },
+            {
+              "text": "With the power OFF, keep ▲ and ▼ pressed and press the POWER switch. Release the switches when the buzzer beeps.  [H4E-0050 User Maintenance Manual p.9]"
+            },
+            {
+              "text": "The password input field blinks. Press ▲ or ▼ to select a number and press ENTER to confirm it. Enter four digits from the left. Password: 0008.  [H4E-0050 User Maintenance Manual p.9]"
+            },
+            {
+              "text": "Press ▲ or ▼ until [ALARM-P] is displayed, then press the ENTER switch.  [H4E-0050 User Maintenance Manual p.10, p.12]"
+            },
+            {
+              "text": "The alarm setpoint setting selection menu is displayed. Press ▲ or ▼ to display the target gas. The order is: Combustible, O2, H2S, CO, ESCAPE.  [H4E-0050 User Maintenance Manual p.12]"
+            },
+            {
+              "text": "With the desired target gas selected, press ENTER to make the alarm setpoint display blink, prompting for input.  [H4E-0050 User Maintenance Manual p.12]"
+            },
+            {
+              "text": "Press ▲ or ▼ to change the alarm setpoint value, then press ENTER to enter it.  [H4E-0050 User Maintenance Manual p.12]"
+            },
+            {
+              "text": "Continue to set WARNING, ALARM, STEL and TWA in this order. Set STEL and TWA only for CO and H2S.  [H4E-0050 User Maintenance Manual p.12]"
+            },
+            {
+              "text": "Change the last item and press ENTER. After the settings are confirmed and [END] is displayed, the monitor returns to the alarm setpoint selection menu. Repeat for other gases.  [H4E-0050 User Maintenance Manual p.12]"
+            },
+            {
+              "text": "When finished, press ▲ or ▼ until [ESCAPE] is displayed and press ENTER to return to the maintenance mode menu.  [H4E-0050 User Maintenance Manual p.12]"
+            },
+            {
+              "text": "Exit: press ▲ or ▼ until [START] is displayed and press ENTER to leave the maintenance mode and enter the detection mode.  [H4E-0050 User Maintenance Manual p.10]"
+            },
+            {
+              "text": "Record the change in the log, and verify the new setpoints on the [ALARM-P] display in the ordinary display/setting mode.  [H4E-0050 User Maintenance Manual p.9; PT0E-09811 Operating Manual §4-8 p.37]"
+            }
+          ]
+        },
+        {
+          "title": "Fresh air adjustment  [AIR CAL]  [PT0E-09811 Operating Manual §4-7 p.31; H4E-0050 User Maintenance Manual §3-2 p.17]",
+          "steps": [
+            {
+              "text": "WARNING: when air calibration is performed in the atmosphere, check the atmosphere for freshness first. If other gases exist the adjustment cannot be performed properly, leading to danger when gas leaks.  [PT0E-09811 Operating Manual §4-7 p.31]"
+            },
+            {
+              "text": "Perform air calibration under pressure, temperature and humidity close to the operating environment, and in fresh air. Perform it after the reading has stabilized.  [PT0E-09811 Operating Manual §4-7 p.31]"
+            },
+            {
+              "text": "If there is a sudden temperature change of 15 °C or more between the storage and operation locations, turn the monitor on, leave it about 10 minutes in an environment similar to the operating location, then air calibrate in fresh air before use.  [PT0E-09811 Operating Manual §4-7 p.31]"
+            },
+            {
+              "text": "In the detection mode, press and keep pressing the AIR switch. The display changes to [Adj HOLD AIR].  [PT0E-09811 Operating Manual §4-7 p.31]"
+            },
+            {
+              "text": "When [RELEASE] is displayed, release the AIR switch. On TYPE-A and TYPE-E a 30-second countdown starts; no countdown on other types.  [PT0E-09811 Operating Manual §4-7 p.31; H4E-0050 User Maintenance Manual p.17]"
+            },
+            {
+              "text": "When the zero adjustment completes successfully [END] is displayed and the monitor returns to the detection mode.  [PT0E-09811 Operating Manual §4-7 p.31]"
+            },
+            {
+              "text": "IF IT FAILS: [FAIL AIR CAL] is displayed with the faulty sensor. Press the RESET switch to reset the fault alarm. The value before calibration is displayed.  [PT0E-09811 Operating Manual §4-7 p.32]"
+            }
+          ]
+        },
+        {
+          "title": "Span adjustment — all channels at once  [AUTO CAL]  [H4E-0050 User Maintenance Manual §3-3 p.18]",
+          "steps": [
+            {
+              "text": "Order matters. Perform in this order: (1) fresh air adjustment, (2) span adjustment, (3) zero adjustment for high-concentration combustible gases, (4) span adjustment for high-concentration combustible gases. Steps 3 and 4 are TYPE-A and E only.  [H4E-0050 User Maintenance Manual §3-1 p.15]"
+            },
+            {
+              "text": "Warm up the gas monitor for 60 minutes or longer before the fresh air adjustment for a more accurate adjustment.  [H4E-0050 User Maintenance Manual §3-1 p.15]"
+            },
+            {
+              "text": "Perform span adjustment where no silicon, organic solvent or spray can gases are used; indoors at normal temperature without fluctuation beyond ±5 °C; and in an exhaust booth.  [H4E-0050 User Maintenance Manual §3-1 p.14]"
+            },
+            {
+              "text": "Connect the gas sampling bag to the probe and GAS IN. The GAS OUT side must be left OPEN — supplied gas must be discharged to a safe place.  [H4E-0050 User Maintenance Manual §3-1 p.14]"
+            },
+            {
+              "text": "Enter calibration mode: in the detection mode, keep ▼ pressed and press DISPLAY. Release when the buzzer beeps.  [H4E-0050 User Maintenance Manual p.5]"
+            },
+            {
+              "text": "Press ▲ or ▼ until [AUTO CAL] is displayed, then press ENTER. The span gas concentration is displayed — it must match the concentration of the prepared span gas.  [H4E-0050 User Maintenance Manual §3-3 p.18]"
+            },
+            {
+              "text": "To change the value: press ▼ and DISPLAY simultaneously. The span gas concentration setting menu appears. Select the target gas (Combustible, O2, H2S, CO, ESCAPE), press ENTER so the value blinks, press ▲ or ▼ to change it, then ENTER to confirm. [END] is displayed. Repeat for other gases, then select [ESCAPE] and press ENTER.  [H4E-0050 User Maintenance Manual §3-3 p.18]"
+            },
+            {
+              "text": "NOTE: the changed span gas concentration is saved and shown first next time.  [H4E-0050 User Maintenance Manual §3-3 p.18]"
+            },
+            {
+              "text": "While the span gas concentration is displayed, press the MODE switch. [AUTO CAL] blinks and the current readings are displayed, prompting for supply. Supply the span gas.  [H4E-0050 User Maintenance Manual §3-3 p.18]"
+            },
+            {
+              "text": "Let the monitor draw the gas and wait until the readings are stabilized. 60 seconds after supplying the span gas, with readings stable, press ENTER to perform the adjustment.  [H4E-0050 User Maintenance Manual §3-3 p.18, §3-1 p.15]"
+            },
+            {
+              "text": "When [PASS] is displayed the adjustment succeeded and the monitor returns to the menu. Stop supplying the gas.  [H4E-0050 User Maintenance Manual §3-3 p.18]"
+            },
+            {
+              "text": "Return to the detection mode when finished — the monitor will not do it by itself.  [H4E-0050 User Maintenance Manual p.3]"
+            }
+          ]
+        },
+        {
+          "title": "Span adjustment — one channel  [ONE CAL]  [H4E-0050 User Maintenance Manual §3-3 p.19]",
+          "steps": [
+            {
+              "text": "Enter calibration mode: in the detection mode, keep ▼ pressed and press DISPLAY. Release when the buzzer beeps.  [H4E-0050 User Maintenance Manual p.5]"
+            },
+            {
+              "text": "Press ▲ or ▼ until [ONE CAL] is displayed, then press ENTER.  [H4E-0050 User Maintenance Manual §3-3 p.19]"
+            },
+            {
+              "text": "Press ▲ or ▼ to select the target gas. The order is: Combustible, O2, H2S, CO, ESCAPE.  [H4E-0050 User Maintenance Manual §3-3 p.19]"
+            },
+            {
+              "text": "With the target gas selected, press ENTER. The concentration display blinks and shows the current reading, prompting for supply. Supply the span gas.  [H4E-0050 User Maintenance Manual §3-3 p.19]"
+            },
+            {
+              "text": "60 seconds after supplying the span gas, with the readings stabilized, press ▲ or ▼ to adjust to the gas concentration.  [H4E-0050 User Maintenance Manual §3-3 p.19]"
+            },
+            {
+              "text": "Press ENTER to adjust it. After [END] is displayed the monitor returns to the menu. Stop supplying the gas.  [H4E-0050 User Maintenance Manual §3-3 p.19]"
+            },
+            {
+              "text": "Repeat for the other gases. When all are done, press ▲ or ▼ until [ESCAPE] is displayed and press ENTER.  [H4E-0050 User Maintenance Manual §3-3 p.19]"
+            }
+          ]
+        },
+        {
+          "title": "Bump test settings  [BUMP-SET]  [H4E-0050 User Maintenance Manual p.13]",
+          "steps": [
+            {
+              "text": "Enter maintenance mode: keep ▲ and ▼ pressed and press POWER; release when the buzzer beeps. Password: 0008.  [H4E-0050 User Maintenance Manual p.9]"
+            },
+            {
+              "text": "Press ▲ or ▼ until [BUMP-SET] is displayed, then press ENTER.  [H4E-0050 User Maintenance Manual p.13]"
+            },
+            {
+              "text": "Test time: press ENTER so the value blinks, press ▲ or ▼ to set, press ENTER to confirm. Options are 30, 45, 60 or 90 seconds.  [H4E-0050 User Maintenance Manual p.13]"
+            },
+            {
+              "text": "Test pass tolerance range: press ENTER, set with ▲ or ▼, confirm with ENTER. Options are within ±10%, ±20%, ±30%, ±40% or ±50%.  [H4E-0050 User Maintenance Manual p.13]"
+            },
+            {
+              "text": "Adjustment time after a test fail: press ENTER, set with ▲ or ▼, confirm with ENTER.  [H4E-0050 User Maintenance Manual p.13]"
+            },
+            {
+              "text": "Automatic adjustment after test fail: press ENTER so ON/OFF blinks, select with ▲ or ▼, confirm with ENTER. ON = automatic adjustment enabled, OFF = disabled.  [H4E-0050 User Maintenance Manual p.13]"
+            },
+            {
+              "text": "When finished press ▲ or ▼ until [ESCAPE] is displayed and press ENTER to return to the maintenance mode menu.  [H4E-0050 User Maintenance Manual p.13]"
+            }
+          ]
+        },
+        {
+          "title": "Sensor replacement  [H4E-0050 User Maintenance Manual §4 p.21-22]",
+          "steps": [
+            {
+              "text": "Sensors have a validity period and must be replaced regularly. The life has expired if the sensors cannot be calibrated in span adjustment, the readings do not come back after fresh air adjustment, or the readings fluctuate. Warranty period is one year for all sensors.  [PT0E-09811 Operating Manual §6-4 p.46]"
+            },
+            {
+              "text": "Loosen the four captive screws on the sensor cover and remove the sensor cover.  [H4E-0050 User Maintenance Manual §4 p.21]"
+            },
+            {
+              "text": "Remove the sensor rubber seal. Take care not to damage the seal or the seal surface inside the sensor cover. Peel it off if it sticks to the sensor cover.  [H4E-0050 User Maintenance Manual §4 p.21]"
+            },
+            {
+              "text": "Replace the sensor. Pay attention to the installation direction. Check that the pins are inserted firmly all the way — the sensors should have equal heights.  [H4E-0050 User Maintenance Manual §4 p.21]"
+            },
+            {
+              "text": "Replace the rubber seals as required. Handle them with care: any damage impairs the waterproof property.  [H4E-0050 User Maintenance Manual §4 p.21]"
+            },
+            {
+              "text": "Sensor positions in the holder: CO sensor, NC (%LEL) sensor, TE (vol%) sensor, H2S sensor, O2 sensor.  [H4E-0050 User Maintenance Manual §4 p.21]"
+            },
+            {
+              "text": "Reinstall the sensor rubber seal and fix the sensor cover in the reverse order. Screw tightening torque: 5 to 5.5 kgf·cm (49 to 54 N·cm).  [H4E-0050 User Maintenance Manual §4 p.22]"
+            },
+            {
+              "text": "After replacing a sensor, calibrate before returning the instrument to service.  [PT0E-09811 Operating Manual §7-2 p.49]"
+            }
+          ]
+        },
+        {
+          "title": "Activated carbon filter replacement  [PT0E-09811 Operating Manual §6-4 p.47]",
+          "steps": [
+            {
+              "text": "CAUTION: turn off the power of the gas monitor before replacing the activated carbon filter.  [PT0E-09811 Operating Manual §6-4 p.47]"
+            },
+            {
+              "text": "Using a coin, turn the activated carbon filter knob counterclockwise (towards OPEN) to remove it.  [PT0E-09811 Operating Manual §6-4 p.47]"
+            },
+            {
+              "text": "Pull out the filter case from the activated carbon knob.  [PT0E-09811 Operating Manual §6-4 p.47]"
+            },
+            {
+              "text": "Replace the two activated carbon filters in the filter case with new ones.  [PT0E-09811 Operating Manual §6-4 p.47]"
+            },
+            {
+              "text": "Attach the filter case to the knob and push it as far as it will go.  [PT0E-09811 Operating Manual §6-4 p.47]"
+            },
+            {
+              "text": "Attach the knob to the main unit in the reverse of step 2 and tighten firmly using a coin.  [PT0E-09811 Operating Manual §6-4 p.47]"
+            },
+            {
+              "text": "CAUTION: if the knob is not completely tightened, accurate measurement may not be possible due to leaks, or water may get inside. The same happens if a minute foreign substance is caught beneath the knob.  [PT0E-09811 Operating Manual §6-4 p.47]"
+            },
+            {
+              "text": "CAUTION: no activated carbon filter is used on a type that does not measure carbon monoxide — keep the knob tightened at all times. Use only a filter dedicated to the GX-8000.  [PT0E-09811 Operating Manual §6-4 p.47]"
+            }
+          ]
+        },
+        {
+          "title": "Gas sampling probe filter replacement  [PT0E-09811 Operating Manual §6-4 p.46]",
+          "steps": [
+            {
+              "text": "Replace especially when the probe shows a sign of water absorption, low flow rate or contamination.  [PT0E-09811 Operating Manual §6-4 p.46]"
+            },
+            {
+              "text": "Rotate the end of the probe counterclockwise and remove it.  [PT0E-09811 Operating Manual §6-4 p.46]"
+            },
+            {
+              "text": "Take out the filter and replace it with a new one.  [PT0E-09811 Operating Manual §6-4 p.46]"
+            },
+            {
+              "text": "Reattach the filter case.  [PT0E-09811 Operating Manual §6-4 p.46]"
+            },
+            {
+              "text": "NOTE: use only the filters specified by RIKEN KEIKI.  [PT0E-09811 Operating Manual §6-4 p.46]"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
