@@ -113,8 +113,31 @@ class MainActivity : AppCompatActivity() {
         web.loadUrl("file:///android_asset/index.html")
     }
 
-    /** Gallery picker with the camera offered alongside it. */
+    /**
+     * Builds the picker the page actually asked for.
+     *
+     * This used to hardcode "image/*" and ignore the accept types altogether,
+     * so every file input in the app opened a photo gallery — which meant none
+     * of the four data imports (three CSV and the instrument JSON) could ever
+     * pick their file on Android. Photos worked, so nothing looked broken.
+     */
     private fun buildChooserIntent(params: WebChromeClient.FileChooserParams?): Intent {
+        val accept = params?.acceptTypes?.filter { it.isNotBlank() } ?: emptyList()
+        val wantsImage = accept.isEmpty() || accept.any { it.startsWith("image/") }
+        val multiple = params?.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE
+
+        if (!wantsImage) {
+            // Deliberately unfiltered. File managers report .csv and .json
+            // inconsistently — often as text/plain or application/octet-stream —
+            // and a picker filtered on the page's own accept string greys out
+            // the very file the user opened it to select.
+            return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                type = "*/*"
+                addCategory(Intent.CATEGORY_OPENABLE)
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, multiple)
+            }
+        }
+
         val pick = Intent(Intent.ACTION_GET_CONTENT).apply {
             type = "image/*"
             addCategory(Intent.CATEGORY_OPENABLE)

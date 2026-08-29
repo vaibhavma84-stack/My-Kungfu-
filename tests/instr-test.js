@@ -195,6 +195,30 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
     await p.waitForTimeout(200);
   }
 
+  // ---- paste import, for when the file picker is the awkward part ----
+  const rx = path.join(__dirname, '..', 'instruments', 'RX-8000.json');
+  if(fs.existsSync(rx)){
+    const before = await p.locator('.instr-card').count();
+    await p.click('#instrPasteBtn');
+    await p.waitForTimeout(200);
+    ok('the paste box opens', await p.locator('#instrPaste').count()===1);
+    await p.fill('#instrPaste', fs.readFileSync(rx,'utf8'));
+    await p.click('[data-ip="load"]');
+    await p.waitForTimeout(500);
+    ok('pasted data imports the same as a file',
+       await p.locator('.instr-card').count()===before+1, await p.locator('.instr-card').count());
+    ok('and it is the RX-8000',
+       (await p.locator('.instr-card .im').allTextContents()).some(n=>/RX-8000/.test(n)));
+
+    await p.click('#instrPasteBtn');
+    await p.waitForTimeout(200);
+    await p.fill('#instrPaste', 'not json at all');
+    await p.click('[data-ip="load"]');
+    await p.waitForTimeout(300);
+    ok('rubbish is rejected without adding anything',
+       await p.locator('.instr-card').count()===before+1, await p.locator('.instr-card').count());
+  }
+
   await p.click('#instrBackBtn');
   ok('back to the launcher', await p.locator('#toolsHome').isVisible());
 

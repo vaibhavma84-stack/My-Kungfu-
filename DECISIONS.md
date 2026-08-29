@@ -135,6 +135,14 @@ it — Sunday 30-Aug resolves to week commencing 24-Aug.
   pre-filled. A span gas figure, an alarm setpoint menu path or a spare part
   number written from memory would read exactly as convincingly as a correct
   one, on an instrument people rely on before entering an enclosed space.
+- **The Android file picker must honour the page's accept types.** It hardcoded
+  `image/*` and ignored them, so every file input in the app opened a photo
+  gallery and none of the four data imports could pick their file. Photos
+  worked, so nothing looked broken — the failure only showed up the first time
+  someone tried to import on the phone rather than in a browser. Data pickers
+  are also deliberately unfiltered (`*/*`): file managers report .csv and .json
+  as text/plain or octet-stream often enough that a filtered picker greys out
+  the file the user came for.
 - **Instrument content is imported, never shipped in the app.** The
   transcriptions live in `instruments/` as files the ship imports, so the app
   itself still carries no manufacturer content — which is what keeps the

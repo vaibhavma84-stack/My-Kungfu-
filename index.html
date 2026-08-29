@@ -1299,6 +1299,7 @@
         <div class="spacer"></div>
         <button class="btn btn-ghost" id="instrExportBtn">Export</button>
         <button class="btn btn-ghost" id="instrImportBtn">Import</button>
+        <button class="btn btn-ghost" id="instrPasteBtn">Paste</button>
         <input type="file" id="instrImportInput" accept=".json,application/json" style="display:none">
       </div>
       <div id="instrList"></div>
@@ -3296,12 +3297,19 @@
   // an import can never overwrite an instrument already on the device.
   function importInstrumentsFile(file){
     var r = new FileReader();
-    r.onload = function(){
+    r.onload = function(){ applyInstrumentImport(r.result, 'file'); };
+    r.readAsText(file);
+  }
+
+  // Picking a file is the awkward step on a phone, so the same text can be
+  // pasted instead. Both routes end up here.
+  function applyInstrumentImport(text, how){
+    (function(){
       var data;
-      try{ data = JSON.parse(r.result); }
-      catch(e){ alert('That file could not be read as instrument data.'); return; }
+      try{ data = JSON.parse(text); }
+      catch(e){ alert('That ' + how + ' could not be read as instrument data.'); return; }
       var list = data && data.instruments;
-      if(!list || !list.length){ alert('No instruments found in that file.'); return; }
+      if(!list || !list.length){ alert('No instruments found in that ' + how + '.'); return; }
       var added = 0;
       list.forEach(function(x){
         if(!x || !x.model) return;
@@ -3334,8 +3342,34 @@
       alert(added + ' instrument' + (added === 1 ? '' : 's') + ' added.\n\n' +
             'Photographs are not carried in this file — add them on the steps ' +
             'that need one. Nothing already on the device was changed.');
-    };
-    r.readAsText(file);
+    })();
+  }
+
+  function openInstrumentPaste(){
+    var bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    bg.innerHTML =
+      '<div class="edit-card">' +
+        '<div class="ec-head"><h3>Paste instrument data</h3></div>' +
+        '<div class="ec-body">' +
+          '<div class="conv-note" style="margin-top:0;">For when picking a file is ' +
+            'awkward. Open the .json, select all, copy, and paste it here.</div>' +
+          '<textarea id="instrPaste" rows="6" placeholder="Paste the whole file, starting with {"></textarea>' +
+        '</div>' +
+        '<div class="ec-actions">' +
+          '<button class="btn btn-ghost" data-ip="cancel">Cancel</button>' +
+          '<button class="btn btn-primary" data-ip="load">Load</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(bg);
+    bg.addEventListener('click', function(e){
+      if(e.target === bg || e.target.closest('[data-ip="cancel"]')){ bg.remove(); return; }
+      if(!e.target.closest('[data-ip="load"]')) return;
+      var text = bg.querySelector('#instrPaste').value.trim();
+      if(!text){ bg.querySelector('#instrPaste').focus(); return; }
+      bg.remove();
+      applyInstrumentImport(text, 'text');
+    });
   }
 
   function showInstrList(){
@@ -4500,7 +4534,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v31';
+  var APP_BUILD = 'v32';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -5082,6 +5116,7 @@
   document.getElementById('instrImportBtn').addEventListener('click', function(){
     document.getElementById('instrImportInput').click();
   });
+  document.getElementById('instrPasteBtn').addEventListener('click', openInstrumentPaste);
   document.getElementById('instrImportInput').addEventListener('change', function(e){
     var f = e.target.files[0];
     if(f) importInstrumentsFile(f);
