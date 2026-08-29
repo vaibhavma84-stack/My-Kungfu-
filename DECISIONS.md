@@ -128,6 +128,17 @@ it — Sunday 30-Aug resolves to week commencing 24-Aug.
   re-derives all 70 from published definitions and compares. It is the only
   check that can catch a wrong factor: the UI renders a wrong number exactly as
   convincingly as a right one.
+- **The Instruments tool ships empty, and that is the point.** It supplies the
+  structure — procedures as numbered steps with photographs, a calibration and
+  bump test log, a spares list, interval-driven due dates — and every word of
+  content is typed in from the maker's manual by the ship. Nothing is
+  pre-filled. A span gas figure, an alarm setpoint menu path or a spare part
+  number written from memory would read exactly as convincingly as a correct
+  one, on an instrument people rely on before entering an enclosed space.
+- **A field edit in the Instruments detail never rebuilds the panel.** Only the
+  two due tags are rewritten. The first version re-rendered on change, which
+  destroyed the field being typed into and made every edit land one step behind
+  the one after it.
 - **The ETA tool lays out a band of speeds rather than answering one.** A tenth
   of a knot moves an arrival by about an hour over an ocean passage, so the
   useful output is the whole band — nine tenths below through one knot above, in
@@ -175,6 +186,10 @@ It is built around one company's documents and one specific ship.
   are reproduced from the operator's forms. They are almost certainly the
   operator's property. A saleable version has to read structure from whatever
   template the user supplies rather than carrying theirs.
+- The Instruments tool is designed to hold transcriptions of manufacturers'
+  manuals. That is fine for one ship's own use; distributing an app with another
+  company's manual content inside it is not. Any saleable version must keep the
+  instrument content as user data only, and must never ship with it.
 - Play Store also needs an App Bundle rather than an APK, a release keystore, a
   privacy policy, and — for a new personal account — a closed test with 12
   testers for 14 days.

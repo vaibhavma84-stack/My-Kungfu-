@@ -552,6 +552,51 @@
   .conv-row.copied .cv{color:var(--done); font-weight:700;}
   .conv-hint{font-size:11.5px; color:var(--ink-soft); text-align:center; padding:12px 0 4px;}
 
+  .instr-card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:13px 14px; margin-top:8px; cursor:pointer;
+  }
+  .instr-card .im{font-size:15px; font-weight:700;}
+  .instr-card .is{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11.5px; color:var(--ink-soft); margin-top:3px;
+  }
+  .instr-card .ic{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
+  .due-tag{
+    font-size:10.5px; font-weight:700; letter-spacing:.03em;
+    border-radius:999px; padding:3px 9px; border:1px solid transparent;
+  }
+  .due-ok{background:var(--tint-ok); color:#3F6147; border-color:rgba(63,97,71,.25);}
+  .due-soon{background:var(--tint-warn); color:#8A5A12; border-color:rgba(138,90,18,.3);}
+  .due-over{background:var(--tint-danger); color:#B23A2E; border-color:rgba(178,58,46,.3);}
+  .due-none{background:var(--paper-2); color:var(--ink-soft); border-color:var(--line);}
+
+  .isec{margin-top:18px;}
+  .isec-h{
+    display:flex; align-items:center; gap:9px; margin-bottom:6px;
+  }
+  .isec-h h4{margin:0; font-size:12px; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-soft); flex:1;}
+  .irow{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; margin-top:6px; display:flex; gap:10px; align-items:flex-start;
+  }
+  .irow .irm{flex:1; min-width:0;}
+  .irow .irt{font-size:13.5px; font-weight:650; word-break:break-word;}
+  .irow .irs{font-size:11.5px; color:var(--ink-soft); margin-top:3px; word-break:break-word;}
+  .irow .irn{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11.5px; color:var(--ink-soft);
+  }
+  .step-n{
+    flex:0 0 24px; height:24px; border-radius:50%; background:var(--steel); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-size:11.5px; font-weight:700;
+  }
+  .iempty{
+    font-size:12.5px; color:var(--ink-soft); padding:12px;
+    border:1px dashed var(--line); border-radius:10px; margin-top:6px;
+  }
+
   .eta-row{
     display:flex; align-items:baseline; gap:10px;
     background:var(--card); border:1px solid var(--line); border-radius:10px;
@@ -1120,6 +1165,17 @@
         Converter
         <span class="tsub">Pressure, temperature, energy and more</span>
       </button>
+      <button class="tool-tile" data-tool="instr">
+        <span class="ti">
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+            <rect x="6" y="3" width="12" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  d="M9 7.5h6M9 11h6M10.5 17.5h3"/>
+          </svg>
+        </span>
+        Instruments
+        <span class="tsub">Procedures, logs and spares</span>
+      </button>
       <button class="tool-tile" data-tool="guide">
         <span class="ti">
           <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
@@ -1163,6 +1219,44 @@
     <div class="conv-note" id="convNote"></div>
     <div id="convOut"></div>
     <div class="conv-hint">Tap a line to copy it.</div>
+  </div>
+
+  <div id="toolInstr" style="display:none;">
+    <div class="tool-head">
+      <button class="btn btn-ghost" id="instrBackBtn">&lsaquo; Tools</button>
+      <div class="tool-title" id="instrTitle">Instruments</div>
+    </div>
+
+    <div id="instrListView">
+      <div class="ship-note">
+        Each instrument holds its own procedures, its calibration and bump test log,
+        and its spare parts list. Everything is typed in from the maker's manual and
+        stays on this device.
+      </div>
+      <div class="form-row row-main">
+        <div class="field job-field">
+          <label>Instrument</label>
+          <input type="text" id="inInstrModel" placeholder="e.g. Riken Keiki GX-8000" maxlength="120">
+        </div>
+        <div class="field">
+          <label>Serial no.</label>
+          <input type="text" id="inInstrSerial" placeholder="Optional" maxlength="60">
+        </div>
+        <div class="field">
+          <label>Kept in</label>
+          <input type="text" id="inInstrLoc" placeholder="e.g. CCR" maxlength="60">
+        </div>
+      </div>
+      <div class="form-row flags-row">
+        <button id="instrAddBtn" class="btn btn-primary" style="flex:1;">+ Add instrument</button>
+      </div>
+      <div id="instrList"></div>
+    </div>
+
+    <div id="instrDetailView" style="display:none;">
+      <button class="btn btn-ghost" id="instrListBtn" style="margin-bottom:4px;">&lsaquo; All instruments</button>
+      <div id="instrDetail"></div>
+    </div>
   </div>
 
   <div id="toolEta" style="display:none;">
@@ -2802,6 +2896,250 @@
     renderConvOut();
   }
 
+  // ---------- Tools: instruments ----------
+  // A place for what the maker's manual says, kept on the device that goes into
+  // the space with you. The app supplies the structure — procedures as numbered
+  // steps with photographs, a calibration and bump test log, and a spares list —
+  // and every word of content is typed in from the manual by the ship. Nothing
+  // here is shipped pre-filled: an invented span gas figure or a wrong menu path
+  // on a gas detector reads exactly as convincingly as a right one.
+  var INSTR_KEY = 'gasplanet_instr_v1';
+  var instruments = [];
+  var instrOpenId = null;
+
+  function loadInstruments(){
+    try{
+      var raw = localStorage.getItem(INSTR_KEY);
+      instruments = raw ? JSON.parse(raw) : [];
+      lastGood[INSTR_KEY] = JSON.stringify(instruments);
+    }catch(e){ instruments = []; }
+  }
+  function saveInstruments(){
+    return persist(INSTR_KEY, instruments, 'Instruments', function(prev){ instruments = prev; });
+  }
+  function findInstr(id){
+    for(var i=0;i<instruments.length;i++) if(instruments[i].id===id) return instruments[i];
+    return null;
+  }
+
+  // due status from the last done date and the interval, in the same day-count
+  // terms the rest of the app uses
+  function dueState(lastISO, days){
+    if(!days)    return { cls:'due-none', text:'no interval set' };
+    if(!lastISO) return { cls:'due-none', text:'never done' };
+    var due  = addDaysISO(lastISO, days);
+    var left = daysBetweenISO(todayISO(), due);
+    if(left < 0)  return { cls:'due-over', text:'overdue ' + Math.abs(left) + 'd', due:due };
+    if(left <= 7) return { cls:'due-soon', text:'due in ' + left + 'd', due:due };
+    return { cls:'due-ok', text:'due ' + fmtDate(due), due:due };
+  }
+
+  function addInstrument(){
+    var model = document.getElementById('inInstrModel').value.trim();
+    if(!model){ document.getElementById('inInstrModel').focus(); return; }
+    instruments.push({
+      id: uid(),
+      model: model,
+      serial: document.getElementById('inInstrSerial').value.trim(),
+      location: document.getElementById('inInstrLoc').value.trim(),
+      sensors: '',
+      calDays: 0,  lastCal: '',
+      bumpDays: 0, lastBump: '',
+      notes: '',
+      parts: [], procedures: [], log: [],
+      created: todayISO()
+    });
+    if(!saveInstruments()){ renderInstruments(); return; }
+    document.getElementById('inInstrModel').value = '';
+    document.getElementById('inInstrSerial').value = '';
+    document.getElementById('inInstrLoc').value = '';
+    renderInstruments();
+  }
+
+  function renderInstruments(){
+    var wrap = document.getElementById('instrList');
+    if(!wrap) return;
+    if(!instruments.length){
+      wrap.innerHTML = '<div class="empty" style="padding:26px 12px;">No instruments yet. '
+                     + 'Add one above, then fill it from its manual.</div>';
+      return;
+    }
+    wrap.innerHTML = instruments.map(function(x){
+      var cal  = dueState(x.lastCal,  x.calDays);
+      var bump = dueState(x.lastBump, x.bumpDays);
+      return '<div class="instr-card" data-instr="' + x.id + '">' +
+               '<div class="im">' + escapeHtml(x.model) + '</div>' +
+               '<div class="is">' +
+                 (x.serial ? 'S/N ' + escapeHtml(x.serial) : 'no serial recorded') +
+                 (x.location ? '  ·  ' + escapeHtml(x.location) : '') +
+               '</div>' +
+               '<div class="ic">' +
+                 '<span class="due-tag ' + cal.cls  + '">Cal: '  + escapeHtml(cal.text)  + '</span>' +
+                 '<span class="due-tag ' + bump.cls + '">Bump: ' + escapeHtml(bump.text) + '</span>' +
+                 '<span class="due-tag due-none">' + x.procedures.length + ' procedure' + (x.procedures.length===1?'':'s') + '</span>' +
+                 '<span class="due-tag due-none">' + x.parts.length + ' spare' + (x.parts.length===1?'':'s') + '</span>' +
+               '</div>' +
+             '</div>';
+    }).join('');
+  }
+
+  function fld(label, id, value, type, ph){
+    return '<div class="field"><label>' + escapeHtml(label) + '</label>' +
+           '<input type="' + (type||'text') + '" id="' + id + '" value="' + escapeHtml(value||'') +
+           '" placeholder="' + escapeHtml(ph||'') + '"></div>';
+  }
+
+  function renderInstrDetail(){
+    var x = findInstr(instrOpenId);
+    var wrap = document.getElementById('instrDetail');
+    if(!x){ showInstrList(); return; }
+    document.getElementById('instrTitle').textContent = x.model;
+
+    var cal  = dueState(x.lastCal,  x.calDays);
+    var bump = dueState(x.lastBump, x.bumpDays);
+
+    var h = '';
+    h += '<div class="isec"><div class="isec-h"><h4>Identity</h4>' +
+         '<button class="btn btn-danger" data-ia="delete-instr">Delete</button></div>';
+    h += '<div class="form-row row-main">' +
+           fld('Instrument','fInstrModel',x.model) +
+           fld('Serial no.','fInstrSerial',x.serial) +
+           fld('Kept in','fInstrLoc',x.location) +
+           fld('Sensors fitted','fInstrSensors',x.sensors,'text','e.g. LEL / O2 / H2S / CO') +
+         '</div></div>';
+
+    h += '<div class="isec"><div class="isec-h"><h4>Calibration &amp; bump test</h4>' +
+         '<span class="due-tag ' + cal.cls + '" data-due="cal">Cal: ' + escapeHtml(cal.text) + '</span>' +
+         '<span class="due-tag ' + bump.cls + '" data-due="bump">Bump: ' + escapeHtml(bump.text) + '</span></div>';
+    h += '<div class="form-row row-main">' +
+           fld('Last calibration','fLastCal',x.lastCal,'date') +
+           fld('Calibration interval (days)','fCalDays',x.calDays || '','number','e.g. 180') +
+           fld('Last bump test','fLastBump',x.lastBump,'date') +
+           fld('Bump interval (days)','fBumpDays',x.bumpDays || '','number','e.g. 30') +
+         '</div>';
+    h += '<div class="conv-note">A bump test only confirms the instrument still responds to gas and that '
+       + 'the alarms sound. A calibration adjusts what it actually reads against a known gas. '
+       + 'The intervals, the gases and the procedure all come from the maker\'s manual and the '
+       + 'company instructions — enter them below from those documents.</div></div>';
+
+    h += '<div class="isec"><div class="isec-h"><h4>Log</h4>' +
+         '<button class="btn btn-ghost" data-ia="add-log">+ Entry</button></div>';
+    if(!x.log.length) h += '<div class="iempty">No calibrations or bump tests logged yet.</div>';
+    else h += x.log.slice().sort(function(a,b){ return a.date < b.date ? 1 : -1; }).map(function(e){
+      return '<div class="irow">' +
+               '<div class="irm">' +
+                 '<div class="irt">' + escapeHtml(e.type) + ' — ' + escapeHtml(e.result || '') + '</div>' +
+                 '<div class="irs">' + escapeHtml(fmtDate(e.date)) +
+                   (e.gas ? '  ·  ' + escapeHtml(e.gas) : '') +
+                   (e.remarks ? '<br>' + escapeHtml(e.remarks) : '') + '</div>' +
+                 (e.photos && e.photos.length ? '<div class="thumbstrip">' + e.photos.map(function(src,i){
+                    return '<div class="thumb" data-iview="log:' + e.id + ':' + i + '"><img src="' + src + '"></div>';
+                  }).join('') + '</div>' : '') +
+               '</div>' +
+               '<button class="icon-btn" data-ia="del-log" data-id="' + e.id + '">🗑</button>' +
+             '</div>';
+    }).join('');
+    h += '</div>';
+
+    h += '<div class="isec"><div class="isec-h"><h4>Procedures</h4>' +
+         '<button class="btn btn-ghost" data-ia="add-proc">+ Procedure</button></div>';
+    if(!x.procedures.length) h += '<div class="iempty">No procedures yet. Add one — calibration, '
+                                + 'bump test, changing an alarm setpoint — then add its steps, '
+                                + 'each with a photograph of the screen or the part.</div>';
+    else h += x.procedures.map(function(pr){
+      var steps = pr.steps.map(function(st, i){
+        return '<div class="irow">' +
+                 '<div class="step-n">' + (i+1) + '</div>' +
+                 '<div class="irm">' +
+                   '<div class="irs" style="font-size:13px;color:var(--ink);">' + escapeHtml(st.text) + '</div>' +
+                   (st.photos && st.photos.length ? '<div class="thumbstrip">' + st.photos.map(function(src,j){
+                      return '<div class="thumb" data-iview="step:' + pr.id + ':' + st.id + ':' + j + '"><img src="' + src + '"></div>';
+                    }).join('') + '</div>' : '') +
+                 '</div>' +
+                 '<button class="icon-btn" data-ia="step-photo" data-proc="' + pr.id + '" data-step="' + st.id + '">📷</button>' +
+                 '<button class="icon-btn" data-ia="del-step" data-proc="' + pr.id + '" data-step="' + st.id + '">🗑</button>' +
+               '</div>';
+      }).join('');
+      return '<div class="isec" style="margin-top:10px;">' +
+               '<div class="isec-h"><h4 style="color:var(--ink);font-size:13px;text-transform:none;letter-spacing:0;">' +
+                 escapeHtml(pr.title) + '</h4>' +
+                 '<button class="btn btn-ghost" data-ia="add-step" data-proc="' + pr.id + '">+ Step</button>' +
+                 '<button class="icon-btn" data-ia="del-proc" data-proc="' + pr.id + '">🗑</button>' +
+               '</div>' +
+               (steps || '<div class="iempty">No steps yet.</div>') +
+             '</div>';
+    }).join('');
+    h += '</div>';
+
+    h += '<div class="isec"><div class="isec-h"><h4>Spare parts</h4>' +
+         '<button class="btn btn-ghost" data-ia="add-part">+ Part</button></div>';
+    if(!x.parts.length) h += '<div class="iempty">No spares listed. Part numbers come from the '
+                           + 'maker\'s parts list — copy them exactly.</div>';
+    else h += x.parts.map(function(pt){
+      return '<div class="irow">' +
+               '<div class="irm">' +
+                 '<div class="irt">' + escapeHtml(pt.name) + '</div>' +
+                 '<div class="irn">' + escapeHtml(pt.partNo || 'no part number') +
+                   (pt.qty ? '  ·  ' + escapeHtml(pt.qty) + ' held' : '') + '</div>' +
+               '</div>' +
+               '<button class="icon-btn" data-ia="del-part" data-id="' + pt.id + '">🗑</button>' +
+             '</div>';
+    }).join('');
+    h += '</div>';
+
+    h += '<div class="isec"><div class="isec-h"><h4>Notes</h4></div>' +
+         '<textarea id="fInstrNotes" rows="3" placeholder="Anything else worth having to hand">' +
+         escapeHtml(x.notes || '') + '</textarea></div>';
+
+    wrap.innerHTML = h;
+  }
+
+  function showInstrList(){
+    instrOpenId = null;
+    document.getElementById('instrListView').style.display = '';
+    document.getElementById('instrDetailView').style.display = 'none';
+    document.getElementById('instrTitle').textContent = 'Instruments';
+    renderInstruments();
+  }
+  function showInstrDetail(id){
+    instrOpenId = id;
+    document.getElementById('instrListView').style.display = 'none';
+    document.getElementById('instrDetailView').style.display = '';
+    renderInstrDetail();
+  }
+
+  // Only the two due tags change when a field changes, so only they are
+  // rewritten. Rebuilding the whole panel on every keystroke would destroy the
+  // field being typed into, which is what made an edit land one step late.
+  function refreshInstrDue(){
+    var x = findInstr(instrOpenId);
+    if(!x) return;
+    [['cal', 'Cal: ', dueState(x.lastCal, x.calDays)],
+     ['bump','Bump: ', dueState(x.lastBump, x.bumpDays)]].forEach(function(row){
+      var el = document.querySelector('#instrDetail [data-due="' + row[0] + '"]');
+      if(!el) return;
+      el.className = 'due-tag ' + row[2].cls;
+      el.textContent = row[1] + row[2].text;
+    });
+  }
+
+  // fields write back as they are typed rather than behind a Save button, the
+  // same way the Ship tab behaves
+  function captureInstrField(el){
+    var x = findInstr(instrOpenId);
+    if(!x) return;
+    var map = { fInstrModel:'model', fInstrSerial:'serial', fInstrLoc:'location',
+                fInstrSensors:'sensors', fLastCal:'lastCal', fLastBump:'lastBump',
+                fInstrNotes:'notes' };
+    if(map[el.id]){ x[map[el.id]] = el.value.trim(); }
+    else if(el.id === 'fCalDays')  x.calDays  = parseInt(el.value, 10) || 0;
+    else if(el.id === 'fBumpDays') x.bumpDays = parseInt(el.value, 10) || 0;
+    else return;
+    saveInstruments();
+    refreshInstrDue();
+    document.getElementById('instrTitle').textContent = x.model;
+  }
+
   // ---------- Tools: ETA ----------
   // Departure is entered in local time and shown in UTC straight away, because
   // that is the number that goes in the message and the one that gets fumbled.
@@ -2990,16 +3328,18 @@
     }).join('');
   }
 
-  var TOOL_TITLES = { convert:'Converter', guide:'Unit guide', eta:'ETA' };
+  var TOOL_TITLES = { convert:'Converter', guide:'Unit guide', eta:'ETA', instr:'Instruments' };
 
   function showTool(name){
     document.getElementById('toolsHome').style.display   = name ? 'none' : '';
     document.getElementById('toolConvert').style.display = name === 'convert' ? '' : 'none';
     document.getElementById('toolGuide').style.display   = name === 'guide' ? '' : 'none';
     document.getElementById('toolEta').style.display     = name === 'eta' ? '' : 'none';
+    document.getElementById('toolInstr').style.display   = name === 'instr' ? '' : 'none';
     document.getElementById('pageTitle').textContent = TOOL_TITLES[name] || 'Tools';
     if(name === 'guide') renderGuide();
     if(name === 'eta')   renderEta();
+    if(name === 'instr') showInstrList();
   }
 
   // ---------- ship's particulars ----------
@@ -3787,7 +4127,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v25';
+  var APP_BUILD = 'v26';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -4149,6 +4489,7 @@
 
   var addPhotoTargetId = null;
   var addPhotoInput = document.createElement('input');
+  addPhotoInput.id = 'taskPhotoInput';
   // FIX 3: no capture attribute here either — keeps the Photo Library option.
   addPhotoInput.type = 'file'; addPhotoInput.accept = 'image/*'; addPhotoInput.multiple = true;
   addPhotoInput.style.display = 'none';
@@ -4237,6 +4578,7 @@
   loadConv();
   renderGuideCats();
   loadEta();
+  loadInstruments();
   document.getElementById('exDate').value = todayISO();
   document.getElementById('wrDate').value = todayISO();
   fillPtwTypes();
@@ -4273,6 +4615,7 @@
   document.getElementById('extraClearBtn').addEventListener('click', clearExtras);
   var exPhotoTargetId = null;
   var exRowPhotoInput = document.createElement('input');
+  exRowPhotoInput.id = 'exRowPhotoInput';
   exRowPhotoInput.type = 'file'; exRowPhotoInput.accept = 'image/*'; exRowPhotoInput.multiple = true;
   exRowPhotoInput.style.display = 'none';
   document.body.appendChild(exRowPhotoInput);
@@ -4313,6 +4656,157 @@
   });
   document.getElementById('toolBackBtn').addEventListener('click', function(){ showTool(null); });
   document.getElementById('guideBackBtn').addEventListener('click', function(){ showTool(null); });
+  document.getElementById('instrBackBtn').addEventListener('click', function(){ showTool(null); });
+  document.getElementById('instrListBtn').addEventListener('click', showInstrList);
+  document.getElementById('instrAddBtn').addEventListener('click', addInstrument);
+  document.getElementById('inInstrModel').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') addInstrument();
+  });
+  document.getElementById('instrList').addEventListener('click', function(e){
+    var card = e.target.closest('[data-instr]');
+    if(card) showInstrDetail(card.dataset.instr);
+  });
+
+  // one photo input serves every step, with the target remembered alongside it
+  var instrPhotoTarget = null;
+  var instrPhotoInput = document.createElement('input');
+  instrPhotoInput.id = 'instrPhotoInput';
+  instrPhotoInput.type = 'file'; instrPhotoInput.accept = 'image/*'; instrPhotoInput.multiple = true;
+  instrPhotoInput.style.display = 'none';
+  document.body.appendChild(instrPhotoInput);
+  instrPhotoInput.addEventListener('change', function(e){
+    var files = Array.from(e.target.files || []);
+    var t = instrPhotoTarget;
+    if(!t || !files.length){ e.target.value = ''; return; }
+    var left = files.length;
+    files.forEach(function(f){
+      fileToCompressedDataURL(f, function(url){
+        if(url) t.photos.push(url);
+        if(--left === 0){ saveInstruments(); renderInstrDetail(); }
+      });
+    });
+    e.target.value = '';
+  });
+
+  ['input','change'].forEach(function(evt){
+    document.getElementById('instrDetail').addEventListener(evt, function(e){
+      if(e.target.matches('input, textarea')) captureInstrField(e.target);
+    });
+  });
+  document.getElementById('instrDetail').addEventListener('click', function(e){
+    var x = findInstr(instrOpenId);
+    if(!x) return;
+
+    var thumb = e.target.closest('[data-iview]');
+    if(thumb){
+      var p = thumb.dataset.iview.split(':');
+      if(p[0] === 'log'){
+        var le = x.log.filter(function(v){ return v.id === p[1]; })[0];
+        if(le && le.photos[p[2]]) openViewer(le.photos[p[2]]);
+      } else {
+        var pr = x.procedures.filter(function(v){ return v.id === p[1]; })[0];
+        var st = pr && pr.steps.filter(function(v){ return v.id === p[2]; })[0];
+        if(st && st.photos[p[3]]) openViewer(st.photos[p[3]]);
+      }
+      return;
+    }
+
+    var btn = e.target.closest('[data-ia]');
+    if(!btn) return;
+    var act = btn.dataset.ia;
+
+    if(act === 'delete-instr'){
+      if(!confirm('Delete ' + x.model + ' and everything recorded against it?\n\nThis cannot be undone.')) return;
+      instruments = instruments.filter(function(v){ return v.id !== x.id; });
+      saveInstruments();
+      showInstrList();
+      return;
+    }
+
+    if(act === 'add-log'){
+      var type = prompt('Entry type — calibration, bump test, or whatever it was:', 'Bump test');
+      if(type === null) return;
+      var date = prompt('Date (YYYY-MM-DD):', todayISO());
+      if(date === null) return;
+      var result = prompt('Result — pass, fail, or a reading:', 'Pass');
+      if(result === null) return;
+      var gas = prompt('Gas used, from the cylinder label (leave blank if none):', '');
+      if(gas === null) return;
+      var rem = prompt('Remarks (optional):', '');
+      if(rem === null) return;
+      x.log.push({ id: uid(), type: type.trim() || 'Entry', date: date.trim() || todayISO(),
+                   result: result.trim(), gas: gas.trim(), remarks: rem.trim(), photos: [] });
+      // logging a test moves the due date it belongs to
+      var lower = (type || '').toLowerCase();
+      if(lower.indexOf('cal') >= 0)  x.lastCal  = date.trim() || todayISO();
+      if(lower.indexOf('bump') >= 0) x.lastBump = date.trim() || todayISO();
+      saveInstruments(); renderInstrDetail();
+      return;
+    }
+    if(act === 'del-log'){
+      if(!confirm('Delete this log entry?')) return;
+      x.log = x.log.filter(function(v){ return v.id !== btn.dataset.id; });
+      saveInstruments(); renderInstrDetail();
+      return;
+    }
+
+    if(act === 'add-proc'){
+      var title = prompt('Procedure name — as the manual calls it:', '');
+      if(!title || !title.trim()) return;
+      x.procedures.push({ id: uid(), title: title.trim(), steps: [] });
+      saveInstruments(); renderInstrDetail();
+      return;
+    }
+    if(act === 'del-proc'){
+      if(!confirm('Delete this procedure and all its steps?')) return;
+      x.procedures = x.procedures.filter(function(v){ return v.id !== btn.dataset.proc; });
+      saveInstruments(); renderInstrDetail();
+      return;
+    }
+    if(act === 'add-step'){
+      var pr = x.procedures.filter(function(v){ return v.id === btn.dataset.proc; })[0];
+      if(!pr) return;
+      var text = prompt('Step ' + (pr.steps.length + 1) + ' — what does the manual say to do?', '');
+      if(!text || !text.trim()) return;
+      pr.steps.push({ id: uid(), text: text.trim(), photos: [] });
+      saveInstruments(); renderInstrDetail();
+      return;
+    }
+    if(act === 'del-step'){
+      var pr2 = x.procedures.filter(function(v){ return v.id === btn.dataset.proc; })[0];
+      if(!pr2) return;
+      pr2.steps = pr2.steps.filter(function(v){ return v.id !== btn.dataset.step; });
+      saveInstruments(); renderInstrDetail();
+      return;
+    }
+    if(act === 'step-photo'){
+      var pr3 = x.procedures.filter(function(v){ return v.id === btn.dataset.proc; })[0];
+      var st3 = pr3 && pr3.steps.filter(function(v){ return v.id === btn.dataset.step; })[0];
+      if(!st3) return;
+      instrPhotoTarget = st3;
+      instrPhotoInput.click();
+      return;
+    }
+
+    if(act === 'add-part'){
+      var name = prompt('Part name:', '');
+      if(!name || !name.trim()) return;
+      var no = prompt('Part number, copied exactly from the maker\'s list:', '');
+      if(no === null) return;
+      var qty = prompt('Quantity held aboard:', '');
+      if(qty === null) return;
+      x.parts.push({ id: uid(), name: name.trim(), partNo: no.trim(), qty: qty.trim() });
+      saveInstruments(); renderInstrDetail();
+      return;
+    }
+    if(act === 'del-part'){
+      if(!confirm('Remove this spare from the list?')) return;
+      x.parts = x.parts.filter(function(v){ return v.id !== btn.dataset.id; });
+      saveInstruments(); renderInstrDetail();
+      return;
+    }
+  });
+
   document.getElementById('etaBackBtn').addEventListener('click', function(){ showTool(null); });
   ['etaDate','etaTime','etaDist','etaSpeed','etaZoneFrom','etaZoneTo'].forEach(function(id){
     document.getElementById(id).addEventListener('input', renderEta);

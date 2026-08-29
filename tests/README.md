@@ -29,6 +29,7 @@ asserts. `OUT` is where downloads and screenshots land (a temp dir by default).
 | `banner-test` | the backup reminder, its thresholds and snooze |
 | `tools-test` | the Tools tab, the converter and the unit guide — known conversions, the formula line, search, what it remembers |
 | `eta-test` | the ETA tool — local-to-UTC conversion, half-hour and negative zones, the speed band and its arithmetic |
+| `instr-test` | the Instruments tool — procedures, steps, spares, the log, and the due-date states |
 | `collapse` | the entry form collapsing without clipping |
 | `marsec-test`, `newfeat-test`, `print-test`, `project-test`, `theme-test` | MARSEC defaults, later additions, printing to PDF, the project sweep, light and dark |
 
@@ -52,6 +53,13 @@ Several suites broke over time because they targeted `.first()` on a job card.
 Pending jobs sort above completed ones, so after a repeat raises a new
 occurrence `.first()` is the *new pending* card, not the one just completed.
 Target `.task.done` or `.task:not(.done)` explicitly.
+
+The same trap in another shape: a suite drove the extras row-photo control by
+taking the **last** `input[type=file]` in the document. Adding a fourth hidden
+file input to the page silently redirected it, and four assertions failed in a
+feature nobody had touched. Those inputs now carry ids — `taskPhotoInput`,
+`exRowPhotoInput`, `instrPhotoInput` — and nothing should locate an element by
+its position among its siblings.
 
 ## Keep the suites runnable
 

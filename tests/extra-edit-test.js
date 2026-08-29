@@ -27,17 +27,12 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('thumbnail shows on the row', (await p.locator('.extra-row .thumb').count())===1);
   ok('photo count badge on the row', (await p.textContent('.extra-row .photo-count'))==='1');
 
-  // add a second photo straight from the row
-  await p.setInputFiles('#extraListWrap >> nth=0 >> xpath=/..//input', []).catch(()=>{});
-  const inputs = await p.evaluate(()=>document.querySelectorAll('input[type=file]').length);
+  // add a second photo straight from the row. The row button opens an input
+  // that lives on document.body, so drive it by id — picking the last file
+  // input in the document broke the moment a fourth one was added.
   await p.locator('[data-extra-action="addphoto"]').click();
   await p.waitForTimeout(150);
-  // the row button opens a detached input; drive it directly
-  await p.evaluate(async () => {
-    const el=[...document.querySelectorAll('input[type=file]')].pop();
-    el.setAttribute('data-test-target','1');
-  });
-  await p.setInputFiles('input[data-test-target="1"]', PIC);
+  await p.setInputFiles('#exRowPhotoInput', PIC);
   await p.waitForTimeout(700);
   ok('second photo added from the row',
      await p.evaluate(()=>JSON.parse(localStorage.getItem('gasplanet_extra_v1'))[0].photos.length)===2);
