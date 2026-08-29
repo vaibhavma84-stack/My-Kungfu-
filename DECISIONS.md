@@ -139,6 +139,20 @@ it — Sunday 30-Aug resolves to week commencing 24-Aug.
   two due tags are rewritten. The first version re-rendered on change, which
   destroyed the field being typed into and made every edit land one step behind
   the one after it.
+- **The weekly report is a table, because that is what repeats a header.** The
+  letterhead sits in a real `<thead>`. A fixed-position header is dropped by
+  print engines and a plain div prints once, at the top of page one. Each page
+  is one `<tr>`, so pagination is decided by the app rather than by wherever the
+  content happens to break — which is also what lets each page carry its own
+  number, since Chrome does not support CSS page counters.
+- **A caption may never sit under a photograph from another job.** Photos are
+  paired within a job, so a job with an odd number of them leaves half a pair
+  empty rather than borrowing from the next. Four to a page is therefore a
+  maximum, not a promise. Arranging works on the two levels this allows: the
+  order of the jobs, and the order of photos inside one.
+- **Reordering a photo reorders the job's own array.** So the new order shows on
+  the card and in every export, not only in the report. The job order, which is
+  report-specific, is kept per week in its own key.
 - **The ETA tool lays out a band of speeds rather than answering one.** A tenth
   of a knot moves an arrival by about an hour over an ocean passage, so the
   useful output is the whole band — nine tenths below through one knot above, in

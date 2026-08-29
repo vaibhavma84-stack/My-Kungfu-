@@ -30,8 +30,21 @@ asserts. `OUT` is where downloads and screenshots land (a temp dir by default).
 | `tools-test` | the Tools tab, the converter and the unit guide — known conversions, the formula line, search, what it remembers |
 | `eta-test` | the ETA tool — local-to-UTC conversion, half-hour and negative zones, the speed band and its arithmetic |
 | `instr-test` | the Instruments tool — procedures, steps, spares, the log, and the due-date states |
+| `report-layout-test` | prints the weekly report to a real PDF and reads it back — repeating header, statements alone on page one, four photos a page, page numbers |
 | `collapse` | the entry form collapsing without clipping |
 | `marsec-test`, `newfeat-test`, `print-test`, `project-test`, `theme-test` | MARSEC defaults, later additions, printing to PDF, the project sweep, light and dark |
+
+`report-layout-check.py` reads the printed PDF that `report-layout-test.js`
+produces. The report's layout rules only exist on paper — on screen it is one
+long scroll — so nothing in the DOM can prove them. It needs `pypdf` (and
+`cffi`); without them it prints SKIP rather than failing.
+
+A warning from writing it: counting the image *objects* in a PDF page does not
+count the photographs on it. Identical images are stored once and referenced
+many times, so four copies of one picture looked like one image and the
+four-per-page check passed no matter what. It counts draw operations in the
+content stream now, and the suite gives every photo a different colour so
+deduplication cannot hide a miscount.
 
 `factor-check.py` is not a browser test: it re-derives all 70 conversion
 factors from published definitions (231 cubic inches to the US gallon, 0.45359237

@@ -787,6 +787,14 @@
     font-size:14px; line-height:1.5; padding:3px 0 3px 20px; position:relative; color:#1B2530;
   }
   .rv-list li::before{content:'•'; position:absolute; left:4px; color:#002060; font-weight:700;}
+  /* The letterhead lives in a real <thead>. That is the only thing browsers
+     reliably repeat at the top of every printed page — a fixed-position header
+     is dropped by print engines, and a plain div only ever prints once. */
+  table.rv-doc{width:100%; border-collapse:collapse;}
+  table.rv-doc thead{display:table-header-group;}
+  table.rv-doc td{padding:0; vertical-align:top;}
+  table.rv-doc thead td{padding-bottom:6px;}
+
   .rv-photos{margin-top:10px;}
   .rv-block{margin-bottom:14px; break-inside:avoid; page-break-inside:avoid;}
   .rv-imgs{display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid #999;}
@@ -799,6 +807,32 @@
     font-weight:700; font-size:13.5px; padding:6px 8px; color:#1B2530;
   }
   .rv-empty{padding:40px 10px; text-align:center; color:var(--ink-soft); font-size:13.5px;}
+
+  /* Each sheet is exactly one printed page, so its number can simply be
+     written into it — Chrome does not support CSS page counters. */
+  .rv-sheetin{display:flex; flex-direction:column;}
+  .rv-pagenum{
+    margin-top:auto; padding-top:7px; text-align:center;
+    font-family:ui-monospace,monospace; font-size:10.5px; color:#6a737b;
+    border-top:1px solid #d7dbdf;
+  }
+
+  .rv-cell{position:relative;}
+  .rv-ctl{
+    position:absolute; left:0; right:0; bottom:4px;
+    display:flex; justify-content:center; gap:5px;
+  }
+  .rv-ctl button, .rv-capctl button{
+    border:1px solid #7d8994; background:rgba(255,255,255,.93); color:#1B2530;
+    border-radius:6px; width:30px; height:26px; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center; padding:0;
+  }
+  .rv-ctl button:disabled, .rv-capctl button:disabled{opacity:.3; cursor:default;}
+  .rv-capctl{display:inline-flex; gap:5px; margin:0 8px; vertical-align:middle;}
+  .rv-arrange-note{
+    background:#FFF7E8; border:1px solid rgba(214,150,59,.45); border-radius:8px;
+    padding:9px 11px; font-size:12.5px; color:#6b5327; margin:14px 0 4px; line-height:1.5;
+  }
   @media print{
     body > *:not(#reportView){display:none !important;}
     #reportView{position:static; overflow:visible; display:block !important;}
@@ -808,6 +842,17 @@
     .rv-cap{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
     .rv-imgs img{max-height:86mm;}
     .rv-imgs div{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    /* nothing that only exists to be tapped belongs on paper */
+    .rv-ctl, .rv-capctl, .rv-arrange-note{display:none !important;}
+    /* Pushes the page number down without risking an overflow: the printable
+       area under the repeating letterhead is about 239mm, so 170mm can never
+       spill a sheet onto a second page and throw the numbering out. */
+    .rv-sheetin{min-height:170mm;}
+    .rv-pagenum{border-top:none; color:#444;}
+    /* one sheet per page: the statements alone first, then four photographs
+       to a page. The last sheet must not break, or a blank page follows it. */
+    tr.rv-sheet{page-break-after:always; break-after:page;}
+    tr.rv-sheet:last-child{page-break-after:auto; break-after:auto;}
     @page{size:A4 portrait; margin:12mm;}
   }
 
@@ -3882,24 +3927,99 @@
     });
   }
 
+  // Photographs are grouped by job, and the caption under each pair names that
+  // job — so a pair may never straddle two jobs, or the caption would be a lie
+  // about one of the photographs above it. That is why arranging works on two
+  // levels: the order of the jobs, and the order of the photographs inside one.
+  var reportArrange = false;
+  var RORDER_KEY = 'gasplanet_reportorder_v1';
+  var reportOrder = {};        // week Monday -> [task id, ...]
+
+  var RV_PHOTOS_PER_SHEET = 4; // four to a page, in two captioned pairs
+
+  function loadReportOrder(){
+    try{ reportOrder = JSON.parse(localStorage.getItem(RORDER_KEY) || '{}'); }
+    catch(e){ reportOrder = {}; }
+  }
+  function saveReportOrder(){
+    try{ localStorage.setItem(RORDER_KEY, JSON.stringify(reportOrder)); }
+    catch(e){ /* losing a chosen order is not worth interrupting the report */ }
+  }
+
+  // a job the ship has not arranged keeps its natural place, at the end
+  function orderedWeekJobs(monday){
+    var jobs = weekJobs(monday);
+    var order = reportOrder[monday];
+    if(!order || !order.length) return jobs;
+    var pos = {};
+    order.forEach(function(id, i){ pos[id] = i; });
+    return jobs.slice().sort(function(a, b){
+      var pa = pos[a.id], pb = pos[b.id];
+      if(pa === undefined && pb === undefined) return 0;
+      if(pa === undefined) return 1;
+      if(pb === undefined) return -1;
+      return pa - pb;
+    });
+  }
+
+  function moveReportJob(id, dir){
+    var jobs = orderedWeekJobs(reportWeek);
+    var i = -1;
+    jobs.forEach(function(t, n){ if(t.id === id) i = n; });
+    var j = i + dir;
+    if(i < 0 || j < 0 || j >= jobs.length) return;
+    var tmp = jobs[i]; jobs[i] = jobs[j]; jobs[j] = tmp;
+    reportOrder[reportWeek] = jobs.map(function(t){ return t.id; });
+    saveReportOrder();
+    renderReport();
+  }
+
+  // this reorders the job's own photos, so the new order shows on the card and
+  // in every export too, not only here
+  function moveReportPhoto(taskId, idx, dir){
+    var t = null;
+    tasks.forEach(function(x){ if(x.id === taskId) t = x; });
+    if(!t || !t.photos) return;
+    var j = idx + dir;
+    if(j < 0 || j >= t.photos.length) return;
+    var tmp = t.photos[idx]; t.photos[idx] = t.photos[j]; t.photos[j] = tmp;
+    saveTasks();
+    renderReport();
+  }
+
+  var RV_ARROW = {
+    up:    'm6 15 6-6 6 6',
+    down:  'm6 9 6 6 6-6',
+    left:  'm15 6-6 6 6 6',
+    right: 'm9 6 6 6-6 6'
+  };
+  function rvArrow(dir){
+    return '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">' +
+           '<path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" ' +
+           'stroke-linejoin="round" d="' + RV_ARROW[dir] + '"/></svg>';
+  }
+
   function renderReport(){
     var monday = reportWeek;
     var sunday = addDaysISO(monday, 6);
-    var jobs = weekJobs(monday);
+    var jobs = orderedWeekJobs(monday);
 
     var html = '<div class="rv-bar">' +
       '<button data-rv="close">Close</button>' +
-      '<button data-rv="prev">‹ Prev</button>' +
-      '<span class="rv-week">' + fmtDate(monday) + ' – ' + fmtDate(sunday) + '</span>' +
-      '<button data-rv="next">Next ›</button>' +
+      '<button data-rv="prev">&lsaquo; Prev</button>' +
+      '<span class="rv-week">' + fmtDate(monday) + ' &ndash; ' + fmtDate(sunday) + '</span>' +
+      '<button data-rv="next">Next &rsaquo;</button>' +
       '<button data-rv="thisweek">This week</button>' +
       // Pick any date and the report jumps to the Monday-to-Sunday week holding
       // it, so an older week can be pulled up without stepping back one at a time.
       '<label class="rv-pick">Week of <input type="date" id="rvPick" value="' + escapeHtml(monday) + '"></label>' +
+      '<button' + (reportArrange ? ' class="primary"' : '') + ' data-rv="arrange">' +
+        (reportArrange ? 'Done' : 'Arrange') + '</button>' +
       '<button class="primary" data-rv="print">Print / Save PDF</button>' +
       '</div><div class="rv-page">';
 
-    html += '<div class="rv-letterhead">' +
+    var head =
+      '<div class="rv-letterhead">' +
         '<div class="lh-bar"></div>' +
         '<div class="lh-body">' +
           '<div class="lh-logo"><img src="' + SYNERGY_LOGO + '" alt="Synergy Group"></div>' +
@@ -3913,30 +4033,84 @@
       '</div>';
 
     if(!jobs.length){
-      html += '<div class="rv-empty">No jobs ticked WR for this week.<br>' +
-              'Tick WR on a job and set its completion date inside this week.</div></div>';
+      html += '<table class="rv-doc"><thead><tr><td>' + head + '</td></tr></thead>' +
+              '<tbody><tr><td><div class="rv-empty">No jobs ticked WR for this week.<br>' +
+              'Tick WR on a job and set its completion date inside this week.</div></td></tr>' +
+              '</tbody></table></div>';
       document.getElementById('reportView').innerHTML = html;
       return;
     }
 
-    html += '<ul class="rv-list">';
-    jobs.forEach(function(t){ html += '<li>' + escapeHtml(t.job) + '</li>'; });
-    html += '</ul>';
-
-    // photographs, two to a row, caption repeated under each row
-    html += '<div class="rv-photos">';
-    jobs.forEach(function(t){
-      if(!t.photos || !t.photos.length) return;
-      for(var i = 0; i < t.photos.length; i += 2){
-        var a = t.photos[i], b = t.photos[i+1];
-        html += '<div class="rv-block"><div class="rv-imgs">' +
-                  '<div><img src="' + a + '" alt=""></div>' +
-                  '<div>' + (b ? '<img src="' + b + '" alt="">' : '') + '</div>' +
-                '</div>' +
-                '<div class="rv-cap">' + escapeHtml(t.job) + '</div></div>';
+    // ---- page one: the statements, and nothing else ----
+    var sheets = [];
+    var list = '<ul class="rv-list">';
+    jobs.forEach(function(t, n){
+      list += '<li>' + escapeHtml(t.job);
+      if(reportArrange && (t.photos || []).length){
+        list += '<span class="rv-capctl">' +
+                  '<button data-rj="up" data-id="' + t.id + '"' + (n === 0 ? ' disabled' : '') +
+                    ' title="Move this job\'s photos earlier">' + rvArrow('up') + '</button>' +
+                  '<button data-rj="down" data-id="' + t.id + '"' + (n === jobs.length - 1 ? ' disabled' : '') +
+                    ' title="Move this job\'s photos later">' + rvArrow('down') + '</button>' +
+                '</span>';
       }
+      list += '</li>';
     });
-    html += '</div></div>';
+    list += '</ul>';
+    sheets.push(list);
+
+    // ---- pairs of photographs, never straddling two jobs ----
+    var blocks = [];
+    jobs.forEach(function(t){
+      var ph = t.photos || [];
+      for(var i = 0; i < ph.length; i += 2) blocks.push({ t: t, i: i });
+    });
+
+    function cell(t, idx){
+      var src = (t.photos || [])[idx];
+      if(src === undefined) return '<div class="rv-cell"></div>';
+      var ctl = '';
+      if(reportArrange){
+        ctl = '<div class="rv-ctl">' +
+                '<button data-rp="left" data-id="' + t.id + '" data-idx="' + idx + '"' +
+                  (idx === 0 ? ' disabled' : '') + ' title="Earlier in this job">' + rvArrow('left') + '</button>' +
+                '<button data-rp="right" data-id="' + t.id + '" data-idx="' + idx + '"' +
+                  (idx === t.photos.length - 1 ? ' disabled' : '') + ' title="Later in this job">' + rvArrow('right') + '</button>' +
+              '</div>';
+      }
+      return '<div class="rv-cell"><img src="' + src + '" alt="">' + ctl + '</div>';
+    }
+
+    var perSheet = RV_PHOTOS_PER_SHEET / 2;   // pairs to a page
+    for(var b = 0; b < blocks.length; b += perSheet){
+      var sheet = '<div class="rv-photos">';
+      blocks.slice(b, b + perSheet).forEach(function(bl){
+        sheet += '<div class="rv-block"><div class="rv-imgs">' +
+                   cell(bl.t, bl.i) + cell(bl.t, bl.i + 1) +
+                 '</div><div class="rv-cap">' + escapeHtml(bl.t.job) + '</div></div>';
+      });
+      sheet += '</div>';
+      sheets.push(sheet);
+    }
+
+    var note = reportArrange
+      ? '<div class="rv-arrange-note">Arranging. The up and down arrows beside a job move ' +
+        'that job\'s photographs as a group; the left and right arrows under a photograph move ' +
+        'it within its own job. A caption names the job above it, so a pair never mixes two jobs. ' +
+        'Photo order is saved on the job itself and shows everywhere.</div>'
+      : '';
+
+    var body = sheets.map(function(sheet, n){
+      return '<tr class="rv-sheet"><td><div class="rv-sheetin">' +
+               (n === 0 ? note : '') + sheet +
+               '<div class="rv-pagenum">Page ' + (n + 1) + ' of ' + sheets.length + '</div>' +
+             '</div></td></tr>';
+    }).join('');
+
+    html += '<table class="rv-doc">' +
+              '<thead><tr><td>' + head + '</td></tr></thead>' +
+              '<tbody>' + body + '</tbody>' +
+            '</table></div>';
     document.getElementById('reportView').innerHTML = html;
   }
 
@@ -4127,7 +4301,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v26';
+  var APP_BUILD = 'v28';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -4435,11 +4609,22 @@
     document.getElementById('reportView').scrollTop = 0;
   });
   document.getElementById('reportView').addEventListener('click', function(e){
+    // arranging keeps the scroll position — the page you are working on should
+    // stay under your thumb rather than jumping back to the top on every tap
+    var jm = e.target.closest('[data-rj]');
+    if(jm){ moveReportJob(jm.dataset.id, jm.dataset.rj === 'up' ? -1 : 1); return; }
+    var pm = e.target.closest('[data-rp]');
+    if(pm){
+      moveReportPhoto(pm.dataset.id, parseInt(pm.dataset.idx, 10), pm.dataset.rp === 'left' ? -1 : 1);
+      return;
+    }
+
     var btn = e.target.closest('[data-rv]');
     if(!btn) return;
     var a = btn.dataset.rv;
     if(a === 'close'){ closeWeeklyReport(); return; }
     if(a === 'print'){ window.print(); return; }
+    if(a === 'arrange'){ reportArrange = !reportArrange; renderReport(); return; }
     if(a === 'prev'){ reportWeek = addDaysISO(reportWeek, -7); }
     else if(a === 'next'){ reportWeek = addDaysISO(reportWeek, 7); }
     else if(a === 'thisweek'){ reportWeek = getMonday(todayISO()); }
@@ -4579,6 +4764,7 @@
   renderGuideCats();
   loadEta();
   loadInstruments();
+  loadReportOrder();
   document.getElementById('exDate').value = todayISO();
   document.getElementById('wrDate').value = todayISO();
   fillPtwTypes();
