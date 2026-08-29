@@ -135,6 +135,13 @@ it — Sunday 30-Aug resolves to week commencing 24-Aug.
   pre-filled. A span gas figure, an alarm setpoint menu path or a spare part
   number written from memory would read exactly as convincingly as a correct
   one, on an instrument people rely on before entering an enclosed space.
+- **Duplicating an instrument copies the model, never the unit.** Procedures and
+  the spares list belong to the model and come across; the serial number, the
+  calibration and bump dates and the whole log belong to the physical unit in
+  your hand and are left empty. Copying a log would put one unit's test history
+  against another. Step photographs are shared by reference rather than
+  duplicated — one picture of a screen serves both, and the collector counts
+  every use before deleting anything.
 - **A field edit in the Instruments detail never rebuilds the panel.** Only the
   two due tags are rewritten. The first version re-rendered on change, which
   destroyed the field being typed into and made every edit land one step behind

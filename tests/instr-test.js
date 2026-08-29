@@ -123,7 +123,32 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('the steps survive too', await p.locator('#instrDetail .step-n').count()===2);
   ok('the photo survives too', await p.locator('#instrDetail .thumb img').count()>=1);
 
+  // ---- duplicating for a second unit of the same model ----
+  await p.click('[data-ia="copy-instr"]');
+  await p.waitForTimeout(250);
+  ok('the copy opens', /\(copy\)/.test(await p.textContent('#instrTitle')), await p.textContent('#instrTitle'));
+  ok('procedures came across', /Changing the H2S alarm setpoint/.test(await p.textContent('#instrDetail')));
+  ok('their steps came across', await p.locator('#instrDetail .step-n').count()===2);
+  ok('step photos came across', await p.locator('#instrDetail .thumb img').count()>=1);
+  ok('spares came across', /ESH-A1DP/.test(await p.textContent('#instrDetail')));
+  ok('the intervals came across', (await p.inputValue('#fCalDays'))==='180');
+  ok('but not the serial number — that belongs to the unit',
+     (await p.inputValue('#fInstrSerial'))==='', await p.inputValue('#fInstrSerial'));
+  ok('nor the calibration date', (await p.inputValue('#fLastCal'))==='', await p.inputValue('#fLastCal'));
+  ok('nor the test history',
+     /No calibrations or bump tests logged yet/.test(await p.textContent('#instrDetail')));
+
+  // editing the copy must not disturb the original
+  await p.fill('#fInstrModel','Riken Keiki GX-8000 TYPE O2');
+  await p.waitForTimeout(200);
   await p.click('#instrListBtn');
+  await p.waitForTimeout(200);
+  ok('both instruments are listed', await p.locator('.instr-card').count()===2,
+     await p.locator('.instr-card').count());
+  const names = await p.locator('.instr-card .im').allTextContents();
+  ok('the original kept its own name', names.some(n=>n.trim()==='Riken Keiki GX-8000'), names.join(' | '));
+  ok('and the copy has the new one', names.some(n=>/TYPE O2/.test(n)), names.join(' | '));
+
   ok('back to the list', await p.locator('#instrListView').isVisible());
   await p.click('#instrBackBtn');
   ok('back to the launcher', await p.locator('#toolsHome').isVisible());

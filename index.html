@@ -3175,6 +3175,7 @@
 
     var h = '';
     h += '<div class="isec"><div class="isec-h"><h4>Identity</h4>' +
+         '<button class="btn btn-ghost" data-ia="copy-instr">Duplicate</button>' +
          '<button class="btn btn-danger" data-ia="delete-instr">Delete</button></div>';
     h += '<div class="form-row row-main">' +
            fld('Instrument','fInstrModel',x.model) +
@@ -4431,7 +4432,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v29';
+  var APP_BUILD = 'v30';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -5072,6 +5073,38 @@
       instruments = instruments.filter(function(v){ return v.id !== x.id; });
       saveInstruments();
       showInstrList();
+      return;
+    }
+
+    // Two of the same instrument share their procedures and their spares list,
+    // but nothing else: the serial number, the calibration dates and the log
+    // belong to the physical unit in your hand, not to the model. So those are
+    // left empty rather than copied, which would put one unit's test history
+    // against another.
+    if(act === 'copy-instr'){
+      var copy = {
+        id: uid(),
+        model: x.model + ' (copy)',
+        serial: '', location: x.location, sensors: x.sensors,
+        calDays: x.calDays, lastCal: '',
+        bumpDays: x.bumpDays, lastBump: '',
+        notes: x.notes,
+        parts: (x.parts || []).map(function(pt){
+          return { id: uid(), name: pt.name, partNo: pt.partNo, qty: pt.qty };
+        }),
+        procedures: (x.procedures || []).map(function(pr){
+          return { id: uid(), title: pr.title, steps: (pr.steps || []).map(function(st){
+            // the photo references are shared, not duplicated — one picture of
+            // a screen serves both units, and the collector counts every use
+            return { id: uid(), text: st.text, photos: (st.photos || []).slice() };
+          }) };
+        }),
+        log: [],
+        created: todayISO()
+      };
+      instruments.push(copy);
+      if(!saveInstruments()) return;
+      showInstrDetail(copy.id);
       return;
     }
 
