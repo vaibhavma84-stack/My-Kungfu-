@@ -11,7 +11,9 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.goto('http://localhost:8751/');
 
   const opts = await p.evaluate(()=>[...document.querySelectorAll('#inRepeat option')].map(o=>o.value+'|'+o.textContent));
-  ok('repeat list offers the PMS intervals', opts.length===7, JSON.stringify(opts));
+  ok('repeat list offers the PMS intervals', opts.length===8, JSON.stringify(opts));
+  ok('including daily, for the standing list done every day',
+     opts.some(o=>o.indexOf('daily|')===0), JSON.stringify(opts));
   ok('labels show the day counts',
      opts.some(o=>/3-monthly \(90 days\)/.test(o)) && opts.some(o=>/Weekly \(7 days\)/.test(o)), JSON.stringify(opts));
 

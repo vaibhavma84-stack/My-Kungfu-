@@ -11,6 +11,9 @@ import android.print.PrintAttributes
 import android.print.PrintManager
 import android.provider.MediaStore
 import android.util.Base64
+import android.Manifest
+import android.content.pm.PackageManager
+import android.webkit.GeolocationPermissions
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -37,6 +40,25 @@ class MainActivity : AppCompatActivity() {
     private lateinit var web: WebView
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var cameraOutputUri: Uri? = null
+
+    // The page asks for a position; Android has to agree first. The callback is
+    // held while the system dialog is up and answered either way afterwards, so
+    // a refused permission fails the page's request rather than hanging it.
+    private var geoOrigin: String? = null
+    private var geoCallback: GeolocationPermissions.Callback? = null
+
+    private val locationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+            val ok = granted[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                     granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+            geoCallback?.invoke(geoOrigin ?: "", ok, false)
+            geoCallback = null; geoOrigin = null
+            if (!ok) toast("Location is off for this app, so the map cannot show your position.")
+        }
+
+    private fun hasLocationPermission(): Boolean =
+        checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+        checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     private val fileChooser =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -69,6 +91,7 @@ class MainActivity : AppCompatActivity() {
         web.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true          // localStorage — the whole data store
+            setGeolocationEnabled(true)       // the map's own-position marker
             databaseEnabled = true
             allowFileAccess = true
             allowContentAccess = true
@@ -86,6 +109,21 @@ class MainActivity : AppCompatActivity() {
         }
 
         web.webChromeClient = object : WebChromeClient() {
+            override fun onGeolocationPermissionsShowPrompt(
+                origin: String?,
+                callback: GeolocationPermissions.Callback?
+            ) {
+                if (callback == null) return
+                if (hasLocationPermission()) { callback.invoke(origin ?: "", true, false); return }
+                geoOrigin = origin; geoCallback = callback
+                locationPermission.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+            }
+
             override fun onShowFileChooser(
                 view: WebView?,
                 callback: ValueCallback<Array<Uri>>?,
