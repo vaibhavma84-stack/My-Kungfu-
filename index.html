@@ -183,6 +183,7 @@
   .crew-name{font-size:14.5px; font-weight:700; flex:1.6; min-width:0;}
   .crew-rank{font-size:12.5px; color:var(--steel); font-weight:600; flex:1; min-width:0;}
   .crew-dob{font-family:ui-monospace,monospace; font-size:12px; color:var(--ink-soft); flex:0 0 auto;}
+  .crew-ship{color:var(--ink-soft); font-weight:500;}
   .crew-row .icon-btn{flex:0 0 auto;}
 
   /* ---------- Cargo log ---------- */
@@ -1113,6 +1114,10 @@
           </select>
         </div>
         <div class="field">
+          <label>Ship</label>
+          <input type="text" id="crewShip" placeholder="Gas Planet" maxlength="60">
+        </div>
+        <div class="field">
           <label>DOB</label>
           <input type="date" id="crewDob">
         </div>
@@ -1682,6 +1687,27 @@
 
   // FIX 8: a 29-Feb birthday used to disappear entirely in non-leap years.
   // It now shows on 28 Feb instead, which is the usual convention aboard.
+  // The rank a crew list carries is the job; the title is how the person is
+  // addressed. A birthday goes up under the title.
+  var RANK_TITLE = {
+    'Master':'Capt.', 'Chief Officer':'C/O', '2nd Officer':'2/O', '3rd Officer':'3/O',
+    'Chief Engineer':'C/E', '2nd Engineer':'2/E', '3rd Engineer':'3/E', '4th Engineer':'4/E',
+    'Gas Engineer':'G/E', 'ETO':'ETO', 'Bosun':'Bsn', 'AB':'AB', 'OS':'OS',
+    'Pumpman':'Pumpman', 'Fitter':'Fitter', 'Oiler':'Oiler', 'Cook':'Cook',
+    'Steward':'Steward', 'Deck Cadet':'Dk Cdt', 'Eng Cadet':'Eng Cdt'
+  };
+  function crewTitle(c){
+    var r = (c.rank || '').trim();
+    return RANK_TITLE[r] || (r === 'Other' ? '' : r);
+  }
+  // "Capt. Karan Vir Bhatia (Gas Planet)" -- title, name, and the ship they are
+  // on, which is what makes the line useful when more than one ship is in the list.
+  function crewLine(c){
+    var t = crewTitle(c);
+    var ship = (c.ship || '').trim();
+    return (t ? t + ' ' : '') + (c.name || '') + (ship ? ' (' + ship + ')' : '');
+  }
+
   function birthdaysOnDate(iso){
     var md = monthDay(iso);
     if(!md) return [];
@@ -1701,7 +1727,7 @@
       var turns = viewedYear - born;
       if(turns > 0) age = ' — turns '+turns;
     }
-    return '<div class="birthday-card">🎂 <strong>'+escapeHtml(c.name)+'</strong>&nbsp;('+escapeHtml(c.rank)+')'+age+' has a birthday today</div>';
+    return '<div class="birthday-card">🎂 <strong>'+escapeHtml(crewLine(c))+'</strong>'+age+' has a birthday today</div>';
   }
   function fmtDate(iso){
     if(!iso) return '—';
@@ -2105,6 +2131,95 @@
            '</div>';
   }
 
+
+  // ---------- the day's agenda, for the home-screen widget ----------
+  // A widget lives in a different process and cannot read this page's storage,
+  // so the page hands Android a plain summary whenever anything changes and the
+  // widget renders from that. Fourteen days are published, not just today, so
+  // the widget rolls over at midnight and stays right even if the app is not
+  // opened for a week.
+  // A month-grid widget needs whole months either side of today to page
+  // through, not just the days ahead, so the window runs from the first of last
+  // month to the end of the month after next.
+  var AGENDA_BACK_MONTHS = 1, AGENDA_FWD_MONTHS = 2;
+  var AGENDA_CACHE_KEY = 'gasplanet_agenda_v1';
+
+  function agendaForDay(iso){
+    var jobs = [];
+    tasks.forEach(function(t){
+      if(t.due !== iso) return;
+      jobs.push({ i:t.id, t:t.job, p:t.priority || 'normal', d:!!t.done, ad19:!!t.ad19 });
+    });
+    projectedOn(iso).forEach(function(t){
+      jobs.push({ t:t.job, p:t.priority || 'normal', d:false, r:true });
+    });
+    jobs.sort(function(a,b){
+      if(a.d !== b.d) return a.d ? 1 : -1;
+      return priorityRank(a.p) - priorityRank(b.p);
+    });
+    return { jobs: jobs, bdays: birthdaysOnDate(iso).map(crewLine) };
+  }
+
+  function buildAgenda(){
+    var now = new Date();
+    var from = new Date(now.getFullYear(), now.getMonth() - AGENDA_BACK_MONTHS, 1);
+    var to   = new Date(now.getFullYear(), now.getMonth() + AGENDA_FWD_MONTHS + 1, 0);
+    var days = {}, d = from;
+    while(d <= to){
+      var iso = isoFromDate(d);
+      var a = agendaForDay(iso);
+      // Only days with something on them are published. An empty day is the
+      // absence of a key, which the widget reads as "nothing due" -- publishing
+      // a hundred empty objects would just be weight.
+      if(a.jobs.length || a.bdays.length) days[iso] = a;
+      d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    }
+    return { v:1, built: todayISO(), ship: shipName(),
+             from: isoFromDate(from), to: isoFromDate(to), days: days };
+  }
+
+  // A tick made on the home screen is applied to the real job list the next
+  // time this page runs. The widget marks it immediately so it feels answered;
+  // this is where that becomes true. Ticks are dropped from the queue whether or
+  // not the job still exists, so a deleted job cannot wedge the queue forever.
+  function applyWidgetTicks(){
+    var raw = null;
+    try{
+      if(window.AndroidBridge && AndroidBridge.pendingTicks) raw = AndroidBridge.pendingTicks();
+    }catch(e){ return false; }
+    if(!raw) return false;
+    var ticks;
+    try{ ticks = JSON.parse(raw); }catch(e){ ticks = null; }
+    try{ if(window.AndroidBridge && AndroidBridge.clearTicks) AndroidBridge.clearTicks(); }catch(e){}
+    if(!ticks) return false;
+    var changed = false;
+    Object.keys(ticks).forEach(function(id){
+      var t = tasks.find(function(x){ return x.id === id; });
+      if(!t) return;
+      var want = !!ticks[id];
+      if(!!t.done === want) return;
+      t.done = want;
+      t.completedOn = want ? todayISO() : '';
+      changed = true;
+    });
+    if(changed) saveTasks();
+    return changed;
+  }
+
+  // Rebuilt on every change, but only pushed when it actually differs — the
+  // widget redraw is not free and most saves do not touch the next fortnight.
+  var lastAgendaJSON = null;
+  function publishAgenda(){
+    var json;
+    try{ json = JSON.stringify(buildAgenda()); }catch(e){ return; }
+    if(json === lastAgendaJSON) return;
+    lastAgendaJSON = json;
+    try{ localStorage.setItem(AGENDA_CACHE_KEY, json); }catch(e){}
+    try{
+      if(window.AndroidBridge && AndroidBridge.publishAgenda) AndroidBridge.publishAgenda(json);
+    }catch(e){}
+  }
+
   // ---------- sort & filter ----------
   function getVisibleTasks(){
     var status = document.getElementById('filterStatus').value;
@@ -2184,6 +2299,7 @@
 
   function render(){
     renderWwr();
+    publishAgenda();     // the home-screen widgets read from this
     var pendingCount = tasks.filter(function(t){return !t.done;}).length;
     document.getElementById('countBadge').textContent = pendingCount + ' pending / ' + tasks.length + ' total';
 
@@ -2316,11 +2432,14 @@
     if(!name){ document.getElementById('crewName').focus(); return; }
     var rank = document.getElementById('crewRank').value;
     var dob = document.getElementById('crewDob').value;
-    crew.push({ id: uid(), serial: nextCrewSerial(), name: name, rank: rank, dob: dob });
+    var shipName = document.getElementById('crewShip').value.trim();
+    crew.push({ id: uid(), serial: nextCrewSerial(), name: name, rank: rank,
+                ship: shipName, dob: dob });
     if(!saveCrew()){ renderCrew(); return; }
     document.getElementById('crewName').value = '';
     document.getElementById('crewDob').value = '';
     document.getElementById('crewRank').value = 'Master';
+    // the ship is deliberately left in place: a whole list is usually one ship
     renderCrew();
     render(); // birthdays feed the calendar views
     document.getElementById('crewName').focus();
@@ -2344,7 +2463,8 @@
       html += '<div class="crew-row">';
       html += '  <span class="crew-sno">#'+c.serial+'</span>';
       html += '  <span class="crew-name">'+escapeHtml(c.name)+'</span>';
-      html += '  <span class="crew-rank">'+escapeHtml(c.rank)+'</span>';
+      html += '  <span class="crew-rank">'+escapeHtml(c.rank)+
+              (c.ship ? ' <span class="crew-ship">'+escapeHtml(c.ship)+'</span>' : '')+'</span>';
       html += '  <span class="crew-dob">'+(c.dob ? fmtDate(c.dob) : '—')+'</span>';
       html += '  <button class="icon-btn" data-crew-action="delete" data-id="'+c.id+'" title="Delete">🗑</button>';
       html += '</div>';
@@ -2457,9 +2577,9 @@
   }
 
   function exportCrewCSV(){
-    var rows = [['Serial No','Name','Rank','DOB']];
+    var rows = [['Serial No','Name','Rank','Ship','DOB']];
     crew.slice().sort(function(a,b){return a.serial-b.serial;}).forEach(function(c){
-      rows.push([c.serial, c.name, c.rank, c.dob || '']);
+      rows.push([c.serial, c.name, c.rank, c.ship || '', c.dob || '']);
     });
     downloadCSV('GasPlanet_CrewList_'+todayISO()+'.csv', toCSV(rows));
     noteBackup('crew');
@@ -2476,6 +2596,7 @@
         if(h==='name' || h==='crewname' || h==='fullname') col.name = idx;
         else if(h==='rank') col.rank = idx;
         else if(h==='dob' || h==='dateofbirth' || h==='birthdate') col.dob = idx;
+        else if(h==='ship' || h==='shipname' || h==='vessel' || h==='vesselname') col.ship = idx;
       });
       if(col.name === undefined){
         alert('Could not find a "Name" column in this file. Make sure the first row has column headers, including one named "Name".');
@@ -2489,7 +2610,9 @@
         if(!nameText){ skipped++; continue; }
         var rankText = col.rank!==undefined ? (row[col.rank]||'').trim() : '';
         var dobVal = col.dob!==undefined ? parseDueDate(row[col.dob], true) : '';
-        crew.push({ id: uid(), serial: serial++, name: nameText, rank: rankText || 'Other', dob: dobVal });
+        var shipText = col.ship!==undefined ? (row[col.ship]||'').trim() : '';
+        crew.push({ id: uid(), serial: serial++, name: nameText,
+                    rank: rankText || 'Other', ship: shipText, dob: dobVal });
         imported++;
       }
       if(!saveCrew()){ renderCrew(); return; }
@@ -5198,7 +5321,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v38';
+  var APP_BUILD = 'v39';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -5677,6 +5800,8 @@
   loadInstruments();
   mollLoad();
   loadReportOrder();
+  // ticks made on the home-screen widget while the app was closed
+  applyWidgetTicks();
   // v35 briefly carried a cargo quantity tool built on a density table the
   // ship typed in. It was removed; anything typed into it is unreachable now
   // and would sit in storage forever, so it goes rather than eating room the
@@ -5779,6 +5904,12 @@
   });
   document.getElementById('toolBackBtn').addEventListener('click', function(){ showTool(null); });
   document.getElementById('guideBackBtn').addEventListener('click', function(){ showTool(null); });
+  // Coming back from the home screen is the usual way a tick arrives.
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState !== 'visible') return;
+    if(applyWidgetTicks()) render();
+  });
+
   document.getElementById('mollBackBtn').addEventListener('click', function(){ showTool(null); });
   document.getElementById('mollProds').addEventListener('click', function(e){
     var b = e.target.closest('button[data-mprod]');

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:layout_marginTop="1dp">
+    <View
+        android:id="@+id/chip_stripe"
+        android:layout_width="2dp"
+        android:layout_height="9dp"
+        android:background="#3A5A78" />
+    <TextView
+        android:id="@+id/chip_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:paddingStart="2dp"
+        android:textColor="#DCE4EB"
+        android:textSize="8sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
+</LinearLayout>

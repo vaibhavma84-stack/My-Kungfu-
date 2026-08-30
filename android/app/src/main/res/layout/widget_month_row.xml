@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One week. Height must be wrap_content: RemoteViews.addView cannot set
+     LayoutParams, so a 0dp height here would give every row zero height and
+     the whole grid would render blank. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/row_cells"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:baselineAligned="false" />

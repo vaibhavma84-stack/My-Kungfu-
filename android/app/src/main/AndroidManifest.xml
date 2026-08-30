@@ -35,5 +35,39 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <receiver
+            android:name=".TodayWidget"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.gasplanet.decklog.TODAY_REFRESH" />
+                <action android:name="com.gasplanet.decklog.TODAY_TICK" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_today_info" />
+        </receiver>
+
+        <receiver
+            android:name=".MonthWidget"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.gasplanet.decklog.MONTH_PREV" />
+                <action android:name="com.gasplanet.decklog.MONTH_NEXT" />
+                <action android:name="com.gasplanet.decklog.MONTH_TODAY" />
+                <action android:name="com.gasplanet.decklog.MONTH_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_month_info" />
+        </receiver>
+
+        <!-- Feeds the rows of the Today widget's list. -->
+        <service
+            android:name=".TodayWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
     </application>
 </manifest>

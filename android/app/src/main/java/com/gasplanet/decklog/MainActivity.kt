@@ -223,6 +223,29 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun print() = runOnUiThread { printPage() }
+
+        /**
+         * The page hands over the agenda whenever anything changes. This is the
+         * only route the home-screen widgets have to the data, so it is stored
+         * and both widgets are redrawn.
+         *
+         * Called on a WebView JavaScript thread, not the UI thread.
+         */
+        @JavascriptInterface
+        fun publishAgenda(json: String) {
+            AgendaStore.save(applicationContext, json)
+            runOnUiThread {
+                TodayWidget.refreshAll(applicationContext)
+                MonthWidget.refreshAll(applicationContext)
+            }
+        }
+
+        /** Ticks made on the widget while the app was closed. */
+        @JavascriptInterface
+        fun pendingTicks(): String = AgendaStore.pendingTicks(applicationContext)
+
+        @JavascriptInterface
+        fun clearTicks() = AgendaStore.clearTicks(applicationContext)
     }
 
     companion object {

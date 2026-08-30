@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Deck Log</string>
+    <string name="widget_today_desc">Today's jobs and birthdays. Tap a job to tick it off.</string>
+    <string name="widget_month_desc">The month, with jobs and birthdays written into the days.</string>
 </resources>

@@ -28,6 +28,7 @@ asserts. `OUT` is where downloads and screenshots land (a temp dir by default).
 | `blank-test` | the three-column blank sheet round-tripping through import |
 | `banner-test` | the backup reminder, its thresholds and snooze |
 | `moll-test` | the Mollier tool — saturation, boil-off, flash, the reliquefaction cycle and the mixtures, every figure checked against the reference equations of state |
+| `widget-test` | what the page publishes for the home-screen widgets, and that a tick made on a widget comes back into the job list |
 | `guide-check` | every Information entry has a note, and no note is keyed to an entry the guide does not show |
 | `factor-check` | all 70 converter factors re-derived from published definitions, independent of the app's own table |
 | `tools-test` | the Tools tab, the converter and the Information guide — known conversions, the formula line, search, what it remembers |
