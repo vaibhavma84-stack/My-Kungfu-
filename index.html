@@ -1221,18 +1221,6 @@
         Converter
         <span class="tsub">Pressure, temperature, energy and more</span>
       </button>
-      <button class="tool-tile" data-tool="lpg">
-        <span class="ti">
-          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"
-                  d="M7 3h10v5.5l3 4.5v8H4v-8l3-4.5Z"/>
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                  d="M4 16.5h16"/>
-          </svg>
-        </span>
-        Cargo quantity
-        <span class="tsub">Tonnes, cubic metres and barrels</span>
-      </button>
       <button class="tool-tile" data-tool="instr">
         <span class="ti">
           <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
@@ -1287,49 +1275,6 @@
     <div class="conv-note" id="convNote"></div>
     <div id="convOut"></div>
     <div class="conv-hint">Tap a line to copy it.</div>
-  </div>
-
-  <div id="toolLpg" style="display:none;">
-    <div class="tool-head">
-      <button class="btn btn-ghost" id="lpgBackBtn">&lsaquo; Tools</button>
-      <div class="tool-title">Cargo quantity</div>
-    </div>
-
-    <div class="conv-note" id="lpgIntro">
-      Mass to volume needs a density, and density changes with temperature. The
-      ASTM and API tables that give it are copyrighted, so they are not built in
-      &mdash; type the figures from the ship&rsquo;s own copy into a table below, once
-      per product, and this works from those. Nothing is assumed and nothing is
-      extrapolated beyond the rows you enter.
-    </div>
-
-    <div class="form-row row-main">
-      <div class="field">
-        <label>Product</label>
-        <select id="lpgProduct"></select>
-      </div>
-      <div class="field">
-        <label>Temperature (&deg;C)</label>
-        <input type="number" step="any" id="lpgTemp" placeholder="e.g. -42.0">
-      </div>
-    </div>
-    <div class="form-row flags-row">
-      <button class="btn btn-ghost" id="lpgAddProd">+ Product</button>
-      <button class="btn btn-ghost" id="lpgEditRows">Density table</button>
-      <button class="btn btn-danger" id="lpgDelProd">Delete product</button>
-    </div>
-
-    <div id="lpgDensity"></div>
-
-    <div class="isec"><div class="isec-h"><h4>Quantity &mdash; enter any one</h4></div>
-      <div class="form-row row-main">
-        <div class="field"><label>Tonnes (MT)</label><input type="number" step="any" id="lpgMT"></div>
-        <div class="field"><label>Cubic metres (m&sup3;)</label><input type="number" step="any" id="lpgM3"></div>
-        <div class="field"><label>Barrels (US)</label><input type="number" step="any" id="lpgBbl"></div>
-        <div class="field"><label>US gallons</label><input type="number" step="any" id="lpgGal"></div>
-      </div>
-    </div>
-    <div id="lpgOut"></div>
   </div>
 
   <div id="toolInstr" style="display:none;">
@@ -3144,242 +3089,6 @@
     renderConvOut();
   }
 
-  // ---------- Tools: cargo quantity ----------
-  // Turning tonnes into cubic metres or barrels needs a density, and density
-  // moves with temperature. The ASTM D1250 and API MPMS tables that give it are
-  // copyrighted, so none of their figures are built in. The ship types the rows
-  // from its own copy and this interpolates between them — and refuses to go
-  // outside them, because an extrapolated cargo density is exactly the kind of
-  // wrong number that looks right on a document.
-  var LPG_KEY = 'gasplanet_lpg_v1';
-  var BBL_PER_M3 = 1 / 0.158987294928;   // 6.28981..., from the 42-US-gallon barrel
-  var lpgProducts = [];
-  var lpgOpen = null;
-
-  function loadLpg(){
-    try{
-      var raw = localStorage.getItem(LPG_KEY);
-      lpgProducts = raw ? JSON.parse(raw) : [];
-      lastGood[LPG_KEY] = JSON.stringify(lpgProducts);
-    }catch(e){ lpgProducts = []; }
-    if(!lpgProducts.length){
-      // two empty products, named, so the shape is obvious. No figures.
-      lpgProducts = [
-        { id: uid(), name: 'Propane', rows: [] },
-        { id: uid(), name: 'Butane',  rows: [] }
-      ];
-    }
-    if(!lpgOpen || !lpgById(lpgOpen)) lpgOpen = lpgProducts[0].id;
-  }
-  function saveLpg(){
-    return persist(LPG_KEY, lpgProducts, 'Cargo densities', function(prev){ lpgProducts = prev; });
-  }
-  function lpgById(id){
-    for(var i=0;i<lpgProducts.length;i++) if(lpgProducts[i].id === id) return lpgProducts[i];
-    return null;
-  }
-
-  // Linear interpolation between the two rows either side. Outside the entered
-  // range it returns nothing at all rather than a guess.
-  function lpgDensityAt(prod, t){
-    var rows = (prod.rows || []).slice().sort(function(a,b){ return a.t - b.t; });
-    if(rows.length < 1) return { err: 'no rows' };
-    if(rows.length === 1){
-      return rows[0].t === t ? { d: rows[0].d, exact: true }
-                             : { err: 'only one row' };
-    }
-    if(t < rows[0].t || t > rows[rows.length-1].t){
-      return { err: 'outside', lo: rows[0].t, hi: rows[rows.length-1].t };
-    }
-    for(var i=0;i<rows.length-1;i++){
-      var a = rows[i], b = rows[i+1];
-      if(t >= a.t && t <= b.t){
-        if(b.t === a.t) return { d: a.d, exact: true };
-        var f = (t - a.t) / (b.t - a.t);
-        return { d: a.d + f * (b.d - a.d), exact: (f === 0 || f === 1), a: a, b: b };
-      }
-    }
-    return { err: 'no rows' };
-  }
-
-  function fillLpgProducts(){
-    var sel = document.getElementById('lpgProduct');
-    sel.innerHTML = lpgProducts.map(function(p){
-      return '<option value="' + escapeHtml(p.id) + '"' + (p.id === lpgOpen ? ' selected' : '') +
-             '>' + escapeHtml(p.name) + '</option>';
-    }).join('');
-  }
-
-  function lpgCurrent(){
-    var prod = lpgById(lpgOpen);
-    var t = parseFloat(document.getElementById('lpgTemp').value);
-    if(!prod) return null;
-    if(isNaN(t)) return { prod: prod, err: 'no temp' };
-    var r = lpgDensityAt(prod, t);
-    r.prod = prod; r.t = t;
-    return r;
-  }
-
-  function renderLpgDensity(){
-    var wrap = document.getElementById('lpgDensity');
-    var c = lpgCurrent();
-    if(!c){ wrap.innerHTML = ''; return; }
-    var n = (c.prod.rows || []).length;
-    if(!n){
-      wrap.innerHTML = '<div class="iempty">No density table for ' + escapeHtml(c.prod.name) +
-        ' yet. Tap <b>Density table</b> and enter temperature and density rows from ' +
-        'the ship\'s ASTM or API tables, or from the cargo documents.</div>';
-      return;
-    }
-    if(c.err === 'no temp'){
-      wrap.innerHTML = '<div class="iempty">' + n + ' row' + (n===1?'':'s') + ' entered for ' +
-        escapeHtml(c.prod.name) + '. Enter a temperature to read a density off them.</div>';
-      return;
-    }
-    if(c.err === 'outside'){
-      wrap.innerHTML = '<div class="conv-note" style="background:var(--tint-danger);' +
-        'border-color:rgba(178,58,46,.35);color:#8d3527;"><b>Outside the table.</b> ' +
-        escapeHtml(c.prod.name) + ' has rows from ' + c.lo + ' to ' + c.hi + ' &deg;C. ' +
-        'Nothing is calculated beyond them &mdash; add the rows that cover ' +
-        escapeHtml(String(c.t)) + ' &deg;C.</div>';
-      return;
-    }
-    if(c.err){
-      wrap.innerHTML = '<div class="iempty">Two or more rows are needed to read between them.</div>';
-      return;
-    }
-    var how = c.exact ? 'read straight off the table'
-                      : 'interpolated between ' + c.a.t + ' and ' + c.b.t + ' &deg;C';
-    wrap.innerHTML = '<div class="conv-note" style="background:var(--tint-ok);' +
-      'border-color:rgba(63,97,71,.3);color:#33513a;">Density at ' + escapeHtml(String(c.t)) +
-      ' &deg;C: <b>' + convFmt(c.d) + ' t/m&sup3;</b> &mdash; ' + how + '.<br>' +
-      'That is <b>' + convFmt(BBL_PER_M3 / c.d) + '</b> barrels per tonne, ' +
-      'and <b>' + convFmt(1 / c.d) + '</b> m&sup3; per tonne.</div>';
-  }
-
-  var lpgBusy = false;
-  function lpgRecalc(from){
-    var c = lpgCurrent();
-    var out = document.getElementById('lpgOut');
-    var ids = ['lpgMT','lpgM3','lpgBbl','lpgGal'];
-    if(!c || c.err || c.d === undefined){
-      out.innerHTML = '';
-      return;
-    }
-    var v = parseFloat(document.getElementById(from).value);
-    if(isNaN(v)){ out.innerHTML = ''; return; }
-    var m3;
-    if(from === 'lpgMT')       m3 = v / c.d;
-    else if(from === 'lpgM3')  m3 = v;
-    else if(from === 'lpgBbl') m3 = v / BBL_PER_M3;
-    else                       m3 = v / (BBL_PER_M3 * 42);
-    var vals = { lpgMT: m3 * c.d, lpgM3: m3, lpgBbl: m3 * BBL_PER_M3, lpgGal: m3 * BBL_PER_M3 * 42 };
-    lpgBusy = true;
-    ids.forEach(function(id){
-      if(id === from) return;
-      document.getElementById(id).value = Math.round(vals[id] * 1000) / 1000;
-    });
-    lpgBusy = false;
-    out.innerHTML = '<div class="conv-row"><span class="cu">At ' + escapeHtml(String(c.t)) +
-      ' &deg;C, density ' + convFmt(c.d) + ' t/m&sup3;</span>' +
-      '<span class="cv">' + convFmt(vals.lpgMT) + ' MT</span></div>' +
-      '<div class="conv-row"><span class="cu">Cubic metres</span><span class="cv">' +
-      convFmt(vals.lpgM3) + ' m&sup3;</span></div>' +
-      '<div class="conv-row"><span class="cu">Barrels</span><span class="cv">' +
-      convFmt(vals.lpgBbl) + ' bbl</span></div>' +
-      '<div class="conv-row"><span class="cu">US gallons</span><span class="cv">' +
-      convFmt(vals.lpgGal) + '</span></div>';
-  }
-
-  function renderLpg(){
-    fillLpgProducts();
-    renderLpgDensity();
-  }
-
-  // the table itself: rows typed from the ship's own copy, or pasted in
-  function openLpgRows(){
-    var prod = lpgById(lpgOpen);
-    if(!prod) return;
-    var working = (prod.rows || []).slice();
-
-    var bg = document.createElement('div');
-    bg.className = 'modal-bg';
-    bg.innerHTML =
-      '<div class="edit-card">' +
-        '<div class="ec-head"><h3>' + escapeHtml(prod.name) + ' density table</h3></div>' +
-        '<div class="ec-body">' +
-          '<div class="conv-note" style="margin-top:0;">One row per temperature, from the ' +
-            'ship\'s ASTM or API tables. Paste as <b>temperature, density</b> &mdash; one pair ' +
-            'a line, degrees Celsius and tonnes per cubic metre.</div>' +
-          '<textarea id="lpgPaste" rows="5" placeholder="-45, 0.5850&#10;-40, 0.5790&#10;-30, 0.5680"></textarea>' +
-          '<div class="form-row" style="margin-top:8px;">' +
-            '<button class="btn btn-ghost" data-lp="add">Add these rows</button>' +
-            '<button class="btn btn-danger" data-lp="clear">Clear table</button>' +
-          '</div>' +
-          '<div class="field"><label>Rows</label><div id="lpgRowList"></div></div>' +
-        '</div>' +
-        '<div class="ec-actions">' +
-          '<button class="btn btn-ghost" data-lp="cancel">Cancel</button>' +
-          '<button class="btn btn-primary" data-lp="save">Save</button>' +
-        '</div>' +
-      '</div>';
-    document.body.appendChild(bg);
-
-    function draw(){
-      var w = bg.querySelector('#lpgRowList');
-      var rows = working.slice().sort(function(a,b){ return a.t - b.t; });
-      if(!rows.length){ w.innerHTML = '<div class="iempty">No rows yet.</div>'; return; }
-      w.innerHTML = rows.map(function(r, i){
-        return '<div class="conv-row" style="cursor:default;">' +
-                 '<span class="cu">' + r.t + ' &deg;C</span>' +
-                 '<span class="cv">' + r.d + ' t/m&sup3;</span>' +
-                 '<button class="icon-btn" data-lprm="' + i + '">🗑</button>' +
-               '</div>';
-      }).join('');
-    }
-    draw();
-
-    bg.addEventListener('click', function(e){
-      if(e.target === bg || e.target.closest('[data-lp="cancel"]')){ bg.remove(); return; }
-      var rm = e.target.closest('[data-lprm]');
-      if(rm){
-        var sorted = working.slice().sort(function(a,b){ return a.t - b.t; });
-        var gone = sorted[parseInt(rm.dataset.lprm, 10)];
-        working = working.filter(function(r){ return r !== gone; });
-        draw();
-        return;
-      }
-      if(e.target.closest('[data-lp="clear"]')){
-        if(!confirm('Clear every row for ' + prod.name + '?')) return;
-        working = []; draw(); return;
-      }
-      if(e.target.closest('[data-lp="add"]')){
-        var text = bg.querySelector('#lpgPaste').value;
-        var added = 0, bad = 0;
-        text.split(/[\r\n]+/).forEach(function(line){
-          if(!line.trim()) return;
-          var parts = line.split(/[,;\t]+|\s{2,}/).map(function(v){ return v.trim(); });
-          if(parts.length < 2) parts = line.trim().split(/\s+/);
-          var t = parseFloat(parts[0]), d = parseFloat(parts[1]);
-          if(isNaN(t) || isNaN(d) || d <= 0){ bad++; return; }
-          working = working.filter(function(r){ return r.t !== t; });
-          working.push({ t: t, d: d });
-          added++;
-        });
-        bg.querySelector('#lpgPaste').value = '';
-        draw();
-        if(bad) alert(added + ' row(s) added. ' + bad + ' line(s) were not a temperature and a density and were left out.');
-        return;
-      }
-      if(e.target.closest('[data-lp="save"]')){
-        prod.rows = working;
-        bg.remove();
-        saveLpg();
-        renderLpg();
-      }
-    });
-  }
-
   // ---------- Tools: instruments ----------
   // A place for what the maker's manual says, kept on the device that goes into
   // the space with you. The app supplies the structure — procedures as numbered
@@ -3895,7 +3604,7 @@
   }
 
   var TOOL_TITLES = { convert:'Converter', guide:'Unit guide', eta:'ETA',
-                      instr:'Instruments', lpg:'Cargo quantity' };
+                      instr:'Instruments' };
 
   function showTool(name){
     document.getElementById('toolsHome').style.display   = name ? 'none' : '';
@@ -3903,12 +3612,10 @@
     document.getElementById('toolGuide').style.display   = name === 'guide' ? '' : 'none';
     document.getElementById('toolEta').style.display     = name === 'eta' ? '' : 'none';
     document.getElementById('toolInstr').style.display   = name === 'instr' ? '' : 'none';
-    document.getElementById('toolLpg').style.display     = name === 'lpg' ? '' : 'none';
     document.getElementById('pageTitle').textContent = TOOL_TITLES[name] || 'Tools';
     if(name === 'guide') renderGuide();
     if(name === 'eta')   renderEta();
     if(name === 'instr') showInstrList();
-    if(name === 'lpg')   renderLpg();
   }
 
   // ---------- ship's particulars ----------
@@ -4825,7 +4532,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v35';
+  var APP_BUILD = 'v36';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -5302,8 +5009,12 @@
   renderGuideCats();
   loadEta();
   loadInstruments();
-  loadLpg();
   loadReportOrder();
+  // v35 briefly carried a cargo quantity tool built on a density table the
+  // ship typed in. It was removed; anything typed into it is unreachable now
+  // and would sit in storage forever, so it goes rather than eating room the
+  // report photographs need.
+  try{ localStorage.removeItem('gasplanet_lpg_v1'); }catch(e){}
   // Photographs come from IndexedDB, which is asynchronous, so the first paint
   // happens without them and everything is drawn again once they are in hand.
   openPhotoDB(function(db){
@@ -5401,44 +5112,6 @@
   });
   document.getElementById('toolBackBtn').addEventListener('click', function(){ showTool(null); });
   document.getElementById('guideBackBtn').addEventListener('click', function(){ showTool(null); });
-  document.getElementById('lpgBackBtn').addEventListener('click', function(){ showTool(null); });
-  document.getElementById('lpgProduct').addEventListener('change', function(){
-    lpgOpen = this.value; renderLpg();
-    ['lpgMT','lpgM3','lpgBbl','lpgGal'].forEach(function(id){ document.getElementById(id).value = ''; });
-    document.getElementById('lpgOut').innerHTML = '';
-  });
-  document.getElementById('lpgTemp').addEventListener('input', function(){
-    renderLpgDensity();
-    var filled = ['lpgMT','lpgM3','lpgBbl','lpgGal'].filter(function(id){
-      return document.getElementById(id).value !== '';
-    })[0];
-    if(filled) lpgRecalc(filled);
-  });
-  ['lpgMT','lpgM3','lpgBbl','lpgGal'].forEach(function(id){
-    document.getElementById(id).addEventListener('input', function(){
-      if(lpgBusy) return;
-      lpgRecalc(id);
-    });
-  });
-  document.getElementById('lpgEditRows').addEventListener('click', openLpgRows);
-  document.getElementById('lpgAddProd').addEventListener('click', function(){
-    var name = prompt('Product name:', '');
-    if(!name || !name.trim()) return;
-    var p = { id: uid(), name: name.trim(), rows: [] };
-    lpgProducts.push(p);
-    lpgOpen = p.id;
-    if(saveLpg()) renderLpg();
-  });
-  document.getElementById('lpgDelProd').addEventListener('click', function(){
-    var prod = lpgById(lpgOpen);
-    if(!prod) return;
-    if(lpgProducts.length < 2){ alert('At least one product is kept.'); return; }
-    if(!confirm('Delete ' + prod.name + ' and its density table?')) return;
-    lpgProducts = lpgProducts.filter(function(p){ return p.id !== prod.id; });
-    lpgOpen = lpgProducts[0].id;
-    if(saveLpg()) renderLpg();
-  });
-
   document.getElementById('instrBackBtn').addEventListener('click', function(){ showTool(null); });
   document.getElementById('instrListBtn').addEventListener('click', showInstrList);
   document.getElementById('instrAddBtn').addEventListener('click', addInstrument);
