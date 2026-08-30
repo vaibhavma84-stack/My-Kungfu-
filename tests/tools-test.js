@@ -22,8 +22,8 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
      await p.locator('#toolsHome').isVisible() && !(await p.locator('#toolConvert').isVisible()));
   ok('converter tile has a drawn icon, not an emoji',
      await p.locator('[data-tool="convert"] svg').count()===1);
-  ok('four live tools on the launcher',
-     await p.locator('.tool-tile[data-tool]').count()===4,
+  ok('five live tools on the launcher',
+     await p.locator('.tool-tile[data-tool]').count()===5,
      await p.locator('.tool-tile[data-tool]').count());
   ok('no placeholder left, every tile does something',
      await p.locator('.tool-tile.soon').count()===0);

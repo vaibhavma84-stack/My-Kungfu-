@@ -9,7 +9,10 @@ cats = {}
 for cm in re.finditer(r"\{ key:'(\w+)'.*?units:\[(.*?)\]\s*\}", block, re.S):
     key, body = cm.group(1), cm.group(2)
     units = {}
-    for um in re.finditer(r"\['([^']+)',\s*'([^']*)',\s*([0-9.eE+-]+)\]", body):
+    # key, label, factor, and then whatever else the row carries (a display
+    # suffix was added later). Match the first three and ignore the rest --
+    # pinning the row's length is what made this whole check silently vacuous.
+    for um in re.finditer(r"\['([^']+)',\s*'([^']*)',\s*([0-9.eE+-]+)\s*[,\]]", body):
         units[um.group(1)] = float(um.group(3))
     cats[key] = units
 
@@ -68,6 +71,11 @@ REF = {
    'kn':1852/3600,'ms':1.0,'kmh':1000/3600,'mph':1609.344/3600,'fts':0.3048,
  },
 }
+
+# If the parse comes back empty the categories below all "mismatch" and every
+# factor is skipped -- a green-looking run that checked nothing. Stop instead.
+if not any(cats.values()):
+    print('PARSE FAILED: no factors read out of CONV_CATS'); sys.exit(2)
 
 bad = 0
 for cat, ref in REF.items():
