@@ -113,14 +113,17 @@ class MainActivity : AppCompatActivity() {
         web.loadUrl("file:///android_asset/index.html")
     }
 
-    /**
-     * Builds the picker the page actually asked for.
-     *
-     * This used to hardcode "image/*" and ignore the accept types altogether,
-     * so every file input in the app opened a photo gallery — which meant none
-     * of the four data imports (three CSV and the instrument JSON) could ever
-     * pick their file on Android. Photos worked, so nothing looked broken.
-     */
+    // Builds the picker the page actually asked for.
+    //
+    // This used to hardcode an image-only MIME type and ignore the accept types
+    // altogether, so every file input in the app opened a photo gallery — which
+    // meant none of the four data imports (three CSV and the instrument JSON)
+    // could ever pick their file on Android. Photos worked, so nothing looked
+    // broken until someone tried to import on the phone.
+    //
+    // Line comments, not a block comment: an image MIME type written out in a
+    // block comment contains the characters that end one, which silently turned
+    // the rest of this file into garbage and failed the build.
     private fun buildChooserIntent(params: WebChromeClient.FileChooserParams?): Intent {
         val accept = params?.acceptTypes?.filter { it.isNotBlank() } ?: emptyList()
         val wantsImage = accept.isEmpty() || accept.any { it.startsWith("image/") }
