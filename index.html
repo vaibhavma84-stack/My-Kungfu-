@@ -1274,8 +1274,9 @@
 
     <div id="instrListView">
       <div class="ship-note">
-        Each instrument holds its own procedures, its calibration and bump test log,
-        and its spare parts list. Everything is typed in from the maker's manual and
+        A reference shelf for the makers' manuals: each instrument holds its procedures
+        and its spare parts list, to be read while you work. It keeps no log &mdash; the
+        ship's log is the record. Everything here comes from the maker's manual and
         stays on this device.
       </div>
       <div class="form-row row-main">
@@ -1787,7 +1788,6 @@
     tasks.forEach(function(t){ if(t.photos) fn(t.photos); });
     extras.forEach(function(x){ if(x.photos) fn(x.photos); });
     instruments.forEach(function(x){
-      (x.log || []).forEach(function(e){ if(e.photos) fn(e.photos); });
       (x.procedures || []).forEach(function(pr){
         (pr.steps || []).forEach(function(st){ if(st.photos) fn(st.photos); });
       });
@@ -3093,7 +3093,18 @@
     try{
       var raw = localStorage.getItem(INSTR_KEY);
       instruments = raw ? JSON.parse(raw) : [];
+      // This tab used to hold a calibration log and due dates. It does not any
+      // more — the ship's log is kept by hand, and a half-filled second record
+      // is worse than none. Anything left from that version is dropped here so
+      // it stops taking up room; its photographs are freed by the collector.
+      var stale = false;
+      instruments.forEach(function(x){
+        ['log','calDays','lastCal','bumpDays','lastBump'].forEach(function(k){
+          if(x[k] !== undefined){ delete x[k]; stale = true; }
+        });
+      });
       lastGood[INSTR_KEY] = JSON.stringify(instruments);
+      if(stale) saveInstruments();
     }catch(e){ instruments = []; }
   }
   function saveInstruments(){
@@ -3102,18 +3113,6 @@
   function findInstr(id){
     for(var i=0;i<instruments.length;i++) if(instruments[i].id===id) return instruments[i];
     return null;
-  }
-
-  // due status from the last done date and the interval, in the same day-count
-  // terms the rest of the app uses
-  function dueState(lastISO, days){
-    if(!days)    return { cls:'due-none', text:'no interval set' };
-    if(!lastISO) return { cls:'due-none', text:'never done' };
-    var due  = addDaysISO(lastISO, days);
-    var left = daysBetweenISO(todayISO(), due);
-    if(left < 0)  return { cls:'due-over', text:'overdue ' + Math.abs(left) + 'd', due:due };
-    if(left <= 7) return { cls:'due-soon', text:'due in ' + left + 'd', due:due };
-    return { cls:'due-ok', text:'due ' + fmtDate(due), due:due };
   }
 
   function addInstrument(){
@@ -3125,10 +3124,8 @@
       serial: document.getElementById('inInstrSerial').value.trim(),
       location: document.getElementById('inInstrLoc').value.trim(),
       sensors: '',
-      calDays: 0,  lastCal: '',
-      bumpDays: 0, lastBump: '',
       notes: '',
-      parts: [], procedures: [], log: [],
+      parts: [], procedures: [],
       created: todayISO()
     });
     if(!saveInstruments()){ renderInstruments(); return; }
@@ -3147,8 +3144,6 @@
       return;
     }
     wrap.innerHTML = instruments.map(function(x){
-      var cal  = dueState(x.lastCal,  x.calDays);
-      var bump = dueState(x.lastBump, x.bumpDays);
       return '<div class="instr-card" data-instr="' + x.id + '">' +
                '<div class="im">' + escapeHtml(x.model) + '</div>' +
                '<div class="is">' +
@@ -3156,8 +3151,6 @@
                  (x.location ? '  ·  ' + escapeHtml(x.location) : '') +
                '</div>' +
                '<div class="ic">' +
-                 '<span class="due-tag ' + cal.cls  + '">Cal: '  + escapeHtml(cal.text)  + '</span>' +
-                 '<span class="due-tag ' + bump.cls + '">Bump: ' + escapeHtml(bump.text) + '</span>' +
                  '<span class="due-tag due-none">' + x.procedures.length + ' procedure' + (x.procedures.length===1?'':'s') + '</span>' +
                  '<span class="due-tag due-none">' + x.parts.length + ' spare' + (x.parts.length===1?'':'s') + '</span>' +
                '</div>' +
@@ -3177,9 +3170,6 @@
     if(!x){ showInstrList(); return; }
     document.getElementById('instrTitle').textContent = x.model;
 
-    var cal  = dueState(x.lastCal,  x.calDays);
-    var bump = dueState(x.lastBump, x.bumpDays);
-
     var h = '';
     h += '<div class="isec"><div class="isec-h"><h4>Identity</h4>' +
          '<button class="btn btn-ghost" data-ia="copy-instr">Duplicate</button>' +
@@ -3191,38 +3181,9 @@
            fld('Sensors fitted','fInstrSensors',x.sensors,'text','e.g. LEL / O2 / H2S / CO') +
          '</div></div>';
 
-    h += '<div class="isec"><div class="isec-h"><h4>Calibration &amp; bump test</h4>' +
-         '<span class="due-tag ' + cal.cls + '" data-due="cal">Cal: ' + escapeHtml(cal.text) + '</span>' +
-         '<span class="due-tag ' + bump.cls + '" data-due="bump">Bump: ' + escapeHtml(bump.text) + '</span></div>';
-    h += '<div class="form-row row-main">' +
-           fld('Last calibration','fLastCal',x.lastCal,'date') +
-           fld('Calibration interval (days)','fCalDays',x.calDays || '','number','e.g. 180') +
-           fld('Last bump test','fLastBump',x.lastBump,'date') +
-           fld('Bump interval (days)','fBumpDays',x.bumpDays || '','number','e.g. 30') +
-         '</div>';
-    h += '<div class="conv-note">A bump test only confirms the instrument still responds to gas and that '
-       + 'the alarms sound. A calibration adjusts what it actually reads against a known gas. '
-       + 'The intervals, the gases and the procedure all come from the maker\'s manual and the '
-       + 'company instructions — enter them below from those documents.</div></div>';
-
-    h += '<div class="isec"><div class="isec-h"><h4>Log</h4>' +
-         '<button class="btn btn-ghost" data-ia="add-log">+ Entry</button></div>';
-    if(!x.log.length) h += '<div class="iempty">No calibrations or bump tests logged yet.</div>';
-    else h += x.log.slice().sort(function(a,b){ return a.date < b.date ? 1 : -1; }).map(function(e){
-      return '<div class="irow">' +
-               '<div class="irm">' +
-                 '<div class="irt">' + escapeHtml(e.type) + ' — ' + escapeHtml(e.result || '') + '</div>' +
-                 '<div class="irs">' + escapeHtml(fmtDate(e.date)) +
-                   (e.gas ? '  ·  ' + escapeHtml(e.gas) : '') +
-                   (e.remarks ? '<br>' + escapeHtml(e.remarks) : '') + '</div>' +
-                 (e.photos && e.photos.length ? '<div class="thumbstrip">' + e.photos.map(function(src,i){
-                    return '<div class="thumb" data-iview="log:' + e.id + ':' + i + '"><img src="' + photoSrc(src) + '"></div>';
-                  }).join('') + '</div>' : '') +
-               '</div>' +
-               '<button class="icon-btn" data-ia="del-log" data-id="' + e.id + '">🗑</button>' +
-             '</div>';
-    }).join('');
-    h += '</div>';
+    h += '<div class="conv-note">Reference only. A copy of what the maker\'s manual says, ' +
+         'kept where it can be read with no signal. The paper copy governs, and nothing here ' +
+         'is a record that the work was done — that belongs in the ship\'s log.</div>';
 
     h += '<div class="isec"><div class="isec-h"><h4>Procedures</h4>' +
          '<button class="btn btn-ghost" data-ia="add-proc">+ Procedure</button></div>';
@@ -3319,8 +3280,6 @@
           serial: String(x.serial || ''),
           location: String(x.location || ''),
           sensors: String(x.sensors || ''),
-          calDays: parseInt(x.calDays, 10) || 0,  lastCal: String(x.lastCal || ''),
-          bumpDays: parseInt(x.bumpDays, 10) || 0, lastBump: String(x.lastBump || ''),
           notes: String(x.notes || ''),
           parts: (x.parts || []).map(function(p){
             return { id: uid(), name: String(p.name || ''),
@@ -3332,7 +3291,6 @@
                        return { id: uid(), text: String(st.text || ''), photos: [] };
                      }) };
           }),
-          log: [],
           created: todayISO()
         });
         added++;
@@ -3386,35 +3344,16 @@
     renderInstrDetail();
   }
 
-  // Only the two due tags change when a field changes, so only they are
-  // rewritten. Rebuilding the whole panel on every keystroke would destroy the
-  // field being typed into, which is what made an edit land one step late.
-  function refreshInstrDue(){
-    var x = findInstr(instrOpenId);
-    if(!x) return;
-    [['cal', 'Cal: ', dueState(x.lastCal, x.calDays)],
-     ['bump','Bump: ', dueState(x.lastBump, x.bumpDays)]].forEach(function(row){
-      var el = document.querySelector('#instrDetail [data-due="' + row[0] + '"]');
-      if(!el) return;
-      el.className = 'due-tag ' + row[2].cls;
-      el.textContent = row[1] + row[2].text;
-    });
-  }
-
   // fields write back as they are typed rather than behind a Save button, the
   // same way the Ship tab behaves
   function captureInstrField(el){
     var x = findInstr(instrOpenId);
     if(!x) return;
     var map = { fInstrModel:'model', fInstrSerial:'serial', fInstrLoc:'location',
-                fInstrSensors:'sensors', fLastCal:'lastCal', fLastBump:'lastBump',
-                fInstrNotes:'notes' };
-    if(map[el.id]){ x[map[el.id]] = el.value.trim(); }
-    else if(el.id === 'fCalDays')  x.calDays  = parseInt(el.value, 10) || 0;
-    else if(el.id === 'fBumpDays') x.bumpDays = parseInt(el.value, 10) || 0;
-    else return;
+                fInstrSensors:'sensors', fInstrNotes:'notes' };
+    if(!map[el.id]) return;
+    x[map[el.id]] = el.value.trim();
     saveInstruments();
-    refreshInstrDue();
     document.getElementById('instrTitle').textContent = x.model;
   }
 
@@ -4534,7 +4473,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v32';
+  var APP_BUILD = 'v33';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -5165,14 +5104,9 @@
     var thumb = e.target.closest('[data-iview]');
     if(thumb){
       var p = thumb.dataset.iview.split(':');
-      if(p[0] === 'log'){
-        var le = x.log.filter(function(v){ return v.id === p[1]; })[0];
-        if(le && le.photos[p[2]]) openViewer(le.photos[p[2]]);
-      } else {
-        var pr = x.procedures.filter(function(v){ return v.id === p[1]; })[0];
-        var st = pr && pr.steps.filter(function(v){ return v.id === p[2]; })[0];
-        if(st && st.photos[p[3]]) openViewer(st.photos[p[3]]);
-      }
+      var pr = x.procedures.filter(function(v){ return v.id === p[1]; })[0];
+      var st = pr && pr.steps.filter(function(v){ return v.id === p[2]; })[0];
+      if(st && st.photos[p[3]]) openViewer(st.photos[p[3]]);
       return;
     }
 
@@ -5188,18 +5122,14 @@
       return;
     }
 
-    // Two of the same instrument share their procedures and their spares list,
-    // but nothing else: the serial number, the calibration dates and the log
-    // belong to the physical unit in your hand, not to the model. So those are
-    // left empty rather than copied, which would put one unit's test history
-    // against another.
+    // Two of the same instrument share their procedures and their spares list.
+    // The serial number belongs to the physical unit in your hand rather than to
+    // the model, so it is left empty rather than copied.
     if(act === 'copy-instr'){
       var copy = {
         id: uid(),
         model: x.model + ' (copy)',
         serial: '', location: x.location, sensors: x.sensors,
-        calDays: x.calDays, lastCal: '',
-        bumpDays: x.bumpDays, lastBump: '',
         notes: x.notes,
         parts: (x.parts || []).map(function(pt){
           return { id: uid(), name: pt.name, partNo: pt.partNo, qty: pt.qty };
@@ -5211,39 +5141,11 @@
             return { id: uid(), text: st.text, photos: (st.photos || []).slice() };
           }) };
         }),
-        log: [],
         created: todayISO()
       };
       instruments.push(copy);
       if(!saveInstruments()) return;
       showInstrDetail(copy.id);
-      return;
-    }
-
-    if(act === 'add-log'){
-      var type = prompt('Entry type — calibration, bump test, or whatever it was:', 'Bump test');
-      if(type === null) return;
-      var date = prompt('Date (YYYY-MM-DD):', todayISO());
-      if(date === null) return;
-      var result = prompt('Result — pass, fail, or a reading:', 'Pass');
-      if(result === null) return;
-      var gas = prompt('Gas used, from the cylinder label (leave blank if none):', '');
-      if(gas === null) return;
-      var rem = prompt('Remarks (optional):', '');
-      if(rem === null) return;
-      x.log.push({ id: uid(), type: type.trim() || 'Entry', date: date.trim() || todayISO(),
-                   result: result.trim(), gas: gas.trim(), remarks: rem.trim(), photos: [] });
-      // logging a test moves the due date it belongs to
-      var lower = (type || '').toLowerCase();
-      if(lower.indexOf('cal') >= 0)  x.lastCal  = date.trim() || todayISO();
-      if(lower.indexOf('bump') >= 0) x.lastBump = date.trim() || todayISO();
-      saveInstruments(); renderInstrDetail();
-      return;
-    }
-    if(act === 'del-log'){
-      if(!confirm('Delete this log entry?')) return;
-      x.log = x.log.filter(function(v){ return v.id !== btn.dataset.id; });
-      saveInstruments(); renderInstrDetail();
       return;
     }
 

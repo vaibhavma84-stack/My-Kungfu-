@@ -57,8 +57,10 @@ for path in files:
            not re.search(r'\b(the )?[ST] (switch|switches)\b', body),
            re.findall(r'.{20}\b[ST] switch\w*', body)[:2])
         ok('%s: arrow keys present' % m, '▲' in body and '▼' in body)
-        # a bump interval nobody wrote down must not be invented
-        ok('%s: bump interval left unset' % m, not inst.get('bumpDays'), inst.get('bumpDays'))
+        # This tab is a reference shelf, not a second record. The ship's log is
+        # kept by hand, so nothing here should carry dates, intervals or a log.
+        record = [k for k in ('log','calDays','lastCal','bumpDays','lastBump') if k in inst]
+        ok('%s: carries no record fields, only reference' % m, not record, record)
 
 print('\nALL PASS' if not fails else '\n%d FAILED' % len(fails))
 sys.exit(1 if fails else 0)

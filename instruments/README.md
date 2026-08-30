@@ -75,5 +75,5 @@ it rather than inheriting a number nobody wrote down.
 The RX-8000 has no bump test at all: neither a procedure in its manual nor a
 separate maintenance manual to hold one. Only span adjustment is documented.
 
-Serial numbers, calibration dates and logs are also absent: those belong to a
-physical unit, not to a model.
+There are no dates, intervals or logs in these files at all. The tab is a
+reference shelf; the ship's log is kept by hand and is the record.

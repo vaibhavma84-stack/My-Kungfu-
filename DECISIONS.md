@@ -143,6 +143,12 @@ it — Sunday 30-Aug resolves to week commencing 24-Aug.
   are also deliberately unfiltered (`*/*`): file managers report .csv and .json
   as text/plain or octet-stream often enough that a filtered picker greys out
   the file the user came for.
+- **The Instruments tab is a reference shelf, not a second record.** It holds
+  the makers' procedures and spares lists to be read while working, and keeps
+  no log, no calibration dates and no intervals. The ship's log is filled by
+  hand and is the record; a half-kept duplicate of it in an app is worse than
+  none, and a stale OVERDUE badge on a reference card is worse still. Old
+  instruments are stripped of those fields on load.
 - **Instrument content is imported, never shipped in the app.** The
   transcriptions live in `instruments/` as files the ship imports, so the app
   itself still carries no manufacturer content — which is what keeps the
@@ -153,12 +159,10 @@ it — Sunday 30-Aug resolves to week commencing 24-Aug.
   were read directly to settle which was which. Anything extracted from a PDF
   that will become an instruction is worth checking against the font.
 - **Duplicating an instrument copies the model, never the unit.** Procedures and
-  the spares list belong to the model and come across; the serial number, the
-  calibration and bump dates and the whole log belong to the physical unit in
-  your hand and are left empty. Copying a log would put one unit's test history
-  against another. Step photographs are shared by reference rather than
-  duplicated — one picture of a screen serves both, and the collector counts
-  every use before deleting anything.
+  the spares list belong to the model and come across; the serial number belongs
+  to the physical unit in your hand and is left empty. Step photographs are
+  shared by reference rather than duplicated — one picture of a screen serves
+  both, and the collector counts every use before deleting anything.
 - **A field edit in the Instruments detail never rebuilds the panel.** Only the
   two due tags are rewritten. The first version re-rendered on change, which
   destroyed the field being typed into and made every edit land one step behind

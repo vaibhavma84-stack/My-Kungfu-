@@ -36,36 +36,28 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   const card = p.locator('.instr-card');
   ok('the instrument is listed', await card.count()===1);
   ok('serial shown', /A123456/.test(await card.textContent()));
-  ok('no interval set reads as such', /no interval set/.test(await card.textContent()));
+  ok('the card shows counts, not due dates',
+     /0 procedures/.test(await card.textContent()) && !/Cal:/.test(await card.textContent()),
+     await card.textContent());
 
   await card.click();
   await p.waitForTimeout(150);
   ok('detail opens', await p.locator('#instrDetailView').isVisible());
   ok('title becomes the instrument', (await p.textContent('#instrTitle')).trim()==='Riken Keiki GX-8000');
-  ok('bump vs calibration is explained', /bump test only confirms/i.test(await p.textContent('#instrDetail')));
-  ok('it says the numbers come from the manual', /maker's manual/i.test(await p.textContent('#instrDetail')));
+  ok('it says the content comes from the manual', /maker's manual/i.test(await p.textContent('#instrDetail')));
 
-  // ---- intervals drive the due state ----
+  // ---- it is a reference shelf, not a record ----
   await p.fill('#fInstrSensors','LEL / O2 / H2S / CO');
-  await p.fill('#fCalDays','180');
-  await p.waitForTimeout(120);
-  await p.fill('#fLastCal','2020-01-01');
-  await p.waitForTimeout(150);
-  ok('a long-past calibration reads overdue',
-     await p.locator('#instrDetail .due-over').count()>=1);
-  const today = new Date();
-  const iso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  await p.fill('#fBumpDays','30');
-  await p.waitForTimeout(120);
-  await p.fill('#fLastBump', iso(new Date(today.getTime()-27*864e5)));
-  await p.waitForTimeout(150);
-  ok('a test due within the week reads as due soon',
-     await p.locator('#instrDetail .due-soon').count()>=1,
-     await p.textContent('#instrDetail .isec-h'));
-  await p.fill('#fLastBump', iso(today));
-  await p.waitForTimeout(150);
-  ok('a test done today reads as in date',
-     await p.locator('#instrDetail .due-ok').count()>=1);
+  await p.waitForTimeout(200);
+  ok('there is no log section', !/No calibrations or bump tests logged/.test(await p.textContent('#instrDetail')));
+  ok('and no way to add one', await p.locator('[data-ia="add-log"]').count()===0);
+  ok('no calibration date field', await p.locator('#fLastCal').count()===0);
+  ok('no interval fields', await p.locator('#fCalDays').count()===0 && await p.locator('#fBumpDays').count()===0);
+  ok('no due badges on the card', await p.locator('#instrDetail .due-ok, #instrDetail .due-soon, #instrDetail .due-over').count()===0);
+  ok('it says plainly that it is reference only',
+     /Reference only/.test(await p.textContent('#instrDetail')));
+  ok('and points the record at the ship\'s log',
+     /ship's log/.test(await p.textContent('#instrDetail')));
 
   // ---- a procedure with steps ----
   answers = ['Changing the H2S alarm setpoint'];
@@ -100,14 +92,6 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('part number kept exactly', /ESH-A1DP/.test(await p.textContent('#instrDetail')));
   ok('quantity held shown', /2 held/.test(await p.textContent('#instrDetail')));
 
-  // ---- log, and logging a test moves its due date ----
-  answers = ['Calibration','2026-08-20','Pass','CH4 50%LEL / H2S 25ppm','Span gas from cylinder 4471'];
-  await p.click('[data-ia="add-log"]');
-  await p.waitForTimeout(200);
-  ok('log entry recorded', /Span gas from cylinder 4471/.test(await p.textContent('#instrDetail')));
-  ok('logging a calibration moves the last-calibration date',
-     (await p.inputValue('#fLastCal'))==='2026-08-20', await p.inputValue('#fLastCal'));
-
   // ---- it survives a reload ----
   await p.reload();
   await p.waitForTimeout(250);
@@ -131,12 +115,8 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('their steps came across', await p.locator('#instrDetail .step-n').count()===2);
   ok('step photos came across', await p.locator('#instrDetail .thumb img').count()>=1);
   ok('spares came across', /ESH-A1DP/.test(await p.textContent('#instrDetail')));
-  ok('the intervals came across', (await p.inputValue('#fCalDays'))==='180');
   ok('but not the serial number — that belongs to the unit',
      (await p.inputValue('#fInstrSerial'))==='', await p.inputValue('#fInstrSerial'));
-  ok('nor the calibration date', (await p.inputValue('#fLastCal'))==='', await p.inputValue('#fLastCal'));
-  ok('nor the test history',
-     /No calibrations or bump tests logged yet/.test(await p.textContent('#instrDetail')));
 
   // editing the copy must not disturb the original
   await p.fill('#fInstrModel','Riken Keiki GX-8000 TYPE O2');
@@ -189,8 +169,6 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
        /NO GAS ALARM IS TRIGGERED IN THE vol% RANGE-ONLY SETTING/.test(body));
     ok('and the four-step span order', /ORDER MATTERS ON THIS TYPE/.test(body));
     ok('the pump part number came across', /RP-11/.test(body));
-    ok('bump interval left unset, since the manuals do not state one',
-       (await p.inputValue('#fBumpDays'))==='', await p.inputValue('#fBumpDays'));
     await p.click('#instrListBtn');
     await p.waitForTimeout(200);
   }
