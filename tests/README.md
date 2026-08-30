@@ -27,7 +27,9 @@ asserts. `OUT` is where downloads and screenshots land (a temp dir by default).
 | `ship-test` | the Ship tab, prefill, and the particulars paste parser |
 | `blank-test` | the three-column blank sheet round-tripping through import |
 | `banner-test` | the backup reminder, its thresholds and snooze |
-| `tools-test` | the Tools tab, the converter and the unit guide — known conversions, the formula line, search, what it remembers |
+| `guide-check` | every Information entry has a note, and no note is keyed to an entry the guide does not show |
+| `factor-check` | all 70 converter factors re-derived from published definitions, independent of the app's own table |
+| `tools-test` | the Tools tab, the converter and the Information guide — known conversions, the formula line, search, what it remembers |
 | `eta-test` | the ETA tool — local-to-UTC conversion, half-hour and negative zones, the speed band and its arithmetic |
 | `instr-test` | the Instruments tool — procedures, steps, spares, the log, and the due-date states |
 | `photostore-test` | photographs in IndexedDB — migration from inline storage without loss, and far past the old ceiling |

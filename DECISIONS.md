@@ -206,7 +206,7 @@ it — Sunday 30-Aug resolves to week commencing 24-Aug.
   object is ever trusted with a time zone: the offset is applied as a number and
   every field is read with getUTC*. Zones run the full range in half-hour steps,
   because half-hour zones are in daily use east of Suez.
-- **The unit guide is plain text carried in the page.** Roughly 17 KB for 74
+- **The Information guide is plain text carried in the page.** Roughly 17 KB for 74
   entries, which is nothing against working with no signal. A build check
   asserts every unit in the converter has a guide entry and vice versa, so the
   two lists cannot drift.

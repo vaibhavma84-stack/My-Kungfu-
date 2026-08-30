@@ -18,6 +18,10 @@ for t in "$(dirname "$0")"/*-test.js "$(dirname "$0")"/collapse.js; do
   printf '%-22s ' "$(basename "$t" .js)"
   if out=$(node "$t" 2>&1); then echo "${out##*$'\n'}"; else echo "FAILED"; echo "$out" | tail -20; fail=1; fi
 done
+printf '%-22s ' "guide-check"
+if out=$(python3 "$(dirname "$0")/guide-check.py" 2>&1); then echo "${out##*$'\n'}"; else echo "FAILED"; echo "$out" | grep FAIL | head -5; fail=1; fi
+printf '%-22s ' "factor-check"
+if out=$(python3 "$(dirname "$0")/factor-check.py" 2>&1); then echo "${out##*$'\n'}"; else echo "FAILED"; echo "$out" | head -8; fail=1; fi
 printf '%-22s ' "instrument-files"
 if out=$(python3 "$(dirname "$0")/instrument-files-check.py" 2>&1); then echo "${out##*$'\n'}"; else echo "FAILED"; echo "$out" | grep FAIL | head -5; fail=1; fi
 

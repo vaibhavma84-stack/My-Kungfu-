@@ -177,7 +177,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('a big factor is grouped, not exponential',
      (await formulaFor('joule (J)'))==='J = GJ × 1 000 000 000', await formulaFor('joule (J)'));
 
-  // ---- the unit guide ----
+  // ---- the information guide ----
   // leave the tab and come back, since re-clicking the tab you are already on
   // is not what resets the launcher
   await p.click('#topTabs button[data-tab="jobs"]');
@@ -185,7 +185,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('a second tile is live now', await p.locator('[data-tool="guide"]').count()===1);
   await p.click('[data-tool="guide"]');
   ok('guide opens', await p.locator('#toolGuide').isVisible());
-  ok('title reads Unit guide', (await p.textContent('#pageTitle')).trim()==='Unit guide');
+  ok('title reads Information', (await p.textContent('#pageTitle')).trim()==='Information');
   ok('opens on a category with its intro', (await p.textContent('#guideIntro')).length>40);
   ok('lists that category\'s units',
      await p.locator('#guideOut .ug-item').count()===14, await p.locator('#guideOut .ug-item').count());
@@ -228,6 +228,69 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.fill('#guideSearch','');
   await p.waitForTimeout(120);
   ok('clearing the search brings the chips back', await p.locator('#guideCats').isVisible());
+
+  // ---- GX-8000 sensing principles, a category that is not units ----
+  // The chip list is CONV_CATS plus the guide's own topics, and the chip click
+  // used to look the key up in CONV_CATS only -- which silently fell back to
+  // Pressure rather than failing, so this asserts the content, not just that
+  // something rendered.
+  const gxChip = p.locator('#guideCats button', { hasText:'GX-8000' });
+  ok('the GX-8000 category is offered', await gxChip.count()===1);
+  await gxChip.click();
+  await p.waitForTimeout(120);
+  ok('it does not fall back to another category',
+     /five separate cells/.test(await p.textContent('#guideIntro')),
+     (await p.textContent('#guideIntro')).slice(0,60));
+  ok('every sensor and topic is listed',
+     await p.locator('#guideOut .ug-item').count()===11,
+     await p.locator('#guideOut .ug-item').count());
+
+  const lelItem = p.locator('.ug-item', { hasText:'%LEL range' }).first();
+  await lelItem.locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  const lelText = await lelItem.textContent();
+  ok('the %LEL sensor names its principle', /catalytic/i.test(lelText));
+  ok('and says it needs oxygen to work', /oxygen/i.test(lelText));
+
+  const volItem = p.locator('.ug-item', { hasText:'vol% range' }).first();
+  await volItem.locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  const volText = await volItem.textContent();
+  ok('the vol% sensor is thermal conductivity, a different cell',
+     /thermal conductivity/i.test(volText));
+  ok('and is the one that works with no oxygen', /needs no oxygen/i.test(volText));
+
+  // the calculation, which is the part worth getting right
+  await p.fill('#guideSearch','%LEL actually means');
+  await p.waitForTimeout(120);
+  await p.locator('#guideOut .ug-item').first().locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  const calc = await p.textContent('#guideOut');
+  ok('the LEL formula is spelled out both ways',
+     /reading in %LEL\s*=\s*\(gas present in vol%\)/.test(calc) &&
+     /gas present in vol%\s*=\s*reading in %LEL/.test(calc));
+  ok("and is anchored to the manual's own methane example",
+     /100 %LEL is 5 vol% methane/.test(calc) && /60 %LEL is 3 vol%/.test(calc));
+  ok('the published limits are marked as not being from the manual',
+     /not from the RKI manual/.test(calc));
+
+  // galvanic / electrochemical, and the documented CO behaviour
+  await p.fill('#guideSearch','galvanic');
+  await p.waitForTimeout(120);
+  await p.locator('#guideOut .ug-item').first().locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  ok('oxygen is a galvanic cell measuring partial pressure',
+     /partial pressure/i.test(await p.textContent('#guideOut')));
+
+  await p.fill('#guideSearch','100 %LEL, the CO reading rises');
+  await p.waitForTimeout(120);
+  ok('the CO cross-reading over 100 %LEL is documented',
+     await p.locator('#guideOut .ug-item').count()>=1);
+
+  await p.fill('#guideSearch','');
+  await p.waitForTimeout(120);
+  await p.locator('#guideCats button').first().click();
+  await p.waitForTimeout(120);
 
   await p.click('#guideBackBtn');
   ok('back returns to the launcher', await p.locator('#toolsHome').isVisible());
