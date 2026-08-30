@@ -7,7 +7,7 @@ committed here.
 
 | File | Transcribed from |
 |---|---|
-| `GX-8000.json` | Riken Keiki GX-8000 **TYPE A** — `PT0E-09811` Operating Manual and `H4E-0050` User Maintenance Manual |
+| `GX-8000.json` | Riken Keiki GX-8000 **TYPE A** — `PT0E-09811` Operating Manual and `H4E-0050` User Maintenance Manual, **with 27 figures** |
 | `GX-8000-TYPE-O2.json` | Riken Keiki GX-8000 **TYPE O2** — `PT0E-1089` Operating Manual and `H4E-0050` |
 | `RX-8000.json` | Riken Keiki RX-8000 — `PT0E-11911` Operating Manual (it carries its own calibration procedure; there is no separate maintenance manual) |
 
@@ -33,6 +33,22 @@ instrument notes, because picking one would be wrong half the time.
 each step cites a document, that both approval tables survive, that no step
 tells anyone to press an "S" or "T" switch, and that no bump interval has been
 invented.
+
+## The pictures come out of the manuals
+
+`add-figures.py` pulls the raster images embedded in the supplied PDFs and
+attaches each to the step it illustrates — the LCD flow for `ALARM-P`, the bump
+test pass and fail paths, `AUTO CAL`, `ONE CAL`, `VOL Z.CAL`, the air
+calibration sequence, the `HC RANGE` screens, and the activated carbon filter
+steps. They are the maker's own drawings, not anything redrawn.
+
+Each is matched by the manual page the step already cites, the script fails
+rather than silently skipping when a figure has nowhere to go, and it clears
+existing figures first so a re-run never doubles them up.
+
+Line art is stored as a 16-colour PNG at 1100px: about a third the size of the
+same drawing as a JPEG, and without the ringing JPEG puts around every rule.
+Twenty-seven figures come to 0.49 MB.
 
 ## The variant is not a detail
 

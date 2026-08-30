@@ -91,7 +91,84 @@ if all(numbers):
     ok('the total on each page is the real total',
        all(n[1] == len(pages) for n in numbers), numbers)
 
-# 5. no blank trailing page
+# 5. the photographs sit in the middle of the page, not up under the header
+# The letterhead logo is drawn at the top of every page. Including it puts the
+# measured band's top edge at the page top no matter where the photographs are,
+# which made the centring check pass whatever the layout did. Page one carries
+# the logo and nothing else, so its XObject names identify it.
+def logo_names(page):
+    res = page.get('/Resources')
+    xo = res.get('/XObject').get_object() if res and res.get('/XObject') else {}
+    return set(k for k in xo if xo[k].get_object().get('/Subtype') == '/Image')
+
+
+def image_band(page, exclude=frozenset()):
+    """Vertical extent of the drawn images, in PDF user units from the bottom.
+
+    An image is placed by a cm matrix followed, not necessarily immediately, by
+    "/Name Do" — colour and graphics-state operators sit in between. Requiring
+    them to be adjacent matched nothing at all, and the check passed by never
+    running, which is the same as no check.
+    """
+    try:
+        content = page.get_contents().get_data().decode('latin1')
+    except Exception:
+        return None
+    num = r'(-?[\d.]+)'
+    pat = re.compile(num + r'\s+' + num + r'\s+' + num + r'\s+' + num + r'\s+' +
+                     num + r'\s+' + num + r'\s+cm\b(?:(?!\bcm\b).)*?/\w+\s+Do\b', re.S)
+    ys = []
+    for m in pat.finditer(content):
+        name = re.search(r'/(\w+)\s+Do\b', m.group(0)).group(1)
+        if name in exclude:
+            continue
+        d = float(m.group(4))       # vertical scale, negative when flipped
+        f = float(m.group(6))       # vertical translation
+        ys.append((min(f, f + d), max(f, f + d)))
+    if not ys:
+        return None
+    return min(y[0] for y in ys), max(y[1] for y in ys)
+
+# Rather than guess at page geometry — the content stream is in a scaled,
+# top-down space and the repeating header eats an unknown slice of it — the full
+# pages calibrate the check. A full page's photographs fill the usable area, so
+# their band marks its extent. A part-full page is centred when its band shares
+# that same midpoint.
+logo = set(n.lstrip('/') for n in logo_names(reader.pages[0]))
+bands = {}
+for i, page in enumerate(reader.pages[1:], start=2):
+    band = image_band(page, logo)
+    ok('page %d: image placements could be read' % i, band is not None,
+       'no cm/Do pairs found - the check cannot see the layout')
+    if band:
+        bands[i] = band
+
+photo_pages = [i for i in bands if counts[i - 1] > 1]
+fullest = max((counts[i - 1] for i in photo_pages), default=0)
+full = [i for i in photo_pages if counts[i - 1] == fullest]
+part = [i for i in photo_pages if counts[i - 1] < fullest]
+
+ok('there is a full page to calibrate against', bool(full), sorted(bands))
+ok('there is a part-full page, where centring is visible', bool(part),
+   'every page is full - centring cannot be observed')
+
+checked = 0
+if full and part:
+    usable = (min(bands[i][0] for i in full), max(bands[i][1] for i in full))
+    target = (usable[0] + usable[1]) / 2
+    span = usable[1] - usable[0]
+    for i in part:
+        mid = (bands[i][0] + bands[i][1]) / 2
+        off = abs(mid - target) / span
+        checked += 1
+        ok('page %d (part full): photographs are centred, not left at the top' % i,
+           off < 0.05,
+           'band midpoint %.0f against %.0f for a full page, %.0f%% of the usable height out'
+           % (mid, target, off * 100))
+
+ok('the centring check actually ran on the photo pages', checked > 0, checked)
+
+# 6. no blank trailing page
 ok('the last page is not blank', pages[-1].strip() != '' or counts[-1] > 1,
    'last page empty')
 

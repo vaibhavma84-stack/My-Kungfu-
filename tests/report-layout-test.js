@@ -36,9 +36,13 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
       return c.toDataURL('image/jpeg', 0.7);
     };
     const t=JSON.parse(localStorage.getItem('gasplanet_todo_v1'));
+    // Deliberately uneven: 3, 3, 3 and 1 photographs give seven pairs, so the
+    // last page holds a single pair. A page that is completely full looks the
+    // same centred or not, so a run of full pages cannot test centring at all.
+    const counts = [3, 3, 3, 1];
     t.forEach((j,n)=>{
       j.done=true; j.dateCompleted='2026-08-19';
-      j.photos=[0,1,2].map(k=>shot(n*70+k*20, (n+1)+'-'+(k+1)));
+      j.photos=[]; for(let k=0;k<counts[n];k++) j.photos.push(shot(n*70+k*20, (n+1)+'-'+(k+1)));
     });
     localStorage.setItem('gasplanet_todo_v1', JSON.stringify(t));
   });
@@ -92,11 +96,11 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
 
   // photo order is stored on the job, so it must survive into localStorage
   const before = await p.evaluate(()=>JSON.parse(localStorage.getItem('gasplanet_todo_v1'))
-    .find(t=>/Weekly bilge/.test(t.job)).photos.length);
-  await p.locator('.rv-block', { hasText:'Weekly bilge' }).first().locator('[data-rp="right"]').first().click();
+    .find(t=>/Derusting/.test(t.job)).photos.length);
+  await p.locator('.rv-block', { hasText:'Derusting' }).first().locator('[data-rp="right"]').first().click();
   await p.waitForTimeout(250);
   ok('moving a photo keeps every photo', await p.evaluate(()=>JSON.parse(localStorage.getItem('gasplanet_todo_v1'))
-    .find(t=>/Weekly bilge/.test(t.job)).photos.length)===before, before);
+    .find(t=>/Derusting/.test(t.job)).photos.length)===before, before);
 
   await p.click('[data-rv="arrange"]');
   await p.waitForTimeout(250);

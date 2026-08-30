@@ -847,8 +847,19 @@
     /* Pushes the page number down without risking an overflow: the printable
        area under the repeating letterhead is about 239mm, so 170mm can never
        spill a sheet onto a second page and throw the numbering out. */
-    .rv-sheetin{min-height:170mm;}
+    /* The printable area under the repeating letterhead measures about 237mm.
+       205mm pads a short page enough to centre in without ever being tall
+       enough to push a full one onto a second sheet. */
+    .rv-sheetin{min-height:205mm;}
     .rv-pagenum{border-top:none; color:#444;}
+    /* Photographs and their captions sit in the middle of the page rather than
+       riding up under the letterhead — a page holding one pair looked like a
+       mistake otherwise. The statements on page one stay at the top, being a
+       list that should start where the eye does. */
+    .rv-sheet .rv-photos{
+      flex:1 1 auto; display:flex; flex-direction:column; justify-content:center;
+      margin-top:0;
+    }
     /* one sheet per page: the statements alone first, then four photographs
        to a page. The last sheet must not break, or a blank page follows it. */
     tr.rv-sheet{page-break-after:always; break-after:page;}
@@ -3243,8 +3254,22 @@
   // to key it into a phone, and the same file serves as the backup.
   function exportInstruments(){
     if(!instruments.length){ alert('No instruments to export yet.'); return; }
+    // Photographs are stored by reference, so an export that copied the
+    // references would be useless anywhere else. They are resolved back to real
+    // images here, which is what makes an exported file worth carrying.
     var payload = { format: 'gasplanet-instruments', version: 1,
-                    exported: todayISO(), instruments: instruments };
+                    exported: todayISO(),
+                    instruments: instruments.map(function(x){
+                      var copy = {};
+                      Object.keys(x).forEach(function(k){ copy[k] = x[k]; });
+                      copy.procedures = (x.procedures || []).map(function(pr){
+                        return { title: pr.title, steps: (pr.steps || []).map(function(st){
+                          return { text: st.text,
+                                   photos: (st.photos || []).map(photoSrc) };
+                        }) };
+                      });
+                      return copy;
+                    }) };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -3271,10 +3296,14 @@
       catch(e){ alert('That ' + how + ' could not be read as instrument data.'); return; }
       var list = data && data.instruments;
       if(!list || !list.length){ alert('No instruments found in that ' + how + '.'); return; }
+      // Pictures arrive inline and have to be put in the photo store before the
+      // instruments are saved, so the record only ever holds references.
+      var pending = [];
+      var fresh = [];
       var added = 0;
       list.forEach(function(x){
         if(!x || !x.model) return;
-        instruments.push({
+        fresh.push({
           id: uid(),
           model: String(x.model),
           serial: String(x.serial || ''),
@@ -3288,18 +3317,47 @@
           procedures: (x.procedures || []).map(function(pr){
             return { id: uid(), title: String(pr.title || ''),
                      steps: (pr.steps || []).map(function(st){
-                       return { id: uid(), text: String(st.text || ''), photos: [] };
+                       var photos = [];
+                       (st.photos || []).forEach(function(src){
+                         if(typeof src === 'string' && src.slice(0, 5) === 'data:'){
+                           photos.push('');
+                           pending.push({ arr: photos, at: photos.length - 1, src: src });
+                         }
+                       });
+                       return { id: uid(), text: String(st.text || ''), photos: photos };
                      }) };
           }),
           created: todayISO()
         });
         added++;
       });
-      if(!saveInstruments()){ renderInstruments(); return; }
-      showInstrList();
-      alert(added + ' instrument' + (added === 1 ? '' : 's') + ' added.\n\n' +
-            'Photographs are not carried in this file — add them on the steps ' +
-            'that need one. Nothing already on the device was changed.');
+
+      var pictures = pending.length;
+      function finish(){
+        // anything that failed to store is dropped rather than left as a blank
+        fresh.forEach(function(inst){
+          inst.procedures.forEach(function(pr){
+            pr.steps.forEach(function(st){
+              st.photos = st.photos.filter(function(v){ return !!v; });
+            });
+          });
+        });
+        instruments = instruments.concat(fresh);
+        if(!saveInstruments()){ renderInstruments(); return; }
+        showInstrList();
+        alert(added + ' instrument' + (added === 1 ? '' : 's') + ' added' +
+              (pictures ? ', with ' + pictures + ' picture' + (pictures === 1 ? '' : 's') : '') +
+              '.\n\nNothing already on the device was changed.');
+      }
+
+      if(!pictures){ finish(); return; }
+      var left = pictures;
+      pending.forEach(function(job){
+        keepPhoto(job.src, function(ref){
+          job.arr[job.at] = ref || '';
+          if(--left === 0) finish();
+        });
+      });
     })();
   }
 
@@ -4473,7 +4531,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v33';
+  var APP_BUILD = 'v34';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }

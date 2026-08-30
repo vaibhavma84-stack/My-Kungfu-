@@ -169,6 +169,18 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
        /NO GAS ALARM IS TRIGGERED IN THE vol% RANGE-ONLY SETTING/.test(body));
     ok('and the four-step span order', /ORDER MATTERS ON THIS TYPE/.test(body));
     ok('the pump part number came across', /RP-11/.test(body));
+
+    // the manual's own drawings must arrive with the steps they illustrate
+    const figs = await p.locator('#instrDetail .thumbstrip img').count();
+    ok('the figures came across with it', figs >= 20, figs);
+    const decoded = await p.locator('#instrDetail .thumbstrip img')
+      .evaluateAll(els => els.filter(i => i.naturalWidth > 0).length);
+    ok('and every one of them actually decodes', decoded === figs, decoded + ' of ' + figs);
+    ok('they are held by reference, not inlined into the record',
+       await p.evaluate(() => localStorage.getItem('gasplanet_instr_v1').indexOf('data:image') < 0));
+    ok('the written record stayed small despite them',
+       await p.evaluate(() => localStorage.getItem('gasplanet_instr_v1').length) < 120000,
+       await p.evaluate(() => localStorage.getItem('gasplanet_instr_v1').length));
     await p.click('#instrListBtn');
     await p.waitForTimeout(200);
   }
