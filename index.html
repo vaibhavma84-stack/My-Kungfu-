@@ -669,6 +669,30 @@
   .mr-row .mr-c{font-size:11.5px; color:var(--ink-soft); flex:0 0 auto;}
   .mr-none{padding:14px 12px; font-size:12.5px; color:var(--ink-soft); text-align:center;}
 
+  .store-row{
+    display:flex; width:100%; align-items:baseline; gap:10px; text-align:left;
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; margin-top:6px; font-family:inherit; color:var(--ink); cursor:pointer;
+  }
+  .store-row .sr-c{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:13px; font-weight:700; color:var(--steel); flex:0 0 auto;
+  }
+  .store-row .sr-d{font-size:13px; flex:1; min-width:0; word-break:break-word;}
+  .store-row .sr-u{font-size:11px; color:var(--ink-soft); flex:0 0 auto;}
+  .store-row .sr-p{font-size:11px; color:var(--steel); flex:0 0 auto; font-weight:700;}
+  .store-head{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:14px 15px; margin:6px 0 10px;
+  }
+  .store-head .sh-c{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:20px; font-weight:700; color:var(--steel); letter-spacing:.02em;
+  }
+  .store-head .sh-d{font-size:15px; font-weight:650; margin-top:5px; line-height:1.4;}
+  .store-head .sh-u{font-size:12px; color:var(--ink-soft); margin-top:6px;}
+  .store-row.copied{background:var(--tint-ok); border-color:rgba(63,97,71,.3);}
+
   .instr-card{
     background:var(--card); border:1px solid var(--line); border-radius:12px;
     padding:13px 14px; margin-top:8px; cursor:pointer;
@@ -1382,6 +1406,17 @@
         World map
         <span class="tsub">Coast, borders, rivers, ports and cities</span>
       </button>
+      <button class="tool-tile" data-tool="stores">
+        <span class="ti">
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"
+                  d="M3 7h18v13H3zM3 7l2-3h14l2 3"/>
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M10 11h4"/>
+          </svg>
+        </span>
+        Stores
+        <span class="tsub">Your own catalogue, searched offline</span>
+      </button>
       <button class="tool-tile" data-tool="instr">
         <span class="ti">
           <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
@@ -1525,6 +1560,28 @@
       <button id="mapManualBtn">Enter position</button>
     </div>
     <div class="conv-note" id="mapNote"></div>
+  </div>
+
+  <div id="toolStores" style="display:none;">
+    <div class="tool-head">
+      <button class="btn btn-ghost" id="storesBackBtn">&lsaquo; Tools</button>
+      <div class="tool-title">Stores catalogue</div>
+    </div>
+    <div id="storesTop">
+      <div class="map-search">
+        <input type="search" id="storesSearchIn" placeholder="Code, or a few words&hellip;">
+      </div>
+      <div class="conv-note" id="storesNote"></div>
+      <div class="form-row flags-row">
+        <button class="btn btn-ghost" id="storesImportBtn">Import CSV</button>
+        <button class="btn btn-danger" id="storesClearBtn" style="display:none;">Remove catalogue</button>
+        <input type="file" id="storesImportInput" accept=".csv,text/csv,text/plain" style="display:none">
+      </div>
+    </div>
+    <div id="storesBrowse">
+      <div id="storesOut"></div>
+    </div>
+    <div id="storesItem" style="display:none;"></div>
   </div>
 
   <div id="toolInstr" style="display:none;">
@@ -2165,6 +2222,11 @@
         (pr.steps || []).forEach(function(st){ if(st.photos) fn(st.photos); });
       });
     });
+    // Photographs of stores items. Anything holding a photo MUST be listed
+    // here: the collector deletes every reference it cannot see, so a new
+    // owner that is missed loses its pictures on the next run.
+    var pix = storePhotos();
+    Object.keys(pix).forEach(function(code){ if(pix[code] && pix[code].length) fn(pix[code]); });
   }
 
   // Photographs saved inline by an older version are moved across on first run.
@@ -4611,6 +4673,322 @@
     requestAnimationFrame(function(){ mapDraw(); });
   }
 
+
+  // ---------- Tools: stores catalogue ----------
+  // A ship's stores catalogue -- IMPA, ISSA, or a maker's own parts list --
+  // held on the phone and searched with no signal.
+  //
+  // The catalogue itself is NOT shipped with the app. IMPA's is copyrighted
+  // commercial data sold by subscription, and a code recalled wrongly means the
+  // wrong part arrives on board, which is worse than no code at all. So this is
+  // the machinery only: the ship imports its own copy, from whatever its
+  // purchasing system can export, and this makes it searchable.
+  //
+  // Fifty thousand rows is well past what localStorage will hold, so the
+  // catalogue lives in IndexedDB alongside the photographs and is read into
+  // memory once when the tool is opened.
+  // Its OWN database, deliberately. Sharing the photo database meant opening it
+  // at a higher version, and the photo code opens it at version 1 -- which then
+  // fails with a VersionError and silently takes every photograph in the app
+  // with it. A separate database cannot interfere with anything.
+  var STORES_DB = 'gasplanet_stores';
+  var STORES_STORE = 'stores';
+  var STORES_META = 'gasplanet_stores_v1';
+  var storesDB = null, storesRows = null, storesLoading = false;
+
+  function openStoresDB(cb){
+    if(!window.indexedDB){ cb(null); return; }
+    var req;
+    try{ req = indexedDB.open(STORES_DB, 1); }
+    catch(e){ cb(null); return; }
+    req.onupgradeneeded = function(){
+      var db = req.result;
+      if(!db.objectStoreNames.contains(STORES_STORE)) db.createObjectStore(STORES_STORE);
+    };
+    req.onsuccess = function(){ cb(req.result); };
+    req.onerror   = function(){ cb(null); };
+    req.onblocked = function(){ cb(null); };
+  }
+
+  // Photographs of items, by code. Only the references live here -- the images
+  // themselves are in IndexedDB with all the others -- so this stays small
+  // enough for localStorage even with a few hundred items photographed.
+  var STORE_PIX = 'gasplanet_storepix_v1';
+  function storePhotos(){
+    try{ return JSON.parse(localStorage.getItem(STORE_PIX) || '{}'); }catch(e){ return {}; }
+  }
+  function setStorePhotos(m){
+    try{ localStorage.setItem(STORE_PIX, JSON.stringify(m)); return true; }
+    catch(e){ alert('No room left on this device to save that photograph.'); return false; }
+  }
+  function storePhotosFor(code){ return storePhotos()[code] || []; }
+
+  function storesMeta(){
+    try{ return JSON.parse(localStorage.getItem(STORES_META) || '{}'); }catch(e){ return {}; }
+  }
+  function setStoresMeta(m){
+    try{ localStorage.setItem(STORES_META, JSON.stringify(m)); }catch(e){}
+  }
+
+  function storesLoad(cb){
+    if(storesRows){ cb(storesRows); return; }
+    if(storesLoading){ setTimeout(function(){ storesLoad(cb); }, 120); return; }
+    storesLoading = true;
+    openStoresDB(function(db){
+      storesDB = db;
+      if(!db){ storesLoading = false; storesRows = []; cb(storesRows); return; }
+      try{
+        var tx = db.transaction(STORES_STORE, 'readonly');
+        var rq = tx.objectStore(STORES_STORE).get('catalogue');
+        rq.onsuccess = function(){
+          storesRows = rq.result || [];
+          storesLoading = false;
+          cb(storesRows);
+        };
+        rq.onerror = function(){ storesRows = []; storesLoading = false; cb(storesRows); };
+      }catch(e){ storesRows = []; storesLoading = false; cb(storesRows); }
+    });
+  }
+
+  function storesSave(rows, cb){
+    openStoresDB(function(db){
+      storesDB = db;
+      if(!db){ cb(false); return; }
+      try{
+        var tx = db.transaction(STORES_STORE, 'readwrite');
+        tx.objectStore(STORES_STORE).put(rows, 'catalogue');
+        tx.oncomplete = function(){ storesRows = rows; cb(true); };
+        tx.onerror    = function(){ cb(false); };
+        tx.onabort    = function(){ cb(false); };
+      }catch(e){ cb(false); }
+    });
+  }
+
+  // --- searching ---
+  // Codes are matched from the start, which is how a section of the catalogue
+  // is looked up. Words are matched anywhere, and every word has to appear, so
+  // "wire rope 16" narrows rather than widens.
+  function storesSearch(q, limit){
+    if(!storesRows) return [];
+    q = (q || '').trim().toLowerCase();
+    if(q.length < 2) return [];
+    // A code lookup only when the whole query IS a code -- digits, spaces and
+    // dashes and nothing else. Treating any query that merely contains digits
+    // as a code meant "stainless bolt m12" returned everything numbered 12
+    // rather than the bolts.
+    var isCode = /^[0-9][0-9\s.-]*$/.test(q);
+    var digits = q.replace(/[^0-9]/g, '');
+    var words = q.split(/\s+/).filter(function(w){ return w.length > 1; });
+    var byCode = [], byText = [];
+    for(var i = 0; i < storesRows.length; i++){
+      var r = storesRows[i];
+      if(isCode && digits.length >= 2 && r.c.replace(/[^0-9]/g, '').indexOf(digits) === 0){
+        byCode.push(r);
+        if(byCode.length >= limit) break;
+        continue;
+      }
+      if(!words.length) continue;
+      var hay = (r.c + ' ' + r.d).toLowerCase();
+      var all = true;
+      for(var w = 0; w < words.length; w++){
+        if(hay.indexOf(words[w]) < 0){ all = false; break; }
+      }
+      if(all && byText.length < limit) byText.push(r);
+    }
+    return byCode.concat(byText).slice(0, limit);
+  }
+
+  window.__storesSearch = function(q, n){ return storesSearch(q, n || 60); };
+
+  function storesFmtCode(c){
+    // IMPA codes are six digits and are read in pairs
+    var d = String(c).replace(/[^0-9]/g, '');
+    return d.length === 6 ? d.slice(0,2) + '-' + d.slice(2,4) + '-' + d.slice(4) : String(c);
+  }
+
+  // --- import ---
+  // Takes whatever the purchasing system exported: any CSV with a code column
+  // and a description column, under any of the usual names.
+  function storesImport(file){
+    var out = document.getElementById('storesOut');
+    out.innerHTML = '<div class="conv-note">Reading ' + escapeHtml(file.name) + '&hellip;</div>';
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var rows;
+      try{ rows = parseCSV(e.target.result); }
+      catch(err){ out.innerHTML = '<div class="moll-warn">That file could not be read as CSV.</div>'; return; }
+      if(rows.length < 2){
+        out.innerHTML = '<div class="moll-warn">No rows in that file.</div>'; return;
+      }
+      var head = rows[0].map(normalizeHeader);
+      var cCode = -1, cDesc = -1, cUnit = -1;
+      head.forEach(function(h, i){
+        if(cCode < 0 && /^(impa|impacode|code|itemcode|article|articleno|artno|partno|itemno|material)$/.test(h)) cCode = i;
+        if(cDesc < 0 && /^(description|desc|item|itemdescription|name|itemname|text|material description|materialdescription)$/.test(h)) cDesc = i;
+        if(cUnit < 0 && /^(unit|uom|units|unitofmeasure|measure)$/.test(h)) cUnit = i;
+      });
+      // fall back on shape: the column that is mostly digits is the code,
+      // the widest text column is the description
+      if(cCode < 0 || cDesc < 0){
+        var n = Math.min(rows.length, 200), score = [];
+        for(var col = 0; col < head.length; col++){
+          var digits = 0, len = 0;
+          for(var r = 1; r < n; r++){
+            var v = (rows[r][col] || '').trim();
+            if(/^[0-9][0-9\s-]{3,}$/.test(v)) digits++;
+            len += v.length;
+          }
+          score.push({ col: col, digits: digits, len: len });
+        }
+        if(cCode < 0){
+          var best = score.slice().sort(function(a,b){ return b.digits - a.digits; })[0];
+          if(best && best.digits > n * 0.5) cCode = best.col;
+        }
+        if(cDesc < 0){
+          var wide = score.filter(function(s){ return s.col !== cCode; })
+                          .sort(function(a,b){ return b.len - a.len; })[0];
+          if(wide) cDesc = wide.col;
+        }
+      }
+      if(cCode < 0 || cDesc < 0){
+        out.innerHTML = '<div class="moll-warn">Could not find a code column and a description column in that ' +
+          'file. Name them <b>Code</b> and <b>Description</b> in the first row and try again.</div>';
+        return;
+      }
+
+      var list = [], skipped = 0;
+      for(var i = 1; i < rows.length; i++){
+        var code = (rows[i][cCode] || '').trim();
+        var desc = (rows[i][cDesc] || '').trim();
+        if(!code || !desc){ skipped++; continue; }
+        var rec = { c: code, d: desc };
+        if(cUnit >= 0 && rows[i][cUnit]) rec.u = (rows[i][cUnit] || '').trim();
+        list.push(rec);
+      }
+      if(!list.length){
+        out.innerHTML = '<div class="moll-warn">No usable rows: every line was missing a code or a description.</div>';
+        return;
+      }
+      out.innerHTML = '<div class="conv-note">Saving ' + list.length.toLocaleString() + ' items&hellip;</div>';
+      storesSave(list, function(okSave){
+        if(!okSave){
+          out.innerHTML = '<div class="moll-warn">Could not save the catalogue on this device. ' +
+            'It needs IndexedDB, which a private browsing window does not provide.</div>';
+          return;
+        }
+        setStoresMeta({ name: file.name, n: list.length, on: todayISO(),
+                        unit: cUnit >= 0, cols: [head[cCode] || '?', head[cDesc] || '?'] });
+        document.getElementById('storesSearchIn').value = '';
+        renderStores();
+      });
+    };
+    reader.onerror = function(){
+      out.innerHTML = '<div class="moll-warn">That file could not be read.</div>';
+    };
+    reader.readAsText(file);
+  }
+
+  function storesClear(){
+    if(!confirm('Remove the imported catalogue from this device? The file you imported is not affected.')) return;
+    storesSave([], function(){
+      setStoresMeta({});
+      document.getElementById('storesSearchIn').value = '';
+      renderStores();
+    });
+  }
+
+  function renderStoresResults(){
+    var out = document.getElementById('storesOut');
+    var q = document.getElementById('storesSearchIn').value;
+    var meta = storesMeta();
+    if(!meta.n){
+      out.innerHTML =
+        '<div class="conv-note">No catalogue on this device yet.<br><br>' +
+        'Import a CSV with a <b>code</b> column and a <b>description</b> column &mdash; whatever your ' +
+        'purchasing system exports will do. It is searched here with no signal.<br><br>' +
+        '<b>The catalogue is not supplied with the app.</b> IMPA sell theirs, and a code guessed wrong ' +
+        'puts the wrong part on board, so nothing here is invented.</div>';
+      return;
+    }
+    if((q || '').trim().length < 2){
+      out.innerHTML = '<div class="conv-hint">Type a code or a few words. ' +
+        meta.n.toLocaleString() + ' items loaded.</div>';
+      return;
+    }
+    var hits = storesSearch(q, 60);
+    if(!hits.length){
+      out.innerHTML = '<div class="empty" style="padding:24px 12px;">Nothing in the catalogue matches that.</div>';
+      return;
+    }
+    var pix = storePhotos();
+    out.innerHTML = hits.map(function(r){
+      var n = (pix[r.c] || []).length;
+      return '<button class="store-row" data-storeopen="' + escapeHtml(r.c) + '">' +
+             '<span class="sr-c">' + escapeHtml(storesFmtCode(r.c)) + '</span>' +
+             '<span class="sr-d">' + escapeHtml(r.d) + '</span>' +
+             (n ? '<span class="sr-p">' + n + ' \uD83D\uDCF7</span>' : '') +
+             (r.u ? '<span class="sr-u">' + escapeHtml(r.u) + '</span>' : '') +
+             '</button>';
+    }).join('') + '<div class="conv-hint">Tap a line to open it.' +
+      (hits.length >= 60 ? ' First 60 shown &mdash; narrow it with another word.' : '') + '</div>';
+  }
+
+  // --- one item, with its photographs ---
+  var storeOpenCode = null;
+
+  function storeItem(code){
+    if(!storesRows) return null;
+    for(var i = 0; i < storesRows.length; i++) if(storesRows[i].c === code) return storesRows[i];
+    return null;
+  }
+
+  function renderStoreItem(){
+    var wrap = document.getElementById('storesItem');
+    var it = storeItem(storeOpenCode);
+    if(!storeOpenCode || !it){
+      wrap.style.display = 'none';
+      document.getElementById('storesBrowse').style.display = '';
+      return;
+    }
+    document.getElementById('storesBrowse').style.display = 'none';
+    wrap.style.display = '';
+    var pics = storePhotosFor(it.c);
+    wrap.innerHTML =
+      '<div class="tool-head">' +
+        '<button class="btn btn-ghost" id="storeItemBack">&lsaquo; Results</button>' +
+      '</div>' +
+      '<div class="store-head">' +
+        '<div class="sh-c">' + escapeHtml(storesFmtCode(it.c)) + '</div>' +
+        '<div class="sh-d">' + escapeHtml(it.d) + '</div>' +
+        (it.u ? '<div class="sh-u">Unit: ' + escapeHtml(it.u) + '</div>' : '') +
+      '</div>' +
+      '<div class="form-row flags-row">' +
+        '<button class="btn btn-ghost" data-storeact="copy">Copy code</button>' +
+        '<button class="btn btn-primary" data-storeact="photo">+ Photo</button>' +
+      '</div>' +
+      (pics.length
+        ? '<div class="thumbstrip">' + pics.map(function(ref, i){
+            return '<div class="thumb"><img src="' + photoSrc(ref) + '" data-storeview="' + i + '" alt="">' +
+                   '<button class="thumb-x" data-storedel="' + i + '">&times;</button></div>';
+          }).join('') + '</div>'
+        : '<div class="conv-hint">No photograph of this item yet. ' +
+          'One taken in the store room is worth more than any description.</div>');
+  }
+
+  function renderStores(){
+    var meta = storesMeta();
+    var note = document.getElementById('storesNote');
+    note.innerHTML = meta.n
+      ? '<b>' + meta.n.toLocaleString() + '</b> items from ' + escapeHtml(meta.name || 'an imported file') +
+        ', loaded ' + fmtDate(meta.on) + '. Held on this device only.'
+      : 'Your own stores catalogue, searchable with no signal. Nothing is supplied with the app.';
+    document.getElementById('storesClearBtn').style.display = meta.n ? '' : 'none';
+    document.getElementById('storesTop').style.display = storeOpenCode ? 'none' : '';
+    storesLoad(function(){
+      if(storeOpenCode) renderStoreItem(); else renderStoresResults();
+    });
+  }
+
   // ---------- Tools: instruments ----------
   // A place for what the maker's manual says, kept on the device that goes into
   // the space with you. The app supplies the structure — procedures as numbered
@@ -5168,7 +5546,8 @@
   }
 
   var TOOL_TITLES = { convert:'Converter', guide:'Information', eta:'ETA',
-                      instr:'Instruments', moll:'Mollier', map:'World map' };
+                      instr:'Instruments', moll:'Mollier', map:'World map',
+                      stores:'Stores catalogue' };
 
   function showTool(name){
     document.getElementById('toolsHome').style.display   = name ? 'none' : '';
@@ -5178,12 +5557,14 @@
     document.getElementById('toolInstr').style.display   = name === 'instr' ? '' : 'none';
     document.getElementById('toolMoll').style.display    = name === 'moll' ? '' : 'none';
     document.getElementById('toolMap').style.display     = name === 'map' ? '' : 'none';
+    document.getElementById('toolStores').style.display  = name === 'stores' ? '' : 'none';
     document.getElementById('pageTitle').textContent = TOOL_TITLES[name] || 'Tools';
     if(name === 'guide') renderGuide();
     if(name === 'eta')   renderEta();
     if(name === 'instr') showInstrList();
     if(name === 'moll')  renderMoll();
     if(name === 'map')   renderMap();
+    if(name === 'stores') renderStores();
     else if(mapWatch !== null){          // do not hold the GPS open off-screen
       navigator.geolocation.clearWatch(mapWatch); mapWatch = null;
     }
@@ -6103,7 +6484,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v42';
+  var APP_BUILD = 'v43';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -6726,6 +7107,105 @@
     if(mollBusy) return;
     document.getElementById('mollBoilQ').value = '';
     renderMoll('m');
+  });
+
+  document.getElementById('storesBackBtn').addEventListener('click', function(){ showTool(null); });
+  document.getElementById('storesSearchIn').addEventListener('input', renderStoresResults);
+  document.getElementById('storesImportBtn').addEventListener('click', function(){
+    document.getElementById('storesImportInput').click();
+  });
+  document.getElementById('storesImportInput').addEventListener('change', function(e){
+    var f = e.target.files[0];
+    if(f) storesImport(f);
+    e.target.value = '';
+  });
+  document.getElementById('storesClearBtn').addEventListener('click', storesClear);
+  function storeCopy(code, el){
+    try{
+      if(navigator.clipboard) navigator.clipboard.writeText(code);
+      else {
+        var ta = document.createElement('textarea');
+        ta.value = code; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+      }
+    }catch(err){}
+    if(el){
+      var was = el.textContent;
+      el.textContent = 'Copied';
+      setTimeout(function(){ el.textContent = was; }, 900);
+    }
+  }
+
+  document.getElementById('storesOut').addEventListener('click', function(e){
+    var b = e.target.closest('[data-storeopen]');
+    if(!b) return;
+    storeOpenCode = b.dataset.storeopen;
+    document.getElementById('storesTop').style.display = 'none';
+    renderStoreItem();
+  });
+
+  // photographs of a stores item go through exactly the same path as every
+  // other photograph in the app: compressed, then kept in IndexedDB
+  var storePhotoInput = document.createElement('input');
+  storePhotoInput.id = 'storePhotoInput';
+  storePhotoInput.type = 'file';
+  storePhotoInput.accept = 'image/*';
+  storePhotoInput.multiple = true;
+  storePhotoInput.style.display = 'none';
+  document.body.appendChild(storePhotoInput);
+  storePhotoInput.addEventListener('change', function(e){
+    var files = Array.from(e.target.files || []);
+    if(!storeOpenCode || !files.length){ e.target.value = ''; return; }
+    var code = storeOpenCode, left = files.length;
+    files.forEach(function(f){
+      fileToCompressedDataURL(f, function(u){
+        keepPhoto(u, function(ref){
+          if(ref){
+            var m = storePhotos();
+            if(!m[code]) m[code] = [];
+            m[code].push(ref);
+            setStorePhotos(m);
+          }
+          if(--left === 0) renderStoreItem();
+        });
+      });
+    });
+    e.target.value = '';
+  });
+
+  document.getElementById('storesItem').addEventListener('click', function(e){
+    if(e.target.closest('#storeItemBack')){
+      storeOpenCode = null;
+      document.getElementById('storesTop').style.display = '';
+      renderStoreItem();
+      renderStoresResults();
+      return;
+    }
+    var act = e.target.closest('[data-storeact]');
+    if(act){
+      if(act.dataset.storeact === 'copy') storeCopy(storeOpenCode, act);
+      else storePhotoInput.click();
+      return;
+    }
+    var view = e.target.closest('[data-storeview]');
+    if(view){
+      var refs = storePhotosFor(storeOpenCode);
+      var r = refs[+view.dataset.storeview];
+      if(r) openViewer(r);
+      return;
+    }
+    var del = e.target.closest('[data-storedel]');
+    if(del){
+      if(!confirm('Remove this photograph?')) return;
+      var m = storePhotos();
+      if(m[storeOpenCode]){
+        m[storeOpenCode].splice(+del.dataset.storedel, 1);
+        if(!m[storeOpenCode].length) delete m[storeOpenCode];
+        setStorePhotos(m);
+      }
+      collectPhotos();
+      renderStoreItem();
+    }
   });
 
   document.getElementById('mapBackBtn').addEventListener('click', function(){ showTool(null); });
