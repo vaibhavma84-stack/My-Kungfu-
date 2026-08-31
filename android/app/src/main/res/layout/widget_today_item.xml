@@ -8,7 +8,10 @@
     android:paddingTop="4dp"
     android:paddingBottom="4dp">
 
-    <View
+    <!-- FrameLayout, not View: RemoteViews accepts only a fixed list of view
+         types and a plain <View> is not on it. One here made every row of the
+         list fail to inflate, so the widget showed nothing at all. -->
+    <FrameLayout
         android:id="@+id/item_stripe"
         android:layout_width="3dp"
         android:layout_height="26dp"

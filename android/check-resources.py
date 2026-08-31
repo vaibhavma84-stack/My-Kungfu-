@@ -54,6 +54,37 @@ for f in res_files('values'):
             fail('UNESCAPED QUOTE  %s in <string name="%s">'
                  % (os.path.relpath(f, ROOT), el.get('name')))
 
+# ---- 2b. widget layouts may only use the view types RemoteViews accepts ---
+# A plain <View> in a widget layout makes the whole thing fail to inflate. The
+# launcher reports "Couldn't add widget" and the list silently renders nothing;
+# there is no build error and nothing in a log anyone would look at. This cost
+# two rounds of the app being shipped with both widgets broken.
+REMOTE_OK = {
+    'FrameLayout', 'LinearLayout', 'RelativeLayout', 'GridLayout',
+    'AnalogClock', 'Button', 'Chronometer', 'ImageButton', 'ImageView',
+    'ProgressBar', 'TextView', 'ViewFlipper', 'ListView', 'GridView',
+    'StackView', 'AdapterViewFlipper', 'ViewStub', 'include', 'merge',
+}
+widget_layouts = set()
+for f in res_files('xml'):
+    txt = open(f, encoding='utf-8').read()
+    for name in re.findall(r'@layout/(\w+)', txt):
+        widget_layouts.add(name)
+# anything a widget layout pulls in is a widget layout too
+for f in res_files('layout'):
+    if os.path.basename(f).startswith('widget_'):
+        widget_layouts.add(os.path.splitext(os.path.basename(f))[0])
+for name in sorted(widget_layouts):
+    f = os.path.join(RES, 'layout', name + '.xml')
+    if not os.path.isfile(f): continue
+    try: root = ET.parse(f).getroot()
+    except Exception: continue
+    for el in root.iter():
+        tag = el.tag if isinstance(el.tag, str) else ''
+        if tag and tag not in REMOTE_OK:
+            fail('UNSUPPORTED IN A WIDGET  <%s> in res/layout/%s.xml -- RemoteViews '
+                 'accepts only %s' % (tag, name, ', '.join(sorted(REMOTE_OK - {'include','merge'}))))
+
 # ---- 3. collect what exists ---------------------------------------------
 defined_ids = set()
 for f in res_files('layout'):

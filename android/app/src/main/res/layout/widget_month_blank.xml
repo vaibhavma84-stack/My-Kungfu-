@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<View xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- A day outside this month. FrameLayout, not View: RemoteViews accepts only
+     a fixed list of view types and a plain <View> is not on it. One in a widget
+     layout makes the whole thing fail to inflate, which the launcher reports as
+     "Couldn't add widget" with nothing in the log a user would ever see. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="0dp"
     android:layout_height="1dp"
     android:layout_weight="1" />
