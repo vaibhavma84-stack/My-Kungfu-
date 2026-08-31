@@ -523,6 +523,14 @@
   .tool-head{display:flex; align-items:center; gap:10px; padding:12px 0 4px;}
   .tool-head .tool-title{font-size:16px; font-weight:700;}
 
+  .signwrap{display:flex; align-items:stretch; gap:6px; min-width:0;}
+  .signwrap input{flex:1; min-width:0;}
+  .signbtn{
+    flex:0 0 auto; width:40px; border:1px solid var(--line); border-radius:8px;
+    background:var(--paper-2); color:var(--ink); font-family:inherit;
+    font-size:17px; font-weight:700; line-height:1; cursor:pointer; padding:0;
+  }
+  .signbtn:active{background:var(--line);}
   .conv-cats{display:flex; gap:7px; flex-wrap:wrap; padding:6px 0 12px;}
   .conv-cats button{
     background:var(--card); border:1px solid var(--line); color:var(--ink-soft);
@@ -1383,7 +1391,7 @@
     <div class="conv-input">
       <div class="field">
         <label>Value</label>
-        <input type="number" step="any" id="convValue" placeholder="0">
+        <input type="text" inputmode="decimal" class="signed" step="any" id="convValue" placeholder="0">
       </div>
       <div class="field">
         <label>Unit</label>
@@ -1407,16 +1415,16 @@
     <div class="moll-form" id="mollFormTank">
       <div class="form-row row-main">
         <div class="field"><label>Liquid temperature (&deg;C)</label>
-          <input type="number" step="any" id="mollTankT" placeholder="e.g. -42"></div>
+          <input type="text" inputmode="decimal" class="signed" step="any" id="mollTankT" placeholder="e.g. -42"></div>
         <div class="field"><label>or tank pressure (bar g)</label>
-          <input type="number" step="any" id="mollTankP" placeholder="e.g. 0.02"></div>
+          <input type="text" inputmode="decimal" class="signed" step="any" id="mollTankP" placeholder="e.g. 0.02"></div>
       </div>
     </div>
 
     <div class="moll-form" id="mollFormBoil" style="display:none;">
       <div class="form-row row-main">
         <div class="field"><label>Liquid temperature (&deg;C)</label>
-          <input type="number" step="any" id="mollBoilT" placeholder="e.g. -42"></div>
+          <input type="text" inputmode="decimal" class="signed" step="any" id="mollBoilT" placeholder="e.g. -42"></div>
         <div class="field"><label>Heat into tank (kW)</label>
           <input type="number" step="any" id="mollBoilQ" placeholder="e.g. 100"></div>
         <div class="field"><label>or boil-off (t/h)</label>
@@ -1427,9 +1435,9 @@
     <div class="moll-form" id="mollFormFlash" style="display:none;">
       <div class="form-row row-main">
         <div class="field"><label>Liquid arriving at (&deg;C)</label>
-          <input type="number" step="any" id="mollFlashT" placeholder="e.g. 10"></div>
+          <input type="text" inputmode="decimal" class="signed" step="any" id="mollFlashT" placeholder="e.g. 10"></div>
         <div class="field"><label>Into tank at (bar g)</label>
-          <input type="number" step="any" id="mollFlashP" placeholder="0" value="0"></div>
+          <input type="text" inputmode="decimal" class="signed" step="any" id="mollFlashP" placeholder="0" value="0"></div>
         <div class="field"><label>Quantity (t) &mdash; optional</label>
           <input type="number" step="any" id="mollFlashQty" placeholder="e.g. 1000"></div>
       </div>
@@ -1438,9 +1446,9 @@
     <div class="moll-form" id="mollFormCycle" style="display:none;">
       <div class="form-row row-main">
         <div class="field"><label>Cargo liquid (&deg;C)</label>
-          <input type="number" step="any" id="mollCycTe" placeholder="e.g. -42"></div>
+          <input type="text" inputmode="decimal" class="signed" step="any" id="mollCycTe" placeholder="e.g. -42"></div>
         <div class="field"><label>Condensing (&deg;C)</label>
-          <input type="number" step="any" id="mollCycTc" placeholder="e.g. 40"></div>
+          <input type="text" inputmode="decimal" class="signed" step="any" id="mollCycTc" placeholder="e.g. 40"></div>
       </div>
       <div class="form-row row-main">
         <div class="field"><label>Suction superheat (K)</label>
@@ -1656,6 +1664,70 @@
     holdPress:{label:'Hold Space Press (kPa)', short:'H-Pr'}
   };
   var TANK_FIELD_ORDER = ['pressure','dome','portTop','portMid','portBot','portSump','stbdTop','stbdMid','stbdBot','stbdSump','portSound','stbdSound','holdTemp','holdPress'];
+
+
+  // ---------- negative numbers on a phone ----------
+  // The numeric keypad Android and iOS put up for a number field has no minus
+  // key. Every cargo and hold-space temperature aboard is negative, so those
+  // fields could be read but not entered. type="number" also refuses to hold a
+  // lone "-", so the sign cannot even be typed first.
+  //
+  // Fields that can legitimately go negative are therefore plain text with a
+  // decimal keypad, sanitised as you type, and carry a +/- button that flips
+  // the sign of whatever is in them. Two ways in, neither depending on which
+  // keyboard the phone happens to use.
+  function signSanitise(v){
+    v = String(v).replace(/[^0-9.\-]/g, '');
+    var neg = v.charAt(0) === '-';
+    v = v.replace(/-/g, '');
+    var bits = v.split('.');
+    if(bits.length > 2) v = bits.shift() + '.' + bits.join('');
+    return (neg ? '-' : '') + v;
+  }
+
+  function flipSign(inp){
+    var v = inp.value.trim();
+    if(v === '')        inp.value = '-';
+    else if(v === '-')  inp.value = '';
+    else if(v.charAt(0) === '-') inp.value = v.slice(1);
+    else                inp.value = '-' + v;
+    inp.dispatchEvent(new Event('input',  { bubbles:true }));
+    inp.dispatchEvent(new Event('change', { bubbles:true }));
+  }
+
+  // Called after anything that renders these fields. Idempotent.
+  function attachSignButtons(root){
+    var list = (root || document).querySelectorAll('input.signed:not([data-signwired])');
+    Array.prototype.forEach.call(list, function(inp){
+      inp.setAttribute('data-signwired', '1');
+      inp.type = 'text';
+      inp.setAttribute('inputmode', 'decimal');
+      inp.addEventListener('input', function(){
+        var pos = this.selectionStart, before = this.value;
+        var clean = signSanitise(before);
+        if(clean !== before){
+          this.value = clean;
+          try{ this.setSelectionRange(pos - (before.length - clean.length), pos - (before.length - clean.length)); }catch(e){}
+        }
+      });
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'signbtn';
+      b.textContent = '\u00B1';
+      b.setAttribute('aria-label', 'Change the sign');
+      b.title = 'Make it negative, or positive again';
+      b.addEventListener('click', function(e){
+        e.preventDefault();
+        flipSign(inp);
+        inp.focus();
+      });
+      var wrap = document.createElement('span');
+      wrap.className = 'signwrap';
+      inp.parentNode.insertBefore(wrap, inp);
+      wrap.appendChild(inp);
+      wrap.appendChild(b);
+    });
+  }
 
   // ---------- date helpers (FIX 1) ----------
   // toISOString() returns UTC, so east of Greenwich in the morning (or west of
@@ -2745,13 +2817,15 @@
       g.fields.forEach(function(key){
         var meta = TANK_FIELD_META[key];
         var val = data[key] !== undefined ? data[key] : '';
-        // FIX 4: no inputmode="decimal" — that keypad has no minus key on iOS,
-        // and every cargo / hold space temperature aboard is negative.
-        html += '<div class="field"><label>'+meta.label+'</label><input type="number" step="0.01" data-key="'+key+'" value="'+escapeHtml(val)+'"></div>';
+        // Temperatures aboard are negative and pressures can be a vacuum, so
+        // every one of these carries the sign button -- see attachSignButtons.
+        html += '<div class="field"><label>'+meta.label+'</label>' +
+                '<input type="text" inputmode="decimal" class="signed" step="0.01" data-key="'+key+'" value="'+escapeHtml(val)+'"></div>';
       });
     });
     html += '</div>';
     wrap.innerHTML = html;
+    attachSignButtons(wrap);
   }
 
   function captureTankInputs(){
@@ -5957,7 +6031,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v40';
+  var APP_BUILD = 'v41';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -6436,6 +6510,8 @@
   loadInstruments();
   mollLoad();
   mapLoad();
+  // the fields that can hold a negative, wherever they already exist
+  attachSignButtons(document);
   loadReportOrder();
   // ticks made on the home-screen widget while the app was closed
   applyWidgetTicks();
