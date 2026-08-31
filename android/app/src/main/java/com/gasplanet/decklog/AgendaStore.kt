@@ -29,7 +29,9 @@ object AgendaStore {
         val done: Boolean,
         val repeat: Boolean,
         /** "overdue", "no date", or empty when it is simply due today. */
-        val note: String
+        val note: String,
+        /** Repeats every day. The day widget wants these; a month grid does not. */
+        val daily: Boolean
     )
     data class Day(val jobs: List<Job>, val birthdays: List<String>)
 
@@ -66,7 +68,8 @@ object AgendaStore {
                         o.optString("p", "normal"),
                         done,
                         o.optBoolean("r", false),
-                        o.optString("w", "")
+                        o.optString("w", ""),
+                        o.optBoolean("dy", false)
                     )
                 )
             }
@@ -76,6 +79,17 @@ object AgendaStore {
             for (i in 0 until arr.length()) bd.add(arr.optString(i, ""))
         }
         return Day(jobs, bd.filter { it.isNotBlank() })
+    }
+
+    /**
+     * The day as a month grid should see it: without the jobs that repeat every
+     * day. Those land in every cell of the month, and a grid where all thirty-one
+     * squares say the same thing tells you nothing about any of them. The app's
+     * own month view hides them for the same reason.
+     */
+    fun dayForMonth(c: Context, iso: String): Day {
+        val d = day(c, iso)
+        return Day(d.jobs.filter { !it.daily }, d.birthdays)
     }
 
     fun hasData(c: Context): Boolean = root(c) != null

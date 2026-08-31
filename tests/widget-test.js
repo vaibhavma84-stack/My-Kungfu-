@@ -72,6 +72,36 @@ function ok(name, cond, got){
   ok('and is labelled as having no date',
      (ag.days[today].jobs.find(j => j.t === 'Grease deck crane wires') || {}).w === 'no date');
 
+  // --- daily jobs are for the day widget only -------------------------------
+  // A job that repeats every day lands in all thirty-one cells of a month grid
+  // and buries everything else, which is why the app's own month view hides it.
+  // The two widgets share one published agenda, so the day is published whole
+  // and each entry says whether it repeats daily; the month widget drops those.
+  await p.fill('#inJob','Sound bilges');
+  await p.fill('#inDue', today);
+  await p.selectOption('#inRepeat','daily');
+  await p.click('#addBtn');
+  await p.selectOption('#inRepeat','');
+  await p.waitForTimeout(250);
+  ag = await p.evaluate(() => JSON.parse(window.__published[window.__published.length-1]));
+  const soundToday = (ag.days[today].jobs.find(j => j.t === 'Sound bilges') || {});
+  ok('a daily job is on today for the day widget', !!soundToday.t,
+     JSON.stringify(ag.days[today].jobs.map(j => j.t)));
+  ok('and is flagged as daily, so the month widget can leave it out',
+     soundToday.dy === true, JSON.stringify(soundToday));
+  const soon = await p.evaluate(() => {
+    const d = new Date(); d.setDate(d.getDate() + 3);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  });
+  const ahead = ag.days[soon] ? ag.days[soon].jobs.filter(j => j.t === 'Sound bilges') : [];
+  ok('it is projected onto the days ahead too', ahead.length === 1,
+     JSON.stringify((ag.days[soon] || {}).jobs));
+  ok('and every one of those carries the flag', ahead.every(j => j.dy === true),
+     JSON.stringify(ahead));
+  ok('a job that does not repeat daily is not flagged',
+     ag.days[today].jobs.filter(j => j.t !== 'Sound bilges').every(j => j.dy !== true),
+     JSON.stringify(ag.days[today].jobs.map(j => j.t + ':' + j.dy)));
+
   const past = await p.evaluate(() => {
     const d = new Date(); d.setDate(d.getDate() - 5);
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');

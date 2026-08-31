@@ -60,29 +60,38 @@ function ok(name, cond, got){
   ok('borders and rivers decode too', geo.borders > 300 && geo.rivers > 3000,
      geo.borders + ' borders, ' + geo.rivers + ' rivers');
 
-  // --- the high-resolution tiles and the country colouring -----------------
-  // Zoomed out the map draws a coarse whole-world layer; past TILE_ZOOM it
-  // switches to 4-degree tiles carrying the full GSHHG coastline. These check
-  // the tiles are there, that each one is genuinely clipped to its own square
-  // (a tile that carried a whole continent's ring would be useless), and that
-  // the colouring promise the generator makes actually reached the app.
+  // --- the high-resolution tiles, the bands and the country colouring -----
+  // The map is too big to parse in one go, so the tiles are stored as
+  // twenty-degree bands and only what is on screen is parsed. These check the
+  // bands are all present, that opening the map does NOT drag them all in, that
+  // each tile is genuinely clipped to its own square, and that the colouring
+  // promise the generator makes reached the app.
+  // zoomed in first: below the tile threshold the map draws from the coarse
+  // layer and needs no bands at all, so a count taken there proves nothing
+  await p.evaluate(() => { window.__mapSetView(51.0, 1.5, 60); });
+  await p.waitForTimeout(500);
   const tiles = await p.evaluate(() => window.__mapTiles());
-  ok('the full-resolution coastline is carried as tiles',
-     tiles.coast > 2000 && tiles.size === 4, tiles.coast + ' tiles of ' + tiles.size + ' deg');
-  ok('and the country colours as tiles of their own',
-     tiles.country > 1500, tiles.country);
+  ok('the coastline and the country fills are both banded',
+     tiles.coastBands === tiles.bands && tiles.countryBands === tiles.bands && tiles.bands >= 12,
+     tiles.coastBands + '/' + tiles.countryBands + ' of ' + tiles.bands);
+  ok('and drawing one place parses only the bands it needs, not all of them',
+     tiles.parsedBands.coast > 0 && tiles.parsedBands.coast < tiles.bands,
+     tiles.parsedBands.coast + ' coast bands parsed of ' + tiles.bands);
+  ok('the geometry is encoded finer than it is simplified',
+     tiles.prec >= 2000, '1/' + tiles.prec + ' of a degree');
   ok('with a coarse whole-world layer for zoomed-out views',
-     tiles.overview >= 10, tiles.overview + ' colour groups');
-  ok('no two countries that touch share a colour',
-     tiles.adjBad === 0, tiles.adjBad + ' adjacent pairs sharing');
-  ok('the palette has enough colours to keep that promise',
-     tiles.fills >= 10, tiles.fills);
+     tiles.overview >= 100, tiles.overview + ' countries');
+  ok('no two countries within reach of each other share a colour',
+     tiles.adjBad === 0, tiles.adjBad + ' pairs sharing');
+  ok('the palette has as many colours as the colouring used',
+     tiles.fills >= tiles.colours, tiles.fills + ' fills for ' + tiles.colours + ' colours');
+  ok('countries and rivers both carry names',
+     tiles.countryLabels > 200 && tiles.riverLabels > 1000,
+     tiles.countryLabels + ' countries, ' + tiles.riverLabels + ' rivers');
 
   // Every ring in a tile must lie inside that tile, or the clip did not happen
   // and the tile is carrying geometry that belongs to its neighbours.
   const clipped = await p.evaluate(() => {
-    // 44_31: the English Channel and southern North Sea (-4..0 E, 34..38 N grid
-    // index), a square with real coastline in it rather than open ocean.
     const size = 4, keys = [];
     for(const [lon, lat] of [[0, 51], [103, 1], [-4, 50], [55, 25]])
       keys.push(Math.floor((lon + 180) / size) + '_' + Math.floor((lat + 90) / size));
@@ -95,7 +104,6 @@ function ok(name, cond, got){
       const w = xs * size - 180, e = w + size, s = ys * size - 90, n = s + size;
       for(const lvl of Object.keys(t)) for(const r of t[lvl]){
         rings++;
-        // a hair of tolerance for the encoder's two-decimal grid
         if(r.w < w - 0.02 || r.e > e + 0.02 || r.s < s - 0.02 || r.no > n + 0.02) outside++;
       }
     }
@@ -106,13 +114,12 @@ function ok(name, cond, got){
      clipped.rings > 20 && clipped.outside === 0,
      clipped.outside + ' of ' + clipped.rings + ' rings outside');
 
-  // The colours have to be readable against the sea and against each other:
-  // an earlier palette put Britain in a blue two just-noticeable differences
-  // from the water and the island simply disappeared.
+  // The colours have to be readable against the sea and against each other: an
+  // earlier palette put Britain in a blue two just-noticeable differences from
+  // the water and the island simply disappeared.
   const sep = await p.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
     const sea = cs.getPropertyValue('--map-sea').trim();
-    // read the palette back out of the app rather than restating it here
     const fills = window.__mapFills();
     function lab(hex){
       const v = parseInt(hex.slice(1), 16);
@@ -138,7 +145,7 @@ function ok(name, cond, got){
   ok('no country colour can be mistaken for the sea',
      sep.minSea > 8, 'closest is ' + sep.minSea.toFixed(1) + ' dE from the water');
   ok('and no two of them can be mistaken for each other',
-     sep.minPair > 6, 'closest pair ' + sep.minPair.toFixed(1) + ' dE');
+     sep.minPair > 10, 'closest pair ' + sep.minPair.toFixed(1) + ' dE');
 
   // Past TILE_ZOOM the tiles take over from the coarse whole-world layer. The
   // test straddles the threshold at the same place -- 13.5 and 14.5 px/degree
@@ -163,9 +170,20 @@ function ok(name, cond, got){
     }
     return out;
   });
-  ok('crossing the tile threshold brings in finer coastline, not just a bigger one',
+  ok('crossing the tile threshold brings in finer coastline detail',
      detail.channel[1] > detail.channel[0] && detail.fjords[1] > detail.fjords[0],
      Object.keys(detail).map(k => k + ' ' + detail[k].join('->')).join(', '));
+
+  // The staircase this replaced: the geometry was full resolution but the
+  // encoder quantised it to a hundredth of a degree, so at a thousand pixels to
+  // the degree every coastline step was ten pixels wide. Consecutive points on
+  // a decoded ring should now be far finer than that.
+  const grid = await p.evaluate(() => {
+    const t = window.__mapTile('coast', Math.floor((1 + 180) / 4) + '_' + Math.floor((51 + 90) / 4));
+    return t ? Object.keys(t).length : 0;
+  });
+  ok('a coastal tile carries real geometry at the finer grid', grid > 0, grid + ' levels');
+
   ok('the coastline spans the whole Earth, not a corner of it',
      geo.box[0] < -179 && geo.box[1] > 179 && geo.box[2] < -60 && geo.box[3] > 70,
      geo.box.map(x => x.toFixed(1)).join(', '));

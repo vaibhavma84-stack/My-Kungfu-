@@ -147,7 +147,7 @@ class MonthWidget : AppWidgetProvider() {
 
         private fun cellFor(c: Context, iso: String, dayNum: Int, isToday: Boolean): RemoteViews {
             val cv = RemoteViews(c.packageName, R.layout.widget_month_cell)
-            val d = AgendaStore.day(c, iso)
+            val d = AgendaStore.dayForMonth(c, iso)
 
             cv.setTextViewText(R.id.cell_num, if (d.birthdays.isNotEmpty()) "$dayNum \u2022" else "$dayNum")
             cv.setTextColor(R.id.cell_num, if (isToday) COLOR_TODAY else COLOR_DAY)
