@@ -56,7 +56,7 @@ class MonthWidget : AppWidgetProvider() {
         const val ACTION_TODAY = "com.gasplanet.decklog.MONTH_TODAY"
         const val ACTION_REFRESH = "com.gasplanet.decklog.MONTH_REFRESH"
 
-        private const val MAX_CHIPS = 3
+        private const val MAX_LINES = 3
 
         fun refreshAll(c: Context) {
             val mgr = AppWidgetManager.getInstance(c)
@@ -148,54 +148,39 @@ class MonthWidget : AppWidgetProvider() {
         private fun cellFor(c: Context, iso: String, dayNum: Int, isToday: Boolean): RemoteViews {
             val cv = RemoteViews(c.packageName, R.layout.widget_month_cell)
             val d = AgendaStore.day(c, iso)
-            cv.setTextViewText(R.id.cell_num, dayNum.toString())
-            cv.setTextColor(R.id.cell_num, if (isToday) COLOR_TODAY else COLOR_DAY)
-            cv.setViewVisibility(
-                R.id.cell_today, if (isToday) android.view.View.VISIBLE else android.view.View.GONE
-            )
-            cv.setViewVisibility(
-                R.id.cell_cake, if (d.birthdays.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
-            )
 
-            cv.removeAllViews(R.id.cell_chips)
-            var shown = 0
-            d.birthdays.forEach { name ->
-                if (shown >= MAX_CHIPS) return@forEach
-                cv.addView(R.id.cell_chips, chip(c, name, COLOR_BIRTHDAY))
-                shown++
+            cv.setTextViewText(R.id.cell_num, if (d.birthdays.isNotEmpty()) "$dayNum \u2022" else "$dayNum")
+            cv.setTextColor(R.id.cell_num, if (isToday) COLOR_TODAY else COLOR_DAY)
+
+            // One TextView, one line per entry, rather than a nested view per
+            // job. A month of chips ran to hundreds of RemoteViews, which is
+            // where the launcher gives up and shows nothing at all.
+            val lines = ArrayList<String>()
+            d.birthdays.forEach { if (lines.size < MAX_LINES) lines.add(it) }
+            d.jobs.forEach {
+                if (lines.size < MAX_LINES) lines.add(if (it.done) "\u2713 " + it.text else it.text)
             }
-            d.jobs.forEach { j ->
-                if (shown >= MAX_CHIPS) return@forEach
-                cv.addView(R.id.cell_chips, chip(c, j.text, colorFor(j)))
-                shown++
-            }
-            val extra = d.birthdays.size + d.jobs.size - shown
-            if (extra > 0) {
-                cv.setTextViewText(R.id.cell_more, "+$extra")
-                cv.setViewVisibility(R.id.cell_more, android.view.View.VISIBLE)
-            } else {
-                cv.setViewVisibility(R.id.cell_more, android.view.View.GONE)
-            }
+            val extra = d.birthdays.size + d.jobs.size - lines.size
+            if (extra > 0) lines.add("+$extra more")
+
+            cv.setTextViewText(R.id.cell_body, lines.joinToString("\n"))
+            cv.setTextColor(R.id.cell_body, bodyColour(d))
             return cv
         }
 
-        private fun chip(c: Context, text: String, colour: Int): RemoteViews {
-            val r = RemoteViews(c.packageName, R.layout.widget_month_chip)
-            r.setTextViewText(R.id.chip_text, text)
-            r.setInt(R.id.chip_stripe, "setBackgroundColor", colour)
-            return r
-        }
-
-        private fun colorFor(j: AgendaStore.Job): Int = when {
-            j.done -> COLOR_DONE
-            j.priority == "urgent" -> COLOR_URGENT
-            j.priority == "important" -> COLOR_IMPORTANT
-            else -> COLOR_NORMAL
+        /** The most urgent thing on the day decides the colour of the whole cell. */
+        private fun bodyColour(d: AgendaStore.Day): Int {
+            if (d.jobs.any { !it.done && it.note == "overdue" }) return COLOR_URGENT
+            if (d.jobs.any { !it.done && it.priority == "urgent" }) return COLOR_URGENT
+            if (d.jobs.any { !it.done && it.priority == "important" }) return COLOR_IMPORTANT
+            if (d.birthdays.isNotEmpty() && d.jobs.isEmpty()) return COLOR_BIRTHDAY
+            if (d.jobs.isNotEmpty() && d.jobs.all { it.done }) return COLOR_DONE
+            return COLOR_BODY
         }
 
         private const val COLOR_URGENT = 0xFFC7452C.toInt()
         private const val COLOR_IMPORTANT = 0xFFD6963B.toInt()
-        private const val COLOR_NORMAL = 0xFF3A5A78.toInt()
+        private const val COLOR_BODY = 0xFFCBD6DF.toInt()
         private const val COLOR_DONE = 0xFF6E8B74.toInt()
         private const val COLOR_BIRTHDAY = 0xFF9B6BB5.toInt()
         private const val COLOR_TODAY = 0xFFFFFFFF.toInt()

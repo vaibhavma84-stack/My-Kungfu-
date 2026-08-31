@@ -1,53 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- One day. Deliberately only three views.
+     The first version built a nested chip layout per job: about five hundred
+     RemoteViews for a month, which is where a widget quietly stops rendering.
+     The jobs are one TextView with a line each instead. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="0dp"
     android:layout_height="wrap_content"
     android:layout_weight="1"
     android:orientation="vertical"
-    android:paddingStart="1dp"
-    android:paddingEnd="1dp"
-    android:paddingTop="2dp">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-        <View
-            android:id="@+id/cell_today"
-            android:layout_width="4dp"
-            android:layout_height="4dp"
-            android:layout_marginEnd="2dp"
-            android:background="@drawable/widget_today_ring"
-            android:visibility="gone" />
-        <TextView
-            android:id="@+id/cell_num"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textColor="#B8C4CE"
-            android:textSize="10sp"
-            android:maxLines="1" />
-        <TextView
-            android:id="@+id/cell_cake"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="8sp"
-            android:visibility="gone"
-            android:text="🎂" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/cell_chips"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical" />
+    android:paddingStart="2dp"
+    android:paddingEnd="2dp"
+    android:paddingTop="2dp"
+    android:paddingBottom="3dp">
 
     <TextView
-        android:id="@+id/cell_more"
-        android:layout_width="wrap_content"
+        android:id="@+id/cell_num"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="#7FA6C8"
+        android:textColor="#B8C4CE"
+        android:textSize="10sp"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/cell_body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#DCE4EB"
         android:textSize="8sp"
-        android:visibility="gone" />
+        android:lineSpacingExtra="1dp"
+        android:maxLines="4"
+        android:ellipsize="end" />
 </LinearLayout>
