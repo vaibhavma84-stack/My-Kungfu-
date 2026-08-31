@@ -17,9 +17,10 @@ class TodayWidget : AppWidgetProvider() {
     override fun onUpdate(c: Context, mgr: AppWidgetManager, ids: IntArray) {
         // The rows are built by the factory, which only re-reads on notify --
         // without this the widget would still show yesterday's list after the
-        // periodic update rolled past midnight.
-        mgr.notifyAppWidgetViewDataChanged(ids, R.id.today_list)
+        // periodic update rolled past midnight. Notify comes after render, for
+        // the reason spelled out in refreshAll.
         ids.forEach { render(c, mgr, it) }
+        mgr.notifyAppWidgetViewDataChanged(ids, R.id.today_list)
     }
 
     override fun onReceive(c: Context, intent: Intent) {
@@ -46,9 +47,12 @@ class TodayWidget : AppWidgetProvider() {
             val mgr = AppWidgetManager.getInstance(c)
             val ids = mgr.getAppWidgetIds(ComponentName(c, TodayWidget::class.java))
             if (ids.isEmpty()) return
-            // the list contents live in the factory, so it has to be told too
-            mgr.notifyAppWidgetViewDataChanged(ids, R.id.today_list)
+            // ORDER MATTERS. render() calls updateAppWidget, which re-attaches
+            // the remote adapter and throws away a pending data-change notice.
+            // Notifying first meant the widget kept showing the list it already
+            // had: new jobs were published and simply never appeared.
             ids.forEach { render(c, mgr, it) }
+            mgr.notifyAppWidgetViewDataChanged(ids, R.id.today_list)
         }
 
         private fun render(c: Context, mgr: AppWidgetManager, id: Int) {

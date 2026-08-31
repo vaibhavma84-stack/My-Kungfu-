@@ -26,13 +26,41 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.click('#viewSwitch button[data-view="month"]');
   await p.evaluate(()=>{ document.querySelector('#navToday').click(); });
   await p.waitForTimeout(150);
+  // Stepping a month must not skip one. It used to: setMonth keeps the day of
+  // the month, so from the 31st it rolled into the month after next, and on the
+  // 31st of August the calendar went straight from August to October. This walks
+  // the months and checks each one follows the last, whatever today happens to be.
+  const MONTHS = ['January','February','March','April','May','June','July',
+                  'August','September','October','November','December'];
+  const label2num = (t) => { const b = t.trim().split(' '); return +b[1] * 12 + MONTHS.indexOf(b[0]); };
+  let prev = label2num(await p.textContent('.nav-label'));
+  let skipped = null;
+  for(let i=0;i<14;i++){
+    await p.click('#navNext'); await p.waitForTimeout(60);
+    const now = label2num(await p.textContent('.nav-label'));
+    if(now !== prev + 1 && skipped === null) skipped = (await p.textContent('.nav-label')).trim();
+    prev = now;
+  }
+  ok('stepping forward advances exactly one month, every time', skipped === null,
+     'jumped to ' + skipped);
+  for(let i=0;i<14;i++){
+    await p.click('#navPrev'); await p.waitForTimeout(60);
+    const now = label2num(await p.textContent('.nav-label'));
+    if(now !== prev - 1 && skipped === null) skipped = (await p.textContent('.nav-label')).trim();
+    prev = now;
+  }
+  ok('and stepping back goes back exactly one', skipped === null, 'jumped to ' + skipped);
+
   const goTo = async (label) => {
-    for(let i=0;i<24;i++){
+    for(let i=0;i<36;i++){
       if((await p.textContent('.nav-label')).trim()===label) return true;
       await p.click('#navNext'); await p.waitForTimeout(60);
     }
     return false;
   };
+  // start from today, so the walk to a fixed month is always forwards
+  await p.evaluate(()=>{ document.querySelector('#navToday').click(); });
+  await p.waitForTimeout(120);
   ok('reached September 2026', await goTo('September 2026'), await p.textContent('.nav-label'));
   const sept = await p.evaluate(()=>{
     const out={};

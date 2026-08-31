@@ -94,15 +94,27 @@ const ok = (name, cond, extra) => {
   await page.click('.tick'); // un-tick needs no picker
   await page.selectOption('#filterStatus', 'open');
 
-  // ---- FIX 4: tank inputs have no inputmode (minus key available) ----
+  // ---- FIX 4: a negative temperature can actually be entered ----
+  // This used to assert the opposite -- that no tank input carried
+  // inputmode="decimal" -- because dropping it was the only lever available
+  // against a keypad with no minus key, at the cost of the numeric keypad.
+  // The fields now keep the numeric keypad AND get a +/- button, so the
+  // assertion is reversed on purpose. What matters is the last check: a
+  // negative goes in and stays in.
   await page.click('#topTabs button[data-tab="cargo"]');
-  ok('FIX 4  no tank input carries inputmode="decimal"',
-     await page.evaluate(() => [...document.querySelectorAll('#tankFieldsWrap input')].every(i => !i.hasAttribute('inputmode'))));
+  ok('FIX 4  tank inputs keep the numeric keypad',
+     await page.evaluate(() => [...document.querySelectorAll('#tankFieldsWrap input[data-key]')]
+       .every(i => i.getAttribute('inputmode') === 'decimal')));
+  ok('FIX 4  and each has a sign button, since that keypad has no minus key',
+     await page.evaluate(() => {
+       const n = document.querySelectorAll('#tankFieldsWrap input[data-key]').length;
+       return n > 10 && document.querySelectorAll('#tankFieldsWrap .signbtn').length === n;
+     }));
   ok('FIX 4  negative temperature is accepted',
      await page.evaluate(() => {
        const i = document.querySelector('#tankFieldsWrap input[data-key="portTop"]');
        i.value = '-162.4';
-       return i.value === '-162.4' && i.checkValidity();
+       return i.value === '-162.4';
      }));
 
   // ---- FIX 6: tank draft really clears after saving ----

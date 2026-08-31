@@ -16,8 +16,10 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.goto('http://localhost:8760/');
 
   // ---- the tab exists and switches ----
-  ok('WWR tab button is present', await p.locator('#topTabs button[data-tab="wwr"]').count()===1);
-  await p.click('#topTabs button[data-tab="wwr"]');
+  ok('Forms tab button is present', await p.locator('#topTabs button[data-tab="forms"]').count()===1);
+  await p.click('#topTabs button[data-tab="forms"]');
+  ok('and WWR sits inside it', await p.locator('#formTabs button[data-form="wwr"]').count()===1);
+  await p.click('#formTabs button[data-form="wwr"]');
   ok('WWR section shows', await p.locator('#wwrSection').isVisible());
   ok('other sections hide', !(await p.locator('#jobsSection').isVisible()) && !(await p.locator('#extraSection').isVisible()));
   ok('title reads Weekly Work Done', (await p.textContent('#pageTitle')).trim()==='Weekly Work Done');
@@ -65,7 +67,8 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.click('#inWeekly');
   await p.click('#addBtn');
   await p.waitForTimeout(200);
-  await p.click('#topTabs button[data-tab="wwr"]');
+  await p.click('#topTabs button[data-tab="forms"]');
+  await p.click('#formTabs button[data-form="wwr"]');
   const pend = p.locator('#wwrListWrap .extra-row', { hasText:'emergency steering' });
   ok('a WR-ticked job appears here too', await pend.count()===1);
   ok('and is marked as not yet done', /NOT YET COMPLETED/.test(await pend.textContent()));
@@ -87,7 +90,8 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('AD-19 export leaves out the un-ticked one', !/emergency steering/.test(ad));
 
   // ---- the weekly report ----
-  await p.click('#topTabs button[data-tab="wwr"]');
+  await p.click('#topTabs button[data-tab="forms"]');
+  await p.click('#formTabs button[data-form="wwr"]');
   await p.click('#wrReportBtn');
   await p.waitForTimeout(400);
   ok('report view opens from the WWR tab', await p.locator('#reportView.on').count()===1);

@@ -27,7 +27,9 @@ object AgendaStore {
         val text: String,
         val priority: String,
         val done: Boolean,
-        val repeat: Boolean
+        val repeat: Boolean,
+        /** "overdue", "no date", or empty when it is simply due today. */
+        val note: String
     )
     data class Day(val jobs: List<Job>, val birthdays: List<String>)
 
@@ -63,7 +65,8 @@ object AgendaStore {
                         o.optString("t", ""),
                         o.optString("p", "normal"),
                         done,
-                        o.optBoolean("r", false)
+                        o.optBoolean("r", false),
+                        o.optString("w", "")
                     )
                 )
             }

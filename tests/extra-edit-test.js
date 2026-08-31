@@ -10,7 +10,8 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.goto('http://localhost:8747/');
   const PIC = process.env.OUT + '/pic.jpg';
 
-  await p.click('#topTabs button[data-tab="extra"]');
+  await p.click('#topTabs button[data-tab="forms"]');
+  await p.click('#formTabs button[data-form="extra"]');
 
   // photo attached at creation
   await p.fill('#exJob','Renew galley exhaust gasket');

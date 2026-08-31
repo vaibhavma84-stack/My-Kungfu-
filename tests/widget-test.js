@@ -58,6 +58,54 @@ function ok(name, cond, got){
      Object.keys(ag.days).length < 20, Object.keys(ag.days).length);
   ok('the ship is named, so the widget can label itself', typeof ag.ship === 'string' && ag.ship.length > 0, ag.ship);
 
+  // --- what today's list is actually for -----------------------------------
+  // A job entered with no date never reached the widget at all, and an overdue
+  // one dropped off it the day after it was due. Both are still work to do.
+  await p.fill('#inJob','Grease deck crane wires');
+  await p.fill('#inDue','');
+  await p.click('#addBtn');
+  await p.waitForTimeout(250);
+  ag = await p.evaluate(() => JSON.parse(window.__published[window.__published.length-1]));
+  ok('a job with no date shows on today',
+     ag.days[today].jobs.some(j => j.t === 'Grease deck crane wires'),
+     JSON.stringify(ag.days[today].jobs.map(j => j.t)));
+  ok('and is labelled as having no date',
+     (ag.days[today].jobs.find(j => j.t === 'Grease deck crane wires') || {}).w === 'no date');
+
+  const past = await p.evaluate(() => {
+    const d = new Date(); d.setDate(d.getDate() - 5);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  });
+  await p.fill('#inJob','Test emergency steering');
+  await p.fill('#inDue', past);
+  await p.click('#addBtn');
+  await p.waitForTimeout(250);
+  ag = await p.evaluate(() => JSON.parse(window.__published[window.__published.length-1]));
+  ok('an overdue job still shows on today',
+     ag.days[today].jobs.some(j => j.t === 'Test emergency steering'),
+     JSON.stringify(ag.days[today].jobs.map(j => j.t + ':' + j.w)));
+  ok('labelled overdue, and sorted to the top',
+     ag.days[today].jobs[0].t === 'Test emergency steering' && ag.days[today].jobs[0].w === 'overdue',
+     JSON.stringify(ag.days[today].jobs[0]));
+  ok('it is still on its own day too, not moved',
+     !!(ag.days[past] && ag.days[past].jobs.some(j => j.t === 'Test emergency steering')));
+  ok('and it is not duplicated on today',
+     ag.days[today].jobs.filter(j => j.t === 'Test emergency steering').length === 1);
+
+  // once done, it drops off
+  await p.evaluate(() => {
+    const t = JSON.parse(localStorage.getItem('gasplanet_todo_v1'));
+    const j = t.find(x => x.job === 'Test emergency steering');
+    j.done = true;
+    localStorage.setItem('gasplanet_todo_v1', JSON.stringify(t));
+  });
+  await p.reload();
+  await p.waitForTimeout(700);
+  ag = await p.evaluate(() => JSON.parse(window.__published[window.__published.length-1]));
+  ok('a completed overdue job is no longer carried onto today',
+     !ag.days[today].jobs.some(j => j.t === 'Test emergency steering'),
+     JSON.stringify(ag.days[today].jobs.map(j => j.t)));
+
   // --- a birthday, in the form the widget shows -----------------------------
   await p.click('#topTabs button[data-tab="crew"]');
   await p.fill('#crewName','Karan Vir Bhatia');

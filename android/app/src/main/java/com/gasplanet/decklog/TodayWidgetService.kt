@@ -53,7 +53,14 @@ private class TodayFactory(private val c: Context) : RemoteViewsService.RemoteVi
                 val j = row.job
                 v.setTextViewText(R.id.item_mark, if (j.done) "☑" else "☐")
                 v.setTextViewText(R.id.item_text, if (j.done) struck(j.text) else j.text)
-                v.setTextViewText(R.id.item_note, if (j.repeat) "recurring" else j.priority)
+                v.setTextViewText(
+                    R.id.item_note,
+                    when {
+                        j.note.isNotBlank() -> j.note          // overdue, or no date on it
+                        j.repeat -> "recurring"
+                        else -> j.priority
+                    }
+                )
                 v.setInt(R.id.item_stripe, "setBackgroundColor", colorFor(j))
                 v.setTextColor(R.id.item_text, if (j.done) TEXT_DONE else TEXT_LIVE)
                 // a projection is not a real job yet, so it cannot be ticked
@@ -77,6 +84,7 @@ private class TodayFactory(private val c: Context) : RemoteViewsService.RemoteVi
 
     private fun colorFor(j: AgendaStore.Job): Int = when {
         j.done -> COLOR_DONE
+        j.note == "overdue" -> COLOR_OVERDUE
         j.priority == "urgent" -> COLOR_URGENT
         j.priority == "important" -> COLOR_IMPORTANT
         else -> COLOR_NORMAL
@@ -88,6 +96,7 @@ private class TodayFactory(private val c: Context) : RemoteViewsService.RemoteVi
         private const val COLOR_NORMAL = 0xFF3A5A78.toInt()
         private const val COLOR_DONE = 0xFF6E8B74.toInt()
         private const val COLOR_BIRTHDAY = 0xFF9B6BB5.toInt()
+        private const val COLOR_OVERDUE = 0xFFC7452C.toInt()
         private const val TEXT_LIVE = 0xFFF0F4F7.toInt()
         private const val TEXT_DONE = 0xFF77848F.toInt()
         /** Struck through the way a job is crossed off a paper list. */

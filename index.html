@@ -156,6 +156,21 @@
   }
   .top-tabs button.active{color:#fff; border-bottom-color:var(--important); background:rgba(255,255,255,.04);}
 
+  .form-tabs{
+    display:flex; gap:7px; padding:11px 20px 10px;
+    background:var(--card); border-bottom:1px solid var(--line);
+  }
+  .form-tabs button{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:6px;
+    background:var(--paper-2); border:1px solid var(--line); color:var(--ink-soft);
+    border-radius:999px; padding:8px 12px; font-size:12.5px; font-weight:700;
+    font-family:inherit; cursor:pointer; white-space:nowrap;
+  }
+  /* Smaller again than the tool icons, which is what these are: a label with a
+     mark beside it, not a tile you aim at. */
+  .form-tabs button svg{width:12px; height:12px; flex:0 0 auto;}
+  .form-tabs button.active{background:var(--steel); border-color:var(--steel); color:#fff;}
+
   /* ---------- Backup reminder ---------- */
   .backup-banner{
     display:flex; align-items:center; gap:10px; flex-wrap:wrap;
@@ -505,16 +520,20 @@
   }
   .tool-tile{
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:11px; background:var(--card); border:1px solid var(--line);
-    border-radius:14px; padding:22px 12px; color:var(--ink);
+    gap:8px; background:var(--card); border:1px solid var(--line);
+    border-radius:14px; padding:15px 12px; color:var(--ink);
     font-family:inherit; font-size:14px; font-weight:650; text-align:center;
     cursor:pointer;
   }
+  /* A quarter of the area they used to take: half the width and half the
+     height. Quartering each dimension instead would leave a six-pixel glyph
+     that cannot be made out at arm's length on deck. */
   .tool-tile .ti{
-    width:46px; height:46px; border-radius:13px; flex:0 0 auto;
+    width:23px; height:23px; border-radius:7px; flex:0 0 auto;
     display:flex; align-items:center; justify-content:center;
     background:var(--tint-info); color:var(--steel);
   }
+  .tool-tile .ti svg{width:13px; height:13px;}
   .tool-tile .tsub{font-size:11.5px; font-weight:500; color:var(--ink-soft);}
   .tool-tile:active{background:var(--paper-2);}
   .tool-tile.soon{opacity:.5; cursor:default; border-style:dashed;}
@@ -1020,8 +1039,7 @@
 
 <div class="top-tabs" id="topTabs">
   <button data-tab="jobs" class="active">To Do</button>
-  <button data-tab="extra">AD-19</button>
-  <button data-tab="wwr">WWR</button>
+  <button data-tab="forms">Forms</button>
   <button data-tab="tools">Tools</button>
   <button data-tab="crew">Crew</button>
   <button data-tab="cargo">Cargo</button>
@@ -1220,7 +1238,23 @@
   <div id="cargoTableWrap"></div>
 </div>
 
-<div id="extraSection" style="display:none;">
+<div id="formsSection" style="display:none;">
+  <div class="form-tabs" id="formTabs">
+    <button data-form="extra" class="active">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="5" y="3" width="14" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"/>
+        <path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+              d="M9 8h6M9 12h6M9 16h3"/>
+      </svg>AD-19</button>
+    <button data-form="wwr">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2.4"/>
+        <path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+              d="M3 10h18M8 3v4M16 3v4M9.5 15.5l2 2 3.5-4"/>
+      </svg>Weekly Work Done</button>
+  </div>
+
+<div id="extraSection">
   <div id="extraAddWrap">
     <div class="ship-note">
       One-off jobs for the work planner — something that came up on the day and was
@@ -1306,6 +1340,7 @@
     <button class="btn btn-primary" id="wrReportBtn" style="padding:10px 14px;">Weekly Report</button>
   </div>
   <div id="wwrListWrap"></div>
+</div>
 </div>
 
 <div id="toolsSection" style="display:none;">
@@ -1637,6 +1672,12 @@
   var expandedIds = new Set();
   var currentView = 'list';
   var activeTab = 'jobs';
+  // Which form was last open. Remembered, because a ship works one of these at
+  // a time for days and being dropped back on the other one every visit grates.
+  var activeForm = (function(){
+    try{ var v = localStorage.getItem('gasplanet_form_v1'); return v === 'wwr' ? 'wwr' : 'extra'; }
+    catch(e){ return 'extra'; }
+  })();
   var currentTankTab = '1';
   var cargoDraft = {'1':{},'2':{},'3':{},'4':{}};
 
@@ -1839,11 +1880,19 @@
     d.setDate(d.getDate()+n);
     return isoFromDate(d);
   }
+  // The 31st has no September. setMonth keeps the day and lets it roll into the
+  // following month, so stepping forward from 31 August landed on 1 October and
+  // the month view skipped September altogether -- as it did from any 31st into
+  // a 30-day month, and from the 29th onwards into February. The day is clamped
+  // to the length of the month being moved into.
   function addMonthsISO(iso, n){
     var parts = iso.split('-');
-    var d = new Date(parts[0], parts[1]-1, parts[2]);
-    d.setMonth(d.getMonth()+n);
-    return isoFromDate(d);
+    var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, day = parseInt(parts[2], 10);
+    var t  = m + n;
+    var ty = y + Math.floor(t / 12);
+    var tm = ((t % 12) + 12) % 12;
+    var lastDay = new Date(ty, tm + 1, 0).getDate();
+    return isoFromDate(new Date(ty, tm, Math.min(day, lastDay)));
   }
   function getMonday(iso){
     var parts = iso.split('-');
@@ -2329,16 +2378,39 @@
   var AGENDA_CACHE_KEY = 'gasplanet_agenda_v1';
 
   function agendaForDay(iso){
-    var jobs = [];
-    tasks.forEach(function(t){
-      if(t.due !== iso) return;
-      jobs.push({ i:t.id, t:t.job, p:t.priority || 'normal', d:!!t.done, ad19:!!t.ad19 });
-    });
-    projectedOn(iso).forEach(function(t){
-      jobs.push({ t:t.job, p:t.priority || 'normal', d:false, r:true });
-    });
+    var jobs = [], seen = {};
+    function add(t, when, projected){
+      if(!projected){
+        if(seen[t.id]) return;
+        seen[t.id] = 1;
+      }
+      jobs.push({ i:projected ? '' : t.id, t:t.job, p:t.priority || 'normal',
+                  d:projected ? false : !!t.done, ad19:!!t.ad19,
+                  r:!!projected, w:when || '' });
+    }
+    tasks.forEach(function(t){ if(t.due === iso) add(t, ''); });
+
+    // Today carries what is actually outstanding, not only what happens to be
+    // dated today. A job entered with no date at all never reached the widget
+    // before, and an overdue one dropped off it the day after it was due --
+    // which is the opposite of what a list of the day's work is for.
+    if(iso === todayISO()){
+      tasks.forEach(function(t){
+        if(t.done || seen[t.id]) return;
+        if(!t.due)        add(t, 'no date');
+        else if(t.due < iso) add(t, 'overdue');
+      });
+    }
+
+    // A projection of a job that is already on this day's list is the same job
+    // twice: an overdue daily job would show once as overdue and once as its
+    // forecast for today, which on a checklist reads as two jobs.
+    projectedOn(iso).forEach(function(t){ if(!seen[t.id]) add(t, '', true); });
     jobs.sort(function(a,b){
       if(a.d !== b.d) return a.d ? 1 : -1;
+      // overdue first: it should have been done already
+      var ao = a.w === 'overdue' ? 0 : 1, bo = b.w === 'overdue' ? 0 : 1;
+      if(ao !== bo) return ao - bo;
       return priorityRank(a.p) - priorityRank(b.p);
     });
     return { jobs: jobs, bdays: birthdaysOnDate(iso).map(crewLine) };
@@ -6031,7 +6103,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v41';
+  var APP_BUILD = 'v42';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -6512,6 +6584,7 @@
   mapLoad();
   // the fields that can hold a negative, wherever they already exist
   attachSignButtons(document);
+  showForm(activeForm);
   loadReportOrder();
   // ticks made on the home-screen widget while the app was closed
   applyWidgetTicks();
@@ -7087,8 +7160,25 @@
     if(delBtn){ deleteCargoEntry(delBtn.dataset.id); }
   });
 
-  var tabTitles = { jobs:'To Do List', extra:'Additional AD-19 Jobs', wwr:'Weekly Work Done',
+  var tabTitles = { jobs:'To Do List', forms:'Forms',
                     tools:'Tools', crew:'Crew List', cargo:'Cargo Log', ship:"Ship's Particulars" };
+  var formTitles = { extra:'Additional AD-19 Jobs', wwr:'Weekly Work Done' };
+
+  function showForm(which){
+    activeForm = (which === 'wwr') ? 'wwr' : 'extra';
+    try{ localStorage.setItem('gasplanet_form_v1', activeForm); }catch(e){}
+    document.getElementById('extraSection').style.display = activeForm === 'extra' ? '' : 'none';
+    document.getElementById('wwrSection').style.display   = activeForm === 'wwr'   ? '' : 'none';
+    document.querySelectorAll('#formTabs button').forEach(function(b){
+      b.classList.toggle('active', b.dataset.form === activeForm);
+    });
+    if(activeTab === 'forms') document.getElementById('pageTitle').textContent = formTitles[activeForm];
+  }
+  document.getElementById('formTabs').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-form]');
+    if(b) showForm(b.dataset.form);
+  });
+
   document.getElementById('topTabs').addEventListener('click', function(e){
     var btn = e.target.closest('button[data-tab]');
     if(!btn) return;
@@ -7098,12 +7188,12 @@
     document.getElementById('crewSection').style.display = activeTab==='crew' ? '' : 'none';
     document.getElementById('cargoSection').style.display = activeTab==='cargo' ? '' : 'none';
     document.getElementById('shipSection').style.display = activeTab==='ship' ? '' : 'none';
-    document.getElementById('extraSection').style.display = activeTab==='extra' ? '' : 'none';
-    document.getElementById('wwrSection').style.display = activeTab==='wwr' ? '' : 'none';
+    document.getElementById('formsSection').style.display = activeTab==='forms' ? '' : 'none';
     document.getElementById('toolsSection').style.display = activeTab==='tools' ? '' : 'none';
     // leaving the tab and coming back lands on the launcher, not the last tool
     if(activeTab !== 'tools') showTool(null);
-    document.getElementById('pageTitle').textContent = tabTitles[activeTab];
+    document.getElementById('pageTitle').textContent =
+      activeTab === 'forms' ? formTitles[activeForm] : tabTitles[activeTab];
     document.getElementById('fabAdd').style.display = activeTab==='jobs' ? '' : 'none';
   });
 })();

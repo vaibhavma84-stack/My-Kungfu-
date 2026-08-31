@@ -10,7 +10,16 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   const dialogs=[]; p.on('dialog',async d=>{dialogs.push(d.message()); await d.accept();});
   await p.goto('http://localhost:8743/');
 
-  ok('seven tabs now', (await p.locator('#topTabs button').count())===7);
+  // AD-19 and WWR moved in behind Forms, so six across the top rather than seven
+  ok('six tabs across the top', (await p.locator('#topTabs button').count())===6,
+     await p.locator('#topTabs button').count());
+  ok('and they are the expected six',
+     (await p.evaluate(()=>[...document.querySelectorAll('#topTabs button')].map(b=>b.dataset.tab).join(','))) 
+       === 'jobs,forms,tools,crew,cargo,ship',
+     await p.evaluate(()=>[...document.querySelectorAll('#topTabs button')].map(b=>b.dataset.tab).join(',')));
+  ok('AD-19 and WWR are no longer top tabs',
+     (await p.locator('#topTabs button[data-tab="extra"]').count())===0 &&
+     (await p.locator('#topTabs button[data-tab="wwr"]').count())===0);
   await p.click('#topTabs button[data-tab="ship"]');
   ok('ship section shows', await p.isVisible('#shipSection'));
   ok('other sections hidden', !(await p.isVisible('#jobsSection')) && !(await p.isVisible('#cargoSection')));
