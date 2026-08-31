@@ -59,6 +59,113 @@ function ok(name, cond, got){
      geo.tiers.join(' < '));
   ok('borders and rivers decode too', geo.borders > 300 && geo.rivers > 3000,
      geo.borders + ' borders, ' + geo.rivers + ' rivers');
+
+  // --- the high-resolution tiles and the country colouring -----------------
+  // Zoomed out the map draws a coarse whole-world layer; past TILE_ZOOM it
+  // switches to 4-degree tiles carrying the full GSHHG coastline. These check
+  // the tiles are there, that each one is genuinely clipped to its own square
+  // (a tile that carried a whole continent's ring would be useless), and that
+  // the colouring promise the generator makes actually reached the app.
+  const tiles = await p.evaluate(() => window.__mapTiles());
+  ok('the full-resolution coastline is carried as tiles',
+     tiles.coast > 2000 && tiles.size === 4, tiles.coast + ' tiles of ' + tiles.size + ' deg');
+  ok('and the country colours as tiles of their own',
+     tiles.country > 1500, tiles.country);
+  ok('with a coarse whole-world layer for zoomed-out views',
+     tiles.overview >= 10, tiles.overview + ' colour groups');
+  ok('no two countries that touch share a colour',
+     tiles.adjBad === 0, tiles.adjBad + ' adjacent pairs sharing');
+  ok('the palette has enough colours to keep that promise',
+     tiles.fills >= 10, tiles.fills);
+
+  // Every ring in a tile must lie inside that tile, or the clip did not happen
+  // and the tile is carrying geometry that belongs to its neighbours.
+  const clipped = await p.evaluate(() => {
+    // 44_31: the English Channel and southern North Sea (-4..0 E, 34..38 N grid
+    // index), a square with real coastline in it rather than open ocean.
+    const size = 4, keys = [];
+    for(const [lon, lat] of [[0, 51], [103, 1], [-4, 50], [55, 25]])
+      keys.push(Math.floor((lon + 180) / size) + '_' + Math.floor((lat + 90) / size));
+    let checked = 0, outside = 0, rings = 0;
+    for(const k of keys){
+      const t = window.__mapTile('coast', k);
+      if(!t) continue;
+      checked++;
+      const [xs, ys] = k.split('_').map(Number);
+      const w = xs * size - 180, e = w + size, s = ys * size - 90, n = s + size;
+      for(const lvl of Object.keys(t)) for(const r of t[lvl]){
+        rings++;
+        // a hair of tolerance for the encoder's two-decimal grid
+        if(r.w < w - 0.02 || r.e > e + 0.02 || r.s < s - 0.02 || r.no > n + 0.02) outside++;
+      }
+    }
+    return { checked, outside, rings };
+  });
+  ok('four sample tiles all decode', clipped.checked === 4, clipped.checked);
+  ok('and every ring in them is clipped to its own square, not spilling out',
+     clipped.rings > 20 && clipped.outside === 0,
+     clipped.outside + ' of ' + clipped.rings + ' rings outside');
+
+  // The colours have to be readable against the sea and against each other:
+  // an earlier palette put Britain in a blue two just-noticeable differences
+  // from the water and the island simply disappeared.
+  const sep = await p.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    const sea = cs.getPropertyValue('--map-sea').trim();
+    // read the palette back out of the app rather than restating it here
+    const fills = window.__mapFills();
+    function lab(hex){
+      const v = parseInt(hex.slice(1), 16);
+      let r = ((v >> 16) & 255) / 255, g = ((v >> 8) & 255) / 255, b = (v & 255) / 255;
+      const f = c => c > 0.04045 ? Math.pow((c + 0.055) / 1.055, 2.4) : c / 12.92;
+      r = f(r); g = f(g); b = f(b);
+      let X = (r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047;
+      let Y = (r * 0.2126 + g * 0.7152 + b * 0.0722);
+      let Z = (r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883;
+      const h = t => t > 0.008856 ? Math.cbrt(t) : (7.787 * t + 16 / 116);
+      X = h(X); Y = h(Y); Z = h(Z);
+      return [116 * Y - 16, 500 * (X - Y), 200 * (Y - Z)];
+    }
+    const dE = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    const L = fills.map(lab), S = lab(sea);
+    let minPair = 1e9, minSea = 1e9;
+    for(let i = 0; i < L.length; i++){
+      minSea = Math.min(minSea, dE(L[i], S));
+      for(let j = i + 1; j < L.length; j++) minPair = Math.min(minPair, dE(L[i], L[j]));
+    }
+    return { minPair, minSea, n: fills.length };
+  });
+  ok('no country colour can be mistaken for the sea',
+     sep.minSea > 8, 'closest is ' + sep.minSea.toFixed(1) + ' dE from the water');
+  ok('and no two of them can be mistaken for each other',
+     sep.minPair > 6, 'closest pair ' + sep.minPair.toFixed(1) + ' dE');
+
+  // Past TILE_ZOOM the tiles take over from the coarse whole-world layer. The
+  // test straddles the threshold at the same place -- 13.5 and 14.5 px/degree
+  // show almost the same window, so any gain in edge detail is the tiles
+  // carrying more coastline than the coarse layer did, not a wider view.
+  const detail = await p.evaluate(() => {
+    const c = document.getElementById('mapCanvas'), g = c.getContext('2d');
+    function edges(){
+      const d = g.getImageData(0, 0, c.width, c.height).data, w = c.width;
+      let n = 0;
+      for(let y = 0; y < c.height; y += 2) for(let x = 0; x < w - 1; x++){
+        const i = (y * w + x) * 4;
+        if(Math.abs(d[i] - d[i + 4]) + Math.abs(d[i + 1] - d[i + 5]) > 24) n++;
+      }
+      return n;
+    }
+    const out = {};
+    for(const [name, lat, lon] of [['channel', 50.9, 1.6], ['fjords', 60, 5]]){
+      window.__mapSetView(lat, lon, 13.5); window.__mapRedraw(); const a = edges();
+      window.__mapSetView(lat, lon, 14.5); window.__mapRedraw(); const b = edges();
+      out[name] = [a, b];
+    }
+    return out;
+  });
+  ok('crossing the tile threshold brings in finer coastline, not just a bigger one',
+     detail.channel[1] > detail.channel[0] && detail.fjords[1] > detail.fjords[0],
+     Object.keys(detail).map(k => k + ' ' + detail[k].join('->')).join(', '));
   ok('the coastline spans the whole Earth, not a corner of it',
      geo.box[0] < -179 && geo.box[1] > 179 && geo.box[2] < -60 && geo.box[3] > 70,
      geo.box.map(x => x.toFixed(1)).join(', '));
