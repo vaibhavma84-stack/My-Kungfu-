@@ -191,7 +191,7 @@ const WANT_DEP = [
     'All securing by wires', 'Reducer installed', 'Visitors list at gangway',
     'MSDS at gangway', 'Tide table at gangway', 'Briefing card at gangway',
     'Cargo meeting', 'Pre-arrivals entry in DLB and port log',
-    'Accommodation at positive pressure', 'Vents close and pressure arrange',
+    'Accommodation at positive pressure', 'Vents close and pressure adjust',
     'Anemometer alarm', 'MARVS setting boards',
     'Drip trays', 'Scuppers', 'SOPEP equipment'
   ];
