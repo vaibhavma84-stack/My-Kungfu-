@@ -356,3 +356,45 @@ as a right one. This is the `factor-check.py` argument, applied to money.
   current.
 - **Nothing in the calculator is a forecast**, and it says so. A fund does not
   return the same percentage every year.
+
+## Ledger on Android
+
+The same WebView-shell approach as the deck log, and mostly the same file. Its
+own Gradle project at `money/android/`, its own workflow, its own release tag.
+
+- **The release tag is `ledger-latest`, not `latest`.** The deck log's workflow
+  deletes and recreates `latest` on every one of its builds. Sharing the tag
+  would have meant each app's build quietly replacing the other's download, and
+  the symptom would have been someone installing the deck log expecting Ledger.
+- **Its own signing key, committed, and verified before publishing.** Same
+  reasoning as the deck log — a build signed by a different key cannot install
+  as an upgrade, and the only way in is to uninstall. There it costs the jobs
+  and photos. Here it costs every loan, holding and expense. The check reuses
+  `android/verify-signing.py` rather than a copy of it.
+- **`check-resources.py` takes a project directory now** and is run against both.
+  It also checks `mipmap/` references, which it previously skipped: a manifest
+  naming a launcher icon that is not there is an aapt error like any other, and
+  costs the same full build cycle to find. There is still no Android SDK in the
+  environment this is developed in, so CI remains the only compiler and the
+  script is the only thing standing between a typo and a wasted cycle.
+- **The shell is smaller than the deck log's on purpose.** No camera, no
+  location, no widgets, no print — no photographs and no map in this app. The
+  permission list is empty, which for an app holding a person's salary and
+  holdings is worth having.
+- **`allowBackup` is off, and this is the one real disagreement with the deck
+  log.** Android's auto backup copies the app data directory — where the WebView
+  keeps localStorage, where all of this lives — to the user's Google Drive, on a
+  schedule, with no prompt. The app's own Data tab says nothing is uploaded and
+  nothing syncs; that has to be true rather than nearly true.
+  `data_extraction_rules.xml` says the same for Android 12 and later, which
+  reads it instead of `fullBackupContent`. The cost is stated plainly in the
+  README: lose the phone and the data goes with it unless it was exported.
+- **The page-to-shell contract is pinned by a test on the page's side.** The
+  shell catches a click on `<a download>` and reads the blob back, because a
+  WebView ignores that click entirely — no error, no file, nothing. If the
+  export is ever rewritten to save some other way, the APK silently loses the
+  ability to back anything up, and nothing on the phone would say so. The test
+  fails instead.
+- **`APP_BUILD` in the page is what CI names the release after**, and the Data
+  tab prints it, so "which version is actually on this phone" is answered by
+  looking rather than guessed.

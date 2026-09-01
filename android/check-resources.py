@@ -8,12 +8,17 @@ error that cost one: an unescaped apostrophe in a string resource (a hard aapt
 error, and the one that broke the v39 build), a reference to a resource that
 does not exist, and malformed XML.
 
-    python3 check-resources.py
+    python3 check-resources.py                 # this project (the deck log)
+    python3 check-resources.py ../money/android    # any other project
+
+The Ledger app has its own Gradle project and the same no-SDK problem, so it
+gets checked by this same script rather than a copy of it that would drift.
 """
 import os, re, sys
 import xml.etree.ElementTree as ET
 
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app', 'src', 'main')
+PROJECT = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.join(PROJECT, 'app', 'src', 'main')
 RES  = os.path.join(ROOT, 'res')
 JAVA = os.path.join(ROOT, 'java')
 
@@ -93,6 +98,14 @@ for f in res_files('layout'):
 layouts   = {os.path.splitext(os.path.basename(f))[0] for f in res_files('layout')}
 drawables = {os.path.splitext(os.path.basename(f))[0] for f in res_files('drawable')}
 xmls      = {os.path.splitext(os.path.basename(f))[0] for f in res_files('xml')}
+# Launcher icons live in mipmap-<density>/ and are PNGs rather than XML, so
+# they need their own sweep. A manifest naming an icon that is not there is an
+# aapt error like any other, and it costs the same full build cycle.
+mipmaps = set()
+for d in sorted(os.listdir(RES) if os.path.isdir(RES) else []):
+    if not d.startswith('mipmap'): continue
+    for fn in os.listdir(os.path.join(RES, d)):
+        mipmaps.add(os.path.splitext(fn)[0])
 strings, styles = set(), set()
 for f in res_files('values'):
     try: root = ET.parse(f).getroot()
@@ -102,14 +115,14 @@ for f in res_files('values'):
         if el.tag == 'style' and el.get('name'): styles.add(el.get('name'))
 
 BUCKETS = {'id':defined_ids, 'layout':layouts, 'drawable':drawables,
-           'xml':xmls, 'string':strings, 'style':styles}
+           'xml':xmls, 'string':strings, 'style':styles, 'mipmap':mipmaps}
 
 # ---- 4. every @reference in res/ and the manifest resolves ---------------
 for f in all_xml:
     txt = open(f, encoding='utf-8').read()
     rel = os.path.relpath(f, ROOT)
     for kind, name in re.findall(r'@(?!\+)(\w+)/([\w.]+)', txt):
-        if kind in ('android', 'mipmap'): continue      # framework / not checked here
+        if kind == 'android': continue                  # framework, not ours
         bucket = BUCKETS.get(kind)
         if bucket is None: continue
         if name not in bucket:
@@ -136,8 +149,9 @@ for cls in re.findall(r'android:name="\.(\w+)"', man):
     if not hit:
         fail('MANIFEST names .%s but there is no %s.kt' % (cls, cls))
 
-print('checked: %d xml files, %d ids, %d layouts, %d strings, %d styles'
-      % (len(all_xml), len(defined_ids), len(layouts), len(strings), len(styles)))
+print('checked: %d xml files, %d ids, %d layouts, %d strings, %d styles, %d icons'
+      % (len(all_xml), len(defined_ids), len(layouts), len(strings), len(styles),
+         len(mipmaps)))
 if fails:
     print()
     for m in fails: print('  ' + m)

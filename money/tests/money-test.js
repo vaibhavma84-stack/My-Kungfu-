@@ -450,6 +450,55 @@ const stepUpClosed = (A, s, ratePa, m, years) => {
      await p.evaluate(() => Object.keys(localStorage).every(k => !k.startsWith('gasplanet_'))),
      await p.evaluate(() => Object.keys(localStorage).join(',')));
 
+  /* ---- the contract with the Android shell ----
+     A WebView ignores a click on <a download> completely: no error, no file,
+     nothing. The shell catches that click in the capture phase, reads the blob
+     back and writes it to Downloads. That only works while the page keeps
+     saving files exactly this way, so the contract is pinned from this side
+     too — if the export is ever rewritten to use something else, the APK
+     silently stops being able to back anything up, and this fails instead. */
+  const caught = await p.evaluate(() => new Promise(resolve => {
+    const seen = [];
+    document.addEventListener('click', function(e){
+      const a = e.target && e.target.closest ? e.target.closest('a[download]') : null;
+      if(!a || !a.href) return;
+      e.preventDefault(); e.stopPropagation();
+      seen.push({ name: a.getAttribute('download'), href: a.href });
+      fetch(a.href).then(r => r.text()).then(text => {
+        resolve({ name: seen[0].name, scheme: seen[0].href.split(':')[0],
+                  head: text.slice(0, 60), bytes: text.length });
+      }).catch(err => resolve({ error: String(err) }));
+    }, true);
+    exportCsv();
+  }));
+  ok('the CSV export is a click on an <a download>, which the shell can catch',
+     !caught.error && caught.scheme === 'blob', JSON.stringify(caught));
+  ok('the file it hands over is named and non-empty',
+     /^ledger-\d{4}-\d{2}-\d{2}\.csv$/.test(caught.name || '') && caught.bytes > 50,
+     JSON.stringify(caught));
+  ok('the blob is still readable when the shell gets to it',
+     /^"list","id","name"/.test(caught.head || ''), caught.head);
+
+  const caughtJson = await p.evaluate(() => new Promise(resolve => {
+    document.addEventListener('click', function(e){
+      const a = e.target && e.target.closest ? e.target.closest('a[download]') : null;
+      if(!a || !a.href) return;
+      e.preventDefault(); e.stopPropagation();
+      const name = a.getAttribute('download');
+      fetch(a.href).then(r => r.text())
+        .then(t => resolve({ name, ok: JSON.parse(t).app === 'ledger' }))
+        .catch(err => resolve({ error: String(err) }));
+    }, true);
+    exportJson();
+  }));
+  ok('the JSON backup goes the same way and is a Ledger backup',
+     caughtJson.ok === true && /\.json$/.test(caughtJson.name || ''),
+     JSON.stringify(caughtJson));
+
+  ok('the page reports a build, which CI reads to name the APK',
+     /^v\d/.test(await p.evaluate(() => APP_BUILD)),
+     await p.evaluate(() => APP_BUILD));
+
   ok('no page errors anywhere in the run', errs.length === 0, errs.join(' | '));
 
   await b.close(); srv.close();
