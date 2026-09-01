@@ -1,0 +1,1986 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#123A2C">
+<title>Ledger</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<style>
+  :root{
+    --hull:#123A2C;
+    --hull-2:#1B4C3A;
+    --steel:#3E6B57;
+    --paper:#F6F4EF;
+    --paper-2:#EDE9DF;
+    --card:#FFFFFF;
+    --ink:#1B2530;
+    --ink-soft:#5B6673;
+    --line:#D8D2C4;
+    --in:#2E7D5B;
+    --out:#C7452C;
+    --warn:#D6963B;
+    --info:#2B5FA0;
+    --focus:#1E88C7;
+    --tint-in:#E8F0E9;
+    --tint-out:#FBF1EE;
+    --tint-warn:#FFF7E8;
+    --tint-info:#EAF1FB;
+    --tint-line:rgba(0,0,0,.08);
+  }
+  :root[data-theme="dark"]{
+    --paper:#10161B;
+    --paper-2:#18212A;
+    --card:#1A232C;
+    --ink:#E4E9ED;
+    --ink-soft:#96A3AF;
+    --line:#2F3B47;
+    --steel:#7FB39A;
+    --in:#79C39D;
+    --out:#E2705A;
+    --warn:#E0A75E;
+    --info:#7FA6C8;
+    --focus:#5AB0E8;
+    --tint-in:#16251D;
+    --tint-out:#2C1D1A;
+    --tint-warn:#2B2416;
+    --tint-info:#16232F;
+    --tint-line:rgba(255,255,255,.07);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:16px;}
+  .mono,.num{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-variant-numeric:tabular-nums;}
+
+  /* ---------- chrome ---------- */
+  header{position:sticky;top:0;z-index:40;background:var(--hull);color:#EAF2EE;
+    padding:calc(env(safe-area-inset-top) + 10px) 12px 0;}
+  .hbar{display:flex;align-items:baseline;gap:8px;padding-bottom:8px;}
+  .hbar h1{margin:0;font-size:17px;font-weight:600;letter-spacing:.02em;}
+  .hbar .sub{font-size:12px;color:#9BBFAF;margin-left:auto;}
+  nav{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;}
+  nav::-webkit-scrollbar{display:none;}
+  nav button{flex:0 0 auto;background:none;border:0;border-bottom:3px solid transparent;
+    color:#9BBFAF;font:inherit;font-size:14px;padding:9px 12px;cursor:pointer;}
+  nav button[aria-selected="true"]{color:#FFF;border-bottom-color:#7FD3AC;font-weight:600;}
+  main{padding:12px 12px calc(env(safe-area-inset-bottom) + 40px);max-width:760px;margin:0 auto;}
+  section[hidden]{display:none;}
+
+  /* ---------- pieces ---------- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:12px;margin:0 0 10px;}
+  .card h2{margin:0 0 8px;font-size:14px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--ink-soft);font-weight:600;}
+  .row{display:flex;gap:8px;align-items:center;}
+  .row.wrap{flex-wrap:wrap;}
+  .grow{flex:1 1 auto;min-width:0;}
+  .muted{color:var(--ink-soft);}
+  .small{font-size:12px;}
+  .tiny{font-size:11px;}
+  .right{text-align:right;}
+  label{display:block;font-size:12px;color:var(--ink-soft);margin:0 0 3px;}
+  input,select,textarea,button{font:inherit;color:var(--ink);}
+  input,select,textarea{width:100%;background:var(--paper-2);border:1px solid var(--line);
+    border-radius:8px;padding:9px 10px;-webkit-appearance:none;appearance:none;}
+  input:focus,select,textarea:focus{outline:2px solid var(--focus);outline-offset:-1px;}
+  select{background-image:linear-gradient(45deg,transparent 50%,var(--ink-soft) 50%),
+    linear-gradient(135deg,var(--ink-soft) 50%,transparent 50%);
+    background-position:calc(100% - 16px) 55%,calc(100% - 11px) 55%;
+    background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:30px;}
+  input[type=checkbox]{width:auto;}
+  .f{margin:0 0 8px;}
+  .f2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .btn{background:var(--hull);color:#fff;border:0;border-radius:8px;padding:10px 14px;
+    cursor:pointer;font-size:15px;}
+  .btn.sec{background:var(--paper-2);color:var(--ink);border:1px solid var(--line);}
+  .btn.danger{background:var(--out);color:#fff;}
+  .btn.sm{padding:6px 10px;font-size:13px;}
+  .btn:active{opacity:.75;}
+  .chip{display:inline-block;font-size:11px;padding:2px 7px;border-radius:99px;
+    border:1px solid var(--tint-line);background:var(--paper-2);color:var(--ink-soft);}
+  .chip.in{background:var(--tint-in);color:var(--in);border-color:var(--tint-line);}
+  .chip.out{background:var(--tint-out);color:var(--out);}
+  .chip.warn{background:var(--tint-warn);color:var(--warn);}
+  .chip.info{background:var(--tint-info);color:var(--info);}
+  .item{border:1px solid var(--line);border-radius:10px;background:var(--card);
+    padding:10px;margin:0 0 8px;}
+  .item .top{display:flex;gap:8px;align-items:baseline;}
+  .item .nm{font-weight:600;font-size:15px;}
+  .item .amt{margin-left:auto;font-weight:600;white-space:nowrap;}
+  .pos{color:var(--in);} .neg{color:var(--out);}
+  .bar{height:7px;border-radius:99px;background:var(--paper-2);overflow:hidden;margin:7px 0 0;}
+  .bar > i{display:block;height:100%;background:var(--in);}
+  .bar.over > i{background:var(--out);}
+  .kv{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:13px;}
+  .kv .k{color:var(--ink-soft);}
+  .kv.tot{border-top:1px solid var(--line);margin-top:5px;padding-top:6px;font-weight:600;}
+  .big{font-size:26px;font-weight:600;letter-spacing:-.01em;}
+  .work{font-size:11px;color:var(--ink-soft);margin-top:4px;}
+  .empty{color:var(--ink-soft);font-size:13px;text-align:center;padding:18px 6px;}
+  .banner{border-radius:10px;padding:10px 12px;margin:0 0 10px;font-size:13px;
+    background:var(--tint-warn);border:1px solid var(--tint-line);}
+  .banner.bad{background:var(--tint-out);}
+  details > summary{cursor:pointer;font-size:13px;color:var(--ink-soft);
+    list-style:none;padding:4px 0;}
+  details > summary::-webkit-details-marker{display:none;}
+  details > summary::before{content:"\25B8 ";}
+  details[open] > summary::before{content:"\25BE ";}
+  table.sched{width:100%;border-collapse:collapse;font-size:12px;}
+  table.sched th,table.sched td{padding:4px 5px;border-bottom:1px solid var(--line);
+    text-align:right;}
+  table.sched th:first-child,table.sched td:first-child{text-align:left;}
+  table.sched th{color:var(--ink-soft);font-weight:600;position:sticky;top:0;
+    background:var(--card);}
+  .scroll{max-height:300px;overflow:auto;-webkit-overflow-scrolling:touch;}
+  .seg{display:flex;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .seg button{flex:1 1 0;background:var(--paper-2);border:0;border-right:1px solid var(--line);
+    padding:8px 4px;font-size:13px;cursor:pointer;color:var(--ink-soft);}
+  .seg button:last-child{border-right:0;}
+  .seg button[aria-pressed="true"]{background:var(--hull);color:#fff;font-weight:600;}
+  dialog{border:0;border-radius:12px;padding:0;background:var(--card);color:var(--ink);
+    width:min(560px,94vw);max-height:88vh;}
+  dialog::backdrop{background:rgba(0,0,0,.45);}
+  .dlg-hd{position:sticky;top:0;background:var(--hull);color:#fff;padding:11px 14px;
+    display:flex;align-items:center;gap:8px;}
+  .dlg-hd h3{margin:0;font-size:15px;font-weight:600;}
+  .dlg-bd{padding:14px;overflow:auto;max-height:calc(88vh - 110px);}
+  .dlg-ft{padding:10px 14px;border-top:1px solid var(--line);display:flex;gap:8px;
+    background:var(--card);}
+
+  /* ---------- the pie ---------- */
+  .pie-wrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+  .pie{width:180px;height:180px;flex:0 0 auto;}
+  .pie .sl{transition:none;}
+  .pie .plab{font-size:9px;font-weight:700;fill:#fff;text-anchor:middle;
+    dominant-baseline:middle;paint-order:stroke;stroke:rgba(0,0,0,.35);
+    stroke-width:2px;stroke-linejoin:round;}
+  .pie .pc1{font-size:16px;font-weight:600;text-anchor:middle;fill:var(--ink);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  .pie .pc2{font-size:9px;text-anchor:middle;fill:var(--ink-soft);
+    text-transform:uppercase;letter-spacing:.06em;}
+  .pie-list{flex:1 1 200px;min-width:190px;}
+  .pie-list .kv .k{display:flex;align-items:center;gap:7px;}
+  .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto;display:inline-block;}
+  @media (max-width:400px){ .pie-wrap{justify-content:center;} }
+  .f.half{margin:0;}
+  .f2 > .f{margin:0 0 8px;}
+  sup{font-size:.75em;}
+  .x{margin-left:auto;background:none;border:0;color:#fff;font-size:20px;cursor:pointer;
+    line-height:1;padding:0 4px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="hbar">
+    <h1>Ledger</h1>
+    <span class="sub" id="netTop"></span>
+  </div>
+  <nav id="nav" role="tablist">
+    <button role="tab" data-tab="month"  aria-selected="true">Month</button>
+    <button role="tab" data-tab="income" aria-selected="false">Income</button>
+    <button role="tab" data-tab="loans"  aria-selected="false">Loans</button>
+    <button role="tab" data-tab="spend"  aria-selected="false">Spend</button>
+    <button role="tab" data-tab="invest" aria-selected="false">Invest</button>
+    <button role="tab" data-tab="goals"  aria-selected="false">Goals</button>
+    <button role="tab" data-tab="data"   aria-selected="false">Data</button>
+  </nav>
+</header>
+<main>
+  <div id="backup"></div>
+  <section id="tab-month"  role="tabpanel"></section>
+  <section id="tab-income" role="tabpanel" hidden></section>
+  <section id="tab-loans"  role="tabpanel" hidden></section>
+  <section id="tab-spend"  role="tabpanel" hidden></section>
+  <section id="tab-invest" role="tabpanel" hidden></section>
+  <section id="tab-goals"  role="tabpanel" hidden></section>
+  <section id="tab-data"   role="tabpanel" hidden></section>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm">
+    <div class="dlg-hd"><h3 id="dlgTitle"></h3>
+      <button type="button" class="x" id="dlgX" aria-label="Close">&times;</button></div>
+    <div class="dlg-bd" id="dlgBody"></div>
+    <div class="dlg-ft">
+      <button type="button" class="btn" id="dlgSave">Save</button>
+      <button type="button" class="btn sec" id="dlgCancel">Cancel</button>
+      <button type="button" class="btn danger sm" id="dlgDelete" style="margin-left:auto">Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+"use strict";
+/* =====================================================================
+   Ledger — one file, no libraries, no network.
+   Everything is computed on the device from figures typed in by hand.
+   There is no price feed and no bank link: at sea there is no signal, and a
+   number that silently went stale is worse than one you entered yourself.
+   ===================================================================== */
+
+/* ---------- dates: local time, never toISOString ----------
+   toISOString() converts to UTC first, so slicing it gives yesterday's date
+   east of Greenwich in the morning. Every date in this app is built from
+   local components. This is the same rule as the deck log, for the same
+   reason, and it is easy to break again. */
+function isoFromDate(d){
+  const p = n => String(n).padStart(2,'0');
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+}
+function today(){ return isoFromDate(new Date()); }
+function dateFromIso(s){
+  if(!s) return null;
+  const [y,m,d] = s.split('-').map(Number);
+  if(!y || !m || !d) return null;
+  return new Date(y, m-1, d);
+}
+function ym(iso){ return (iso||'').slice(0,7); }              // '2026-09'
+function thisMonth(){ return ym(today()); }
+function monthAdd(m, n){                                       // '2026-09', 4
+  const [y,mm] = m.split('-').map(Number);
+  const t = (y*12 + (mm-1)) + n;
+  return String(Math.floor(t/12)) + '-' + String(t%12 + 1).padStart(2,'0');
+}
+function monthDiff(a, b){                                      // b - a, in months
+  const [ay,am] = a.split('-').map(Number), [by,bm] = b.split('-').map(Number);
+  return (by*12 + bm) - (ay*12 + am);
+}
+function monthName(m){
+  const d = dateFromIso(m + '-01');
+  return d ? d.toLocaleDateString(undefined,{month:'long',year:'numeric'}) : m;
+}
+function shortMonth(m){
+  const d = dateFromIso(m + '-01');
+  return d ? d.toLocaleDateString(undefined,{month:'short',year:'2-digit'}) : m;
+}
+function dayOfMonth(m, day){                                   // clamped to month end
+  const [y,mm] = m.split('-').map(Number);
+  const last = new Date(y, mm, 0).getDate();
+  return m + '-' + String(Math.min(Math.max(day||1,1), last)).padStart(2,'0');
+}
+/* Months between two dates, with the part-month as a fraction of the month it
+   falls in. Deposits are quoted in months, so elapsed time is counted in
+   months too — measuring it in average-length years instead left "worth
+   today" a few rupees short of "at maturity" on the maturity date itself. */
+function monthsBetween(aIso, bIso){
+  const a = dateFromIso(aIso), b = dateFromIso(bIso);
+  if(!a || !b) return 0;
+  const whole = monthDiff(ym(aIso), ym(bIso));
+  const da = a.getDate(), db = b.getDate();
+  const inB = new Date(b.getFullYear(), b.getMonth()+1, 0).getDate();
+  return whole + (db - da) / inB;
+}
+function fmtDate(iso){
+  const d = dateFromIso(iso);
+  return d ? d.toLocaleDateString(undefined,{day:'2-digit',month:'short',year:'numeric'}) : '';
+}
+
+/* ---------- money ----------
+   Rupees are held as numbers and rounded only for display. Indian digit
+   grouping (1,23,456) comes from Intl, which is in the engine — no library. */
+const S = { cur:'₹', locale:'en-IN', theme:'light', month:'', spendCats:[] };
+function money(n, dp){
+  if(n === null || n === undefined || !isFinite(n)) return '—';
+  const d = dp === undefined ? 0 : dp;
+  let out;
+  try{ out = Math.abs(n).toLocaleString(S.locale,
+        {minimumFractionDigits:d, maximumFractionDigits:d}); }
+  catch(e){ out = Math.abs(n).toFixed(d); }
+  return (n < 0 ? '-' : '') + S.cur + out;
+}
+function num(n, dp){
+  if(n === null || n === undefined || !isFinite(n)) return '—';
+  const d = dp === undefined ? 2 : dp;
+  try{ return n.toLocaleString(S.locale,{minimumFractionDigits:d,maximumFractionDigits:d}); }
+  catch(e){ return n.toFixed(d); }
+}
+function pct(n){ return isFinite(n) ? (n>=0?'+':'') + n.toFixed(2) + '%' : '—'; }
+function toNum(v){ const n = parseFloat(String(v).replace(/,/g,'')); return isFinite(n)?n:0; }
+
+/* ---------- storage ----------
+   localStorage is per ORIGIN, not per path. On GitHub Pages this app and the
+   deck log sit under one origin and therefore share one store and one quota,
+   so every key here is prefixed money_ and nothing here ever touches a
+   gasplanet_ key.
+
+   Writes are verified and rolled back. A quota failure used to be swallowed
+   in the deck log: the change stayed in memory, the screen looked normal, and
+   everything since the failure vanished on reload. */
+const K = {
+  income :'money_income_v1',
+  receipt:'money_receipt_v1',
+  loans  :'money_loans_v1',
+  fixed  :'money_fixed_v1',
+  spend  :'money_spend_v1',
+  invest :'money_invest_v1',
+  goals  :'money_goals_v1',
+  set    :'money_settings_v1',
+  backup :'money_lastBackup_',
+  snooze :'money_backupSnooze'
+};
+let DB = { income:[], receipt:[], loans:[], fixed:[], spend:[], invest:[], goals:[] };
+
+function load(){
+  for(const name of ['income','receipt','loans','fixed','spend','invest','goals']){
+    try{
+      const raw = localStorage.getItem(K[name]);
+      const v = raw ? JSON.parse(raw) : [];
+      DB[name] = Array.isArray(v) ? v : [];
+    }catch(e){ DB[name] = []; }
+  }
+  try{
+    const raw = localStorage.getItem(K.set);
+    if(raw) Object.assign(S, JSON.parse(raw));
+  }catch(e){}
+  if(!S.month) S.month = thisMonth();
+  if(!Array.isArray(S.spendCats) || !S.spendCats.length) S.spendCats = DEFAULT_CATS.slice();
+  document.documentElement.setAttribute('data-theme', S.theme === 'dark' ? 'dark' : 'light');
+}
+function save(name){
+  const key = K[name];
+  const before = localStorage.getItem(key);
+  const text = JSON.stringify(name === 'set' ? S : DB[name]);
+  try{
+    localStorage.setItem(key, text);
+    if(localStorage.getItem(key) !== text) throw new Error('short write');
+    return true;
+  }catch(e){
+    // Put the store back the way it was, then reload the copy in memory from
+    // it, so what is on the screen is what actually reached the disk.
+    try{ before === null ? localStorage.removeItem(key) : localStorage.setItem(key, before); }
+    catch(e2){}
+    if(name !== 'set'){
+      try{ DB[name] = before ? JSON.parse(before) : []; }catch(e3){ DB[name] = []; }
+    }
+    alert('Could not save — the phone’s storage for this site is full.\n\n' +
+          'Nothing was changed. Export a backup from the Data tab, then delete ' +
+          'old entries to make room.');
+    return false;
+  }
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* =====================================================================
+   The arithmetic
+   Every formula is written out against its own definition and never chained
+   through another one, so an error in one cannot travel into the rest. The
+   UI prints the working beside each answer for the same reason: a wrong
+   number renders exactly as convincingly as a right one.
+   ===================================================================== */
+
+const DEFAULT_CATS = ['Rent','Car','Fuel','Groceries','Food','Utilities','Phone',
+  'Medical','Family','Travel','Insurance','Education','Clothes','Other'];
+
+const FREQ = {                       // how many times a year it happens
+  monthly:{n:12, label:'monthly'},
+  quarterly:{n:4, label:'quarterly'},
+  half:{n:2,     label:'half-yearly'},
+  yearly:{n:1,   label:'yearly'},
+  once:{n:0,     label:'one-off'}
+};
+/* A yearly bonus is not a twelfth of itself every month, but for "what does
+   this year look like" it has to be spread somehow. Both figures are shown:
+   perMonth for the averaged view, dueIn() for the month it actually lands. */
+function perMonth(amount, freq){
+  const f = FREQ[freq];
+  return (!f || !f.n) ? 0 : amount * f.n / 12;
+}
+/* Does a recurring item fall in month m? Anchored on its start month, so a
+   quarterly item started in February lands in Feb, May, Aug, Nov — not on the
+   calendar quarter, which is a different thing and not what was entered. */
+function fallsIn(item, m){
+  const start = ym(item.start || '');
+  if(!start || m < start) return false;
+  if(item.end && m > ym(item.end)) return false;
+  const f = FREQ[item.freq] || FREQ.monthly;
+  if(f.n === 0) return start === m;                      // one-off
+  const step = 12 / f.n;
+  return monthDiff(start, m) % step === 0;
+}
+function dueIn(item, m){ return fallsIn(item, m) ? toNum(item.amount) : 0; }
+
+/* ---------- loans ----------
+   Reducing balance, interest charged monthly on the opening balance:
+
+       i = rate / 12 / 100
+       interest_this_month = balance * i
+       balance = balance + interest - EMI - any extra payment that month
+
+   The schedule is simulated month by month rather than solved in closed form,
+   because a prepayment part-way through has no closed form — and prepayment
+   is the whole reason anyone opens this screen. */
+function loanRate(loan){ return toNum(loan.rate) / 12 / 100; }
+
+/* Standard EMI, used to fill the field when the lender's figure is not to
+   hand: EMI = P i (1+i)^n / ((1+i)^n - 1). At zero interest it is P/n, which
+   the formula cannot express (0/0). */
+function emiFor(principal, ratePa, months){
+  const P = toNum(principal), n = Math.round(toNum(months)), i = toNum(ratePa)/12/100;
+  if(P <= 0 || n <= 0) return 0;
+  if(i === 0) return P / n;
+  const g = Math.pow(1+i, n);
+  return P * i * g / (g - 1);
+}
+
+/* Runs the loan to its end. Returns every month, so the caller can ask for a
+   schedule, a balance on a date, or the interest paid so far, off one run. */
+function amortise(loan, limit){
+  const P = toNum(loan.principal), i = loanRate(loan);
+  const emi = toNum(loan.emi) || emiFor(P, loan.rate, loan.months);
+  const start = ym(loan.start) || thisMonth();
+  const cap = limit || 1200;                       // 100 years is not a loan
+  const extras = (loan.extras || []).slice()
+        .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  const rows = [];
+  let bal = P, paidInt = 0, paidPri = 0, paidExtra = 0;
+
+  if(P <= 0) return { rows, emi, balance:0, paidInt:0, paidPri:0, paidExtra:0,
+                      payoff:null, months:0, totalInt:0, never:false };
+
+  // An EMI at or below the first month's interest never touches the principal.
+  // Say so rather than looping 1200 times and printing a century.
+  const never = emi > 0 && i > 0 && emi <= P * i;
+
+  for(let k = 0; k < cap && bal > 0.005; k++){
+    const m = monthAdd(start, k);
+    const open = bal;
+    const interest = open * i;
+    let pay = Math.min(emi, open + interest);       // last instalment is short
+    const extra = extras.filter(x => ym(x.date) === m)
+                        .reduce((s,x) => s + toNum(x.amount), 0);
+    let close = open + interest - pay - extra;
+    let extraUsed = extra;
+    if(close < 0){ extraUsed = extra + close; close = 0; }   // do not overpay
+    rows.push({ n:k+1, month:m, open, interest, principal:pay - interest,
+                pay, extra:extraUsed, close });
+    paidInt += interest; paidPri += pay - interest; paidExtra += extraUsed;
+    bal = close;
+    if(never) break;
+  }
+  const last = rows.length ? rows[rows.length-1] : null;
+  return {
+    rows, emi, never,
+    balance: bal,
+    paidInt, paidPri, paidExtra,
+    months: rows.length,
+    payoff: never ? null : (last ? last.month : null),
+    totalInt: paidInt
+  };
+}
+/* Where the loan stands at the end of month m — what is still owed, what has
+   gone in interest so far. Anything after the payoff month reads as closed. */
+function loanAt(loan, m){
+  const a = amortise(loan);
+  let bal = toNum(loan.principal), int = 0, pri = 0, n = 0;
+  for(const r of a.rows){
+    if(r.month > m) break;
+    bal = r.close; int += r.interest; pri += r.principal + r.extra; n = r.n;
+  }
+  if(!a.rows.length) return { balance:0, interest:0, principal:0, paid:0, a };
+  if(m < a.rows[0].month) return { balance:toNum(loan.principal), interest:0,
+                                   principal:0, paid:0, a };
+  return { balance:bal, interest:int, principal:pri, paid:n, a };
+}
+/* The EMI actually due in month m — nothing before it starts, nothing after
+   it is paid off, and the short final instalment at its real size. */
+function loanDue(loan, m){
+  if(loan.closed) return 0;
+  const a = amortise(loan);
+  const row = a.rows.find(r => r.month === m);
+  return row ? row.pay : 0;
+}
+
+/* ---------- deposits ----------
+   FD, cumulative: A = P (1 + r/(100 n))^(n t), n compounds a year.
+   Indian banks compound a term deposit quarterly, so n = 4 is the default and
+   is shown on the card rather than hidden, because at 7% the difference
+   between quarterly and yearly over five years is real money.
+
+   FD, interest paid out: the principal never grows. Payout per period is
+   P r / (100 n) and the maturity value is the principal back. */
+function fdValue(fd, atIso){
+  const P = toNum(fd.principal), r = toNum(fd.rate), n = toNum(fd.comp) || 4;
+  const months = Math.round(toNum(fd.months));
+  const start = dateFromIso(fd.start), at = dateFromIso(atIso || today());
+  if(P <= 0 || !start) return { value:P, maturity:P, interest:0, matures:null, years:0 };
+  const matures = monthAdd(ym(fd.start), months);
+  const tFull = months / 12;
+  const grow = (t) => (fd.payout === 'periodic') ? P : P * Math.pow(1 + r/(100*n), n*t);
+  const maturity = grow(tFull);
+  let elapsed = Math.max(0, monthsBetween(fd.start, atIso || today())) / 12;
+  if(elapsed > tFull) elapsed = tFull;
+  const value = grow(elapsed);
+  return { value, maturity, interest: maturity - P, matures,
+           years: tFull, elapsed,
+           periodic: (fd.payout === 'periodic') ? P * r / (100*n) : 0 };
+}
+/* RD: one instalment a month, each compounded for the time it has left to
+   run. The bank compounds quarterly, so an instalment sitting for k months
+   earns (1 + r/400)^(k/3) — the quarterly rate applied over k/3 quarters,
+   which is how the banks' own RD tables are built.
+
+       M = SUM over i of  A (1 + r/400)^((N - i + 1)/3)
+
+   Not A x N x (1+r) x something. The single-rate shortcut is out by several
+   thousand rupees over a five-year RD, always in the bank's favour. */
+function rdValue(rd, atIso){
+  const A = toNum(rd.monthly), r = toNum(rd.rate), n = toNum(rd.comp) || 4;
+  const N = Math.round(toNum(rd.months));
+  const startM = ym(rd.start);
+  if(A <= 0 || N <= 0 || !startM) return { value:0, maturity:0, paid:0,
+                                           interest:0, matures:null, done:0 };
+  const q = 1 + r / (100 * n);
+  const per = 12 / n;                          // months in one compounding period
+  let maturity = 0;
+  for(let k = 1; k <= N; k++) maturity += A * Math.pow(q, (N - k + 1) / per);
+
+  const nowM = ym(atIso || today());
+  let done = monthDiff(startM, nowM) + 1;
+  if(done < 0) done = 0; if(done > N) done = N;
+  let value = 0;
+  for(let k = 1; k <= done; k++) value += A * Math.pow(q, (done - k + 1) / per);
+
+  return { value, maturity, paid: A * done, done, N,
+           interest: maturity - A * N, matures: monthAdd(startM, N) };
+}
+/* Bond: held at what it is worth now if a price was entered, otherwise at
+   what was paid. Coupon is on face value, never on the price paid — a bond
+   bought at 96 still pays its coupon on 100. */
+function bondValue(b){
+  const units = toNum(b.units) || 0, face = toNum(b.face) || 0;
+  const buy = toNum(b.buy) || face, price = toNum(b.price) || buy;
+  return { cost: units*buy, value: units*price,
+           coupon: units * face * toNum(b.coupon) / 100,
+           matures: b.maturity || null };
+}
+/* Equity and mutual funds: units x the price last written down, and the date
+   it was written down, so a stale figure is visibly stale rather than
+   quietly wrong. */
+function unitValue(h){
+  const units = toNum(h.units), buy = toNum(h.buy), price = toNum(h.price) || buy;
+  const cost = units*buy, value = units*price;
+  return { cost, value, gain:value-cost, gainPct: cost ? (value-cost)/cost*100 : 0 };
+}
+/* One holding, whatever its kind, reduced to cost / value / income. */
+function holdingValue(h, atIso){
+  if(h.kind === 'fd'){
+    const v = fdValue(h, atIso);
+    return { cost:toNum(h.principal), value:v.value, gain:v.value - toNum(h.principal),
+             income:v.periodic * (toNum(h.comp)||4), detail:v };
+  }
+  if(h.kind === 'rd'){
+    const v = rdValue(h, atIso);
+    return { cost:v.paid, value:v.value, gain:v.value - v.paid, income:0, detail:v };
+  }
+  if(h.kind === 'bond'){
+    const v = bondValue(h);
+    return { cost:v.cost, value:v.value, gain:v.value - v.cost, income:v.coupon, detail:v };
+  }
+  const v = unitValue(h);
+  return { cost:v.cost, value:v.value, gain:v.gain, income:0, detail:v };
+}
+const KINDS = { equity:'Equity', mf:'Mutual fund', bond:'Bond', fd:'Fixed deposit',
+                rd:'Recurring deposit' };
+
+/* =====================================================================
+   Rendering
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+function esc(s){
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+function el(id){ return document.getElementById(id); }
+
+/* ---------- the pie ----------
+   Drawn by hand in SVG: no library can be fetched here, and a chart is a few
+   arcs. It is a donut rather than a filled pie because the hole is where the
+   total goes, and reading one number in the middle beats reading a caption.
+
+   Six hues at most, in a fixed order, with everything past the sixth folded
+   into one grey "Other" slice. Slices are never recoloured by rank — a
+   category keeps its colour as the figures move, or a glance month to month
+   means nothing. Both palettes were checked for colour-blind separation
+   against this app's own card colours rather than eyeballed; every slice is
+   also labelled and repeated in the list beneath, so no slice is told apart
+   by its colour alone. */
+const PIE_LIGHT = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300'];
+const PIE_DARK  = ['#3987e5','#d95926','#199e70','#c98500','#d55181','#008300'];
+const PIE_OTHER_LIGHT = '#8A8F96', PIE_OTHER_DARK = '#7C858F';
+function pieColours(){
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return { set: dark ? PIE_DARK : PIE_LIGHT,
+           other: dark ? PIE_OTHER_DARK : PIE_OTHER_LIGHT,
+           surface: dark ? '#1A232C' : '#FFFFFF' };
+}
+/* parts: [{label, value}] — already positive. Returns markup for the donut
+   and its list. Anything below 1% of the total is folded into Other too:
+   a one-degree slice is a line, not a quantity. */
+function donut(parts, centreLabel, centreValue){
+  const c = pieColours();
+  const clean = parts.filter(p => toNum(p.value) > 0)
+                     .sort((a,b) => b.value - a.value);
+  const total = clean.reduce((s,p) => s + p.value, 0);
+  if(!total) return '<div class="empty">Nothing to chart yet.</div>';
+
+  const keep = [], rest = [];
+  for(const p of clean){
+    (keep.length < PIE_LIGHT.length && p.value / total >= 0.01 ? keep : rest).push(p);
+  }
+  const slices = keep.map((p,i) => ({...p, colour:c.set[i]}));
+  if(rest.length){
+    slices.push({ label: rest.length === 1 ? rest[0].label : 'Other (' + rest.length + ')',
+                  value: rest.reduce((s,p) => s + p.value, 0), colour:c.other });
+  }
+
+  const R = 62, W = 22, C = 2 * Math.PI * R, GAP = 2;
+  let at = 0, arcs = '', labels = '';
+  for(const s of slices){
+    const frac = s.value / total;
+    const len = Math.max(C * frac - GAP, 0.6);
+    arcs += '<circle class="sl" cx="90" cy="90" r="' + R + '" fill="none" stroke="' +
+            s.colour + '" stroke-width="' + W + '" stroke-dasharray="' +
+            len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' +
+            (-C * at).toFixed(2) + '"><title>' + esc(s.label) + ' — ' +
+            esc(money(s.value)) + ' (' + (frac*100).toFixed(1) + '%)</title></circle>';
+    // A slice under 7% has no room for a number on it; it is read off the list.
+    if(frac >= 0.07){
+      const mid = (at + frac/2) * 2 * Math.PI - Math.PI/2;
+      const rr = R;
+      labels += '<text x="' + (90 + rr*Math.cos(mid)).toFixed(1) + '" y="' +
+                (90 + rr*Math.sin(mid)).toFixed(1) + '" class="plab">' +
+                Math.round(frac*100) + '%</text>';
+    }
+    at += frac;
+  }
+  const list = slices.map(s =>
+    '<div class="kv"><span class="k"><i class="sw" style="background:' + s.colour +
+    '"></i>' + esc(s.label) + '</span><span class="num">' + esc(money(s.value)) +
+    ' <span class="muted tiny">' + (s.value/total*100).toFixed(1) + '%</span></span></div>'
+  ).join('');
+
+  return '<div class="pie-wrap"><svg viewBox="0 0 180 180" class="pie" role="img" ' +
+    'aria-label="' + esc(centreLabel) + ' ' + esc(centreValue) + '">' +
+    '<g transform="rotate(-90 90 90)">' + arcs + '</g>' + labels +
+    '<text x="90" y="84" class="pc1" style="font-size:' +
+    (String(centreValue).length > 11 ? 12 : String(centreValue).length > 8 ? 14 : 16) +
+    'px">' + esc(centreValue) + '</text>' +
+    '<text x="90" y="100" class="pc2">' + esc(centreLabel) + '</text></svg>' +
+    '<div class="pie-list">' + list + '</div></div>';
+}
+
+/* ---------- small builders ---------- */
+function kv(k, v, cls){
+  return '<div class="kv' + (cls ? ' ' + cls : '') + '"><span class="k">' + esc(k) +
+         '</span><span class="num">' + v + '</span></div>';
+}
+function emptyMsg(t){ return '<div class="empty">' + esc(t) + '</div>'; }
+function barPct(done, target){
+  const p = target > 0 ? done / target * 100 : 0;
+  return '<div class="bar' + (p > 100 ? ' over' : '') + '"><i style="width:' +
+         Math.max(0, Math.min(100, p)).toFixed(1) + '%"></i></div>';
+}
+function opts(list, sel){
+  return list.map(o => {
+    const v = typeof o === 'string' ? o : o.v, t = typeof o === 'string' ? o : o.t;
+    return '<option value="' + esc(v) + '"' + (v === sel ? ' selected' : '') + '>' +
+           esc(t) + '</option>';
+  }).join('');
+}
+
+/* ---------- tabs ---------- */
+let TAB = 'month';
+function show(tab){
+  TAB = tab;
+  document.querySelectorAll('#nav button').forEach(b =>
+    b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  document.querySelectorAll('main section[role=tabpanel]').forEach(s =>
+    s.hidden = (s.id !== 'tab-' + tab));
+  render();
+  window.scrollTo(0,0);
+}
+
+/* ---------- the editor dialog ----------
+   One dialog serves every record. It is handed a list of fields and a record;
+   it gives back a record. Adding a kind of holding is a line in a table, not
+   another form to keep in step with the rest. */
+let DLG = null;
+function editor(title, fields, rec, onSave, onDelete){
+  DLG = { fields, rec, onSave, onDelete };
+  el('dlgTitle').textContent = title;
+  el('dlgDelete').style.display = onDelete ? '' : 'none';
+  drawFields();
+  el('dlg').showModal();
+  const first = el('dlgBody').querySelector('input,select,textarea');
+  if(first && !first.readOnly) setTimeout(() => first.focus(), 50);
+}
+function drawFields(){
+  const { fields, rec } = DLG;
+  el('dlgBody').innerHTML = fields.map(f => {
+    if(f.type === 'head') return '<h2 style="margin:14px 0 6px;font-size:12px;' +
+      'text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft)">' +
+      esc(f.label) + '</h2>';
+    if(f.type === 'note') return '<p class="small muted" style="margin:2px 0 10px">' +
+      f.label + '</p>';
+    const v = rec[f.k] === undefined || rec[f.k] === null ? '' : rec[f.k];
+    let input;
+    if(f.type === 'select'){
+      input = '<select data-k="' + f.k + '">' + opts(f.options, String(v)) + '</select>';
+    }else if(f.type === 'textarea'){
+      input = '<textarea data-k="' + f.k + '" rows="2">' + esc(v) + '</textarea>';
+    }else if(f.type === 'check'){
+      return '<div class="f"><label style="display:flex;gap:8px;align-items:center;' +
+        'font-size:14px;color:var(--ink)"><input type="checkbox" data-k="' + f.k +
+        '"' + (v ? ' checked' : '') + '> ' + esc(f.label) + '</label></div>';
+    }else{
+      const t = f.type === 'date' ? 'date' : (f.type === 'money' || f.type === 'number'
+        ? 'number' : 'text');
+      const step = f.type === 'money' ? ' step="0.01"' : (f.type === 'number'
+        ? ' step="' + (f.step || 'any') + '"' : '');
+      input = '<input type="' + t + '" data-k="' + f.k + '" value="' + esc(v) + '"' +
+        step + (f.type === 'money' || f.type === 'number' ? ' inputmode="decimal"' : '') +
+        (f.ph ? ' placeholder="' + esc(f.ph) + '"' : '') + '>';
+    }
+    return '<div class="f' + (f.half ? ' half' : '') + '"><label>' + esc(f.label) +
+           (f.hint ? ' <span class="muted">' + esc(f.hint) + '</span>' : '') +
+           '</label>' + input + '</div>';
+  }).join('');
+  // Pair adjacent half fields into two columns without a wrapper per pair.
+  const body = el('dlgBody');
+  let i = 0, kids = Array.from(body.children);
+  while(i < kids.length){
+    if(kids[i].classList && kids[i].classList.contains('half') &&
+       kids[i+1] && kids[i+1].classList.contains('half')){
+      const g = document.createElement('div');
+      g.className = 'f2';
+      kids[i].parentNode.insertBefore(g, kids[i]);
+      g.appendChild(kids[i]); g.appendChild(kids[i+1]);
+      i += 2;
+    } else i++;
+  }
+}
+function readFields(){
+  const out = Object.assign({}, DLG.rec);
+  el('dlgBody').querySelectorAll('[data-k]').forEach(n => {
+    const f = DLG.fields.find(x => x.k === n.dataset.k) || {};
+    out[n.dataset.k] = n.type === 'checkbox' ? n.checked
+      : (f.type === 'money' || f.type === 'number' ? (n.value === '' ? '' : toNum(n.value))
+      : n.value);
+  });
+  return out;
+}
+
+/* =====================================================================
+   Month — what came in, what went out, what is left
+   ===================================================================== */
+function monthFigures(m){
+  const incomeDue = DB.income.reduce((s,i) => s + dueIn(i, m), 0);
+  const received  = DB.receipt.filter(r => ym(r.date) === m)
+                              .reduce((s,r) => s + toNum(r.amount), 0);
+  const emi       = DB.loans.reduce((s,l) => s + loanDue(l, m), 0);
+  const prepay    = DB.loans.reduce((s,l) => s + (l.extras||[])
+                      .filter(x => ym(x.date) === m)
+                      .reduce((t,x) => t + toNum(x.amount), 0), 0);
+  const fixed     = DB.fixed.reduce((s,f) => s + dueIn(f, m), 0);
+  const spendRows = DB.spend.filter(x => ym(x.date) === m);
+  const spend     = spendRows.reduce((s,x) => s + toNum(x.amount), 0);
+  const saved     = DB.goals.reduce((s,g) => s + (g.ledger||[])
+                      .filter(x => ym(x.date) === m)
+                      .reduce((t,x) => t + toNum(x.amount), 0), 0);
+  const invested  = DB.invest.filter(h => h.kind === 'rd' && !h.closed)
+                      .reduce((s,h) => {
+                        const v = rdValue(h, m + '-28');
+                        return s + (fallsIn({start:h.start, freq:'monthly',
+                          end: monthAdd(ym(h.start), Math.round(toNum(h.months))-1) + '-28'}, m)
+                          ? toNum(h.monthly) : 0);
+                      }, 0);
+  const out = emi + prepay + fixed + spend + saved + invested;
+  return { m, incomeDue, received, emi, prepay, fixed, spend, spendRows, saved,
+           invested, out, left: incomeDue - out };
+}
+function netWorth(atIso){
+  let assets = 0, cost = 0;
+  for(const h of DB.invest){
+    if(h.closed) continue;
+    assets += holdingValue(h, atIso).value;
+    cost   += holdingValue(h, atIso).cost;
+  }
+  const pots = DB.goals.reduce((s,g) => s + goalSaved(g), 0);
+  const m = ym(atIso || today());
+  const debt = DB.loans.reduce((s,l) => s + (l.closed ? 0 : loanAt(l, m).balance), 0);
+  return { assets, cost, pots, debt, net: assets + pots - debt };
+}
+function goalSaved(g){
+  return (g.ledger||[]).reduce((s,x) => s + toNum(x.amount), 0);
+}
+
+let PIE_VIEW = 'out';
+function renderMonth(){
+  const m = S.month, f = monthFigures(m), nw = netWorth();
+  const prev = monthAdd(m, -1), next = monthAdd(m, 1);
+
+  let h = '<div class="card"><div class="row" style="margin-bottom:10px">' +
+    '<button class="btn sec sm" data-go-month="' + prev + '">&#8592; ' +
+      esc(shortMonth(prev)) + '</button>' +
+    '<div class="grow right" style="text-align:center;font-weight:600">' +
+      esc(monthName(m)) + '</div>' +
+    '<button class="btn sec sm" data-go-month="' + next + '">' +
+      esc(shortMonth(next)) + ' &#8594;</button></div>';
+
+  h += '<div class="right"><div class="muted small">Left over</div>' +
+    '<div class="big ' + (f.left < 0 ? 'neg' : 'pos') + '">' + esc(money(f.left)) +
+    '</div><div class="work">' + esc(money(f.incomeDue)) + ' in &minus; ' +
+    esc(money(f.out)) + ' out</div></div>';
+
+  h += kv('Income due', '<span class="pos">' + esc(money(f.incomeDue)) + '</span>');
+  if(f.received) h += kv('Actually received', esc(money(f.received)));
+  h += kv('Loan instalments', esc(money(f.emi)));
+  if(f.prepay) h += kv('Prepayments', esc(money(f.prepay)));
+  h += kv('Fixed outgoings (rent, etc.)', esc(money(f.fixed)));
+  h += kv('Day-to-day spending', esc(money(f.spend)));
+  if(f.invested) h += kv('Recurring deposits', esc(money(f.invested)));
+  if(f.saved) h += kv('Put into goals', esc(money(f.saved)));
+  h += kv('Left over', '<span class="' + (f.left<0?'neg':'pos') + '">' +
+        esc(money(f.left)) + '</span>', 'tot');
+  h += '</div>';
+
+  /* The pie. Two things are worth seeing as a whole: where a month's money
+     goes, and what the net worth is made of. Same chart, two questions. */
+  h += '<div class="card"><div class="seg" style="margin-bottom:12px">' +
+    '<button data-pie="out"    aria-pressed="' + (PIE_VIEW==='out') + '">Where it goes</button>' +
+    '<button data-pie="assets" aria-pressed="' + (PIE_VIEW==='assets') + '">What I own</button>' +
+    '<button data-pie="cat"    aria-pressed="' + (PIE_VIEW==='cat') + '">Spending</button></div>';
+
+  if(PIE_VIEW === 'out'){
+    const parts = [
+      { label:'Loan instalments', value:f.emi + f.prepay },
+      { label:'Fixed outgoings',  value:f.fixed },
+      { label:'Recurring deposits', value:f.invested },
+      { label:'Goals',            value:f.saved }
+    ];
+    const byCat = {};
+    for(const s of f.spendRows) byCat[s.cat||'Other'] = (byCat[s.cat||'Other']||0) + toNum(s.amount);
+    for(const c in byCat) parts.push({ label:c, value:byCat[c] });
+    h += donut(parts, shortMonth(m) + ' out', money(f.out));
+  }else if(PIE_VIEW === 'cat'){
+    const byCat = {};
+    for(const s of f.spendRows) byCat[s.cat||'Other'] = (byCat[s.cat||'Other']||0) + toNum(s.amount);
+    h += donut(Object.keys(byCat).map(c => ({label:c, value:byCat[c]})),
+               'spent', money(f.spend));
+  }else{
+    const byKind = {};
+    for(const hd of DB.invest){
+      if(hd.closed) continue;
+      const v = holdingValue(hd).value;
+      byKind[KINDS[hd.kind]||hd.kind] = (byKind[KINDS[hd.kind]||hd.kind]||0) + v;
+    }
+    const pots = DB.goals.reduce((s,g) => s + goalSaved(g), 0);
+    if(pots) byKind['Goal savings'] = pots;
+    h += donut(Object.keys(byKind).map(k => ({label:k, value:byKind[k]})),
+               'assets', money(nw.assets + nw.pots));
+  }
+  h += '</div>';
+
+  h += '<div class="card"><h2>Net worth</h2>' +
+    kv('Investments at value', esc(money(nw.assets))) +
+    kv('Goal savings', esc(money(nw.pots))) +
+    kv('Loans outstanding', '<span class="neg">' + esc(money(-nw.debt)) + '</span>') +
+    kv('Net', '<span class="' + (nw.net<0?'neg':'pos') + '">' + esc(money(nw.net)) +
+      '</span>', 'tot') +
+    '<div class="work">Investments are held at the prices last written down, ' +
+    'not at a live price — there is no feed here.</div></div>';
+
+  el('tab-month').innerHTML = h;
+}
+
+/* =====================================================================
+   Income — several sources, each on its own cycle
+   ===================================================================== */
+const INCOME_FIELDS = [
+  { k:'name',   label:'Name',      ph:'Salary, rent from flat, dividend…' },
+  { k:'amount', label:'Amount',    type:'money', half:true },
+  { k:'freq',   label:'How often', type:'select', half:true,
+    options:[{v:'monthly',t:'Monthly'},{v:'quarterly',t:'Quarterly'},
+             {v:'half',t:'Half-yearly'},{v:'yearly',t:'Yearly'},{v:'once',t:'One-off'}] },
+  { k:'start',  label:'First payment', type:'date', half:true },
+  { k:'end',    label:'Last payment',  type:'date', half:true, hint:'(blank = ongoing)' },
+  { k:'note',   label:'Note', type:'textarea' }
+];
+function renderIncome(){
+  const m = S.month;
+  const monthly = DB.income.reduce((s,i) => s + perMonth(toNum(i.amount), i.freq), 0);
+  const dueNow  = DB.income.reduce((s,i) => s + dueIn(i, m), 0);
+
+  let h = '<div class="card"><h2>Income</h2>' +
+    kv('Averaged over a year, per month', esc(money(monthly))) +
+    kv('Falling due in ' + shortMonth(m), esc(money(dueNow))) +
+    '<div class="work">A yearly bonus is not a twelfth of itself each month. ' +
+    'The average is for planning; the month figure is what actually arrives.</div>' +
+    '<button class="btn sm" data-add="income" style="margin-top:10px">Add income</button></div>';
+
+  if(!DB.income.length){
+    h += emptyMsg('No income sources yet. Add salary, rent, dividends — as many as you have.');
+  }
+  for(const i of DB.income){
+    const due = dueIn(i, m);
+    h += '<div class="item" data-edit="income" data-id="' + i.id + '">' +
+      '<div class="top"><span class="nm">' + esc(i.name || 'Untitled') + '</span>' +
+      '<span class="amt pos">' + esc(money(toNum(i.amount))) + '</span></div>' +
+      '<div class="small muted">' + esc((FREQ[i.freq]||FREQ.monthly).label) +
+      (i.start ? ' from ' + esc(fmtDate(i.start)) : '') +
+      (i.end ? ' to ' + esc(fmtDate(i.end)) : '') + '</div>' +
+      (due ? '<div style="margin-top:5px"><span class="chip in">due in ' +
+             esc(shortMonth(m)) + '</span></div>' : '') +
+      (i.note ? '<div class="small muted" style="margin-top:5px">' + esc(i.note) +
+                '</div>' : '') + '</div>';
+  }
+
+  const got = DB.receipt.filter(r => ym(r.date) === m)
+                        .sort((a,b) => b.date.localeCompare(a.date));
+  h += '<div class="card"><h2>Received in ' + esc(shortMonth(m)) + '</h2>' +
+    '<div class="work">What actually landed, as against what was due. ' +
+    'A month where they differ is the month worth looking at.</div>' +
+    (got.length ? got.map(r => {
+      const src = DB.income.find(i => i.id === r.incomeId);
+      return '<div class="kv" data-edit="receipt" data-id="' + r.id + '">' +
+        '<span class="k">' + esc(fmtDate(r.date)) + ' · ' +
+        esc(src ? src.name : (r.note || 'Other')) + '</span>' +
+        '<span class="num pos">' + esc(money(toNum(r.amount))) + '</span></div>';
+    }).join('') : '<div class="empty">Nothing recorded for this month.</div>') +
+    '<button class="btn sm sec" data-add="receipt" style="margin-top:10px">Record a receipt</button></div>';
+
+  el('tab-income').innerHTML = h;
+}
+
+/* =====================================================================
+   Loans — several at once, each with its own schedule
+   ===================================================================== */
+const LOAN_FIELDS = [
+  { k:'name',      label:'Name',   ph:'Home loan, car loan…' },
+  { k:'lender',    label:'Lender', ph:'Bank' },
+  { k:'principal', label:'Amount borrowed', type:'money', half:true },
+  { k:'rate',      label:'Interest % a year', type:'number', half:true, step:'0.01' },
+  { k:'months',    label:'Tenure in months',  type:'number', half:true, step:'1' },
+  { k:'emi',       label:'EMI', type:'money', half:true, hint:'(blank = work it out)' },
+  { k:'start',     label:'First instalment', type:'date' },
+  { k:'closed',    label:'Closed / paid off', type:'check' },
+  { k:'note',      label:'Note', type:'textarea' }
+];
+let OPEN_LOAN = null;
+function renderLoans(){
+  const m = S.month;
+  const live = DB.loans.filter(l => !l.closed);
+  const owed = live.reduce((s,l) => s + loanAt(l, m).balance, 0);
+  const dueM = live.reduce((s,l) => s + loanDue(l, m), 0);
+  const intLeft = live.reduce((s,l) => {
+    const a = amortise(l);
+    const past = loanAt(l, m).interest;
+    return s + (a.totalInt - past);
+  }, 0);
+
+  let h = '<div class="card"><h2>Loans</h2>' +
+    kv('Outstanding at end of ' + shortMonth(m), '<span class="neg">' +
+       esc(money(owed)) + '</span>') +
+    kv('Instalments due this month', esc(money(dueM))) +
+    kv('Interest still to pay, if nothing changes', esc(money(intLeft))) +
+    '<button class="btn sm" data-add="loan" style="margin-top:10px">Add loan</button></div>';
+
+  if(!DB.loans.length) h += emptyMsg('No loans. Add as many as you carry — each keeps its own schedule.');
+
+  for(const l of DB.loans){
+    const a = amortise(l), at = loanAt(l, m);
+    const paidPct = toNum(l.principal) ? (toNum(l.principal) - at.balance) /
+                    toNum(l.principal) * 100 : 0;
+    const open = OPEN_LOAN === l.id;
+    h += '<div class="item">' +
+      '<div class="top"><span class="nm">' + esc(l.name || 'Loan') + '</span>' +
+      (l.closed ? ' <span class="chip">closed</span>' : '') +
+      '<span class="amt neg">' + esc(money(at.balance)) + '</span></div>' +
+      '<div class="small muted">' + esc(l.lender || '') +
+      (l.lender ? ' · ' : '') + num(toNum(l.rate),2) + '% · EMI ' +
+      esc(money(a.emi)) + ' · ' + a.months + ' instalments</div>' +
+      barPct(toNum(l.principal) - at.balance, toNum(l.principal)) +
+      '<div class="tiny muted" style="margin-top:4px">' + paidPct.toFixed(1) +
+      '% repaid · ' + (a.payoff ? 'clear by ' + esc(monthName(a.payoff))
+                                : 'never clears at this EMI') + '</div>';
+
+    if(a.never){
+      h += '<div class="banner bad" style="margin-top:8px">The EMI is at or below ' +
+        'the first month&rsquo;s interest (' + esc(money(toNum(l.principal)*loanRate(l))) +
+        '), so the balance never falls. Check the EMI or the rate.</div>';
+    }
+    h += '<div class="row" style="margin-top:8px;gap:6px">' +
+      '<button class="btn sec sm" data-edit="loan" data-id="' + l.id + '">Edit</button>' +
+      '<button class="btn sec sm" data-prepay="' + l.id + '">Prepay</button>' +
+      '<button class="btn sec sm" data-openloan="' + l.id + '">' +
+      (open ? 'Hide' : 'Schedule') + '</button></div>';
+
+    if(open){
+      h += '<div style="margin-top:10px">' +
+        kv('Interest paid so far', esc(money(at.interest))) +
+        kv('Principal repaid so far', esc(money(at.principal))) +
+        kv('Interest over the whole loan', esc(money(a.totalInt))) +
+        kv('Total repaid over the whole loan',
+           esc(money(toNum(l.principal) + a.totalInt)), 'tot') +
+        '<div class="work">EMI = P&nbsp;i&nbsp;(1+i)<sup>n</sup> / ((1+i)<sup>n</sup>&minus;1), ' +
+        'i = ' + num(toNum(l.rate),2) + '% &divide; 12 = ' +
+        num(loanRate(l)*100, 4) + '% a month. Interest each month is charged on ' +
+        'the opening balance.</div>';
+      if((l.extras||[]).length){
+        h += '<div style="margin-top:8px" class="small"><strong>Prepayments</strong>' +
+          (l.extras||[]).map((x,ix) => '<div class="kv"><span class="k">' +
+            esc(fmtDate(x.date)) + (x.note ? ' · ' + esc(x.note) : '') +
+            '</span><span class="num">' + esc(money(toNum(x.amount))) +
+            ' <button class="btn sec sm" data-delextra="' + l.id + ':' + ix +
+            '">&times;</button></span></div>').join('') + '</div>';
+      }
+      h += '<details style="margin-top:8px"><summary>Every instalment</summary>' +
+        '<div class="scroll"><table class="sched"><thead><tr><th>#</th><th>Month</th>' +
+        '<th>Opening</th><th>Interest</th><th>Principal</th><th>Extra</th><th>Closing</th>' +
+        '</tr></thead><tbody>' +
+        a.rows.map(r => '<tr' + (r.month === m ? ' style="background:var(--tint-info)"' : '') +
+          '><td>' + r.n + '</td><td>' + esc(shortMonth(r.month)) + '</td><td class="num">' +
+          esc(money(r.open)) + '</td><td class="num">' + esc(money(r.interest)) +
+          '</td><td class="num">' + esc(money(r.principal)) + '</td><td class="num">' +
+          (r.extra ? esc(money(r.extra)) : '') + '</td><td class="num">' +
+          esc(money(r.close)) + '</td></tr>').join('') +
+        '</tbody></table></div></details>';
+      h += '</div>';
+    }
+    h += '</div>';
+  }
+  el('tab-loans').innerHTML = h;
+}
+
+/* =====================================================================
+   Spend — the fixed outgoings, and the day-to-day
+   ===================================================================== */
+const FIXED_FIELDS = [
+  { k:'name',   label:'What',   ph:'House rent, car insurance, school fees…' },
+  { k:'amount', label:'Amount', type:'money', half:true },
+  { k:'freq',   label:'How often', type:'select', half:true,
+    options:[{v:'monthly',t:'Monthly'},{v:'quarterly',t:'Quarterly'},
+             {v:'half',t:'Half-yearly'},{v:'yearly',t:'Yearly'},{v:'once',t:'One-off'}] },
+  { k:'cat',    label:'Category', type:'select', half:true, options:DEFAULT_CATS },
+  { k:'start',  label:'First due', type:'date', half:true },
+  { k:'end',    label:'Last due',  type:'date', half:true, hint:'(blank = ongoing)' },
+  { k:'note',   label:'Note', type:'textarea' }
+];
+function spendFields(){
+  return [
+    { k:'date',   label:'Date',   type:'date', half:true },
+    { k:'amount', label:'Amount', type:'money', half:true },
+    { k:'cat',    label:'Category', type:'select', options:S.spendCats },
+    { k:'note',   label:'What for', ph:'Diesel, groceries, service…' }
+  ];
+}
+function renderSpend(){
+  const m = S.month, f = monthFigures(m);
+  const rows = f.spendRows.slice().sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const byCat = {};
+  for(const s of rows) byCat[s.cat||'Other'] = (byCat[s.cat||'Other']||0) + toNum(s.amount);
+  const cats = Object.keys(byCat).sort((a,b) => byCat[b] - byCat[a]);
+  const days = new Date(Number(m.slice(0,4)), Number(m.slice(5,7)), 0).getDate();
+  /* How much of the month is behind us. On the first or second of a month a
+     rate a day is one expense divided by one day, and projecting it forward
+     produces a month-end figure several times the year's income — which is
+     how this was found. An expense dated later in the month counts too: money
+     written down for the 20th has to be inside the elapsed span, or the rate
+     is a division by a period that did not contain the spending. */
+  const lastEntry = f.spendRows.reduce((d,r) =>
+    Math.max(d, Number((r.date||'').slice(8,10)) || 0), 0);
+  const elapsed = (m === thisMonth())
+    ? Math.min(days, Math.max(new Date().getDate(), lastEntry))
+    : days;
+  const rateWorthQuoting = elapsed >= 5 && f.spend > 0;
+
+  let h = '<div class="card"><h2>' + esc(monthName(m)) + '</h2>' +
+    kv('Fixed outgoings', esc(money(f.fixed))) +
+    kv('Day-to-day spending', esc(money(f.spend))) +
+    kv('Together', esc(money(f.fixed + f.spend)), 'tot') +
+    (rateWorthQuoting
+      ? '<div class="work">Day-to-day is running at ' +
+        esc(money(f.spend / elapsed)) + ' a day over ' + elapsed + ' days; at ' +
+        'that rate the month finishes at ' +
+        esc(money(f.spend / elapsed * days)) + '.</div>'
+      : '<div class="work">Too little of the month has gone by to read a rate ' +
+        'a day into it.</div>') +
+    '<div class="row wrap" style="margin-top:10px;gap:6px">' +
+    '<button class="btn sm" data-add="spend">Add expense</button>' +
+    '<button class="btn sec sm" data-add="fixed">Add fixed outgoing</button></div></div>';
+
+  h += '<div class="card"><h2>Fixed outgoings</h2>' +
+    (DB.fixed.length ? DB.fixed.map(x => {
+      const due = dueIn(x, m);
+      return '<div class="kv" data-edit="fixed" data-id="' + x.id + '">' +
+        '<span class="k">' + esc(x.name||'—') + ' <span class="chip">' +
+        esc((FREQ[x.freq]||FREQ.monthly).label) + '</span>' +
+        (due ? ' <span class="chip warn">due</span>' : '') + '</span>' +
+        '<span class="num">' + esc(money(toNum(x.amount))) + '</span></div>';
+    }).join('') : '<div class="empty">Rent, insurance, fees — the ones that arrive whether you look or not.</div>') +
+    '</div>';
+
+  if(cats.length){
+    h += '<div class="card"><h2>By category</h2>' +
+      donut(cats.map(c => ({label:c, value:byCat[c]})), 'spent', money(f.spend)) +
+      '</div>';
+  }
+
+  h += '<div class="card"><h2>Every expense in ' + esc(shortMonth(m)) + '</h2>' +
+    (rows.length ? rows.map(s => '<div class="kv" data-edit="spend" data-id="' + s.id + '">' +
+      '<span class="k">' + esc(fmtDate(s.date)) + ' · <strong>' + esc(s.cat||'Other') +
+      '</strong>' + (s.note ? ' · ' + esc(s.note) : '') + '</span>' +
+      '<span class="num">' + esc(money(toNum(s.amount))) + '</span></div>').join('')
+      : '<div class="empty">Nothing spent this month, or nothing written down.</div>') +
+    '</div>';
+
+  el('tab-spend').innerHTML = h;
+}
+
+/* =====================================================================
+   Invest — equity, mutual funds, bonds, fixed and recurring deposits
+   ===================================================================== */
+function investFields(kind){
+  const common = [{ k:'note', label:'Note', type:'textarea' },
+                  { k:'closed', label:'Sold / matured — leave out of the totals', type:'check' }];
+  if(kind === 'equity') return [
+    { k:'name',  label:'Company', ph:'Name as you know it' },
+    { k:'code',  label:'Symbol',  half:true, ph:'e.g. INFY' },
+    { k:'units', label:'Shares',  type:'number', half:true, step:'any' },
+    { k:'buy',   label:'Average buy price', type:'money', half:true },
+    { k:'price', label:'Price now', type:'money', half:true },
+    { k:'asof',  label:'Price written down on', type:'date' }
+  ].concat(common);
+  if(kind === 'mf') return [
+    { k:'name',  label:'Scheme' },
+    { k:'code',  label:'Folio / plan', half:true },
+    { k:'units', label:'Units', type:'number', half:true, step:'any' },
+    { k:'buy',   label:'Average cost NAV', type:'money', half:true },
+    { k:'price', label:'NAV now', type:'money', half:true },
+    { k:'asof',  label:'NAV written down on', type:'date' },
+    { k:'sip',   label:'Monthly SIP', type:'money', half:true, hint:'(if running)' },
+    { k:'sipday',label:'SIP day', type:'number', half:true, step:'1' }
+  ].concat(common);
+  if(kind === 'bond') return [
+    { k:'name',     label:'Bond' },
+    { k:'units',    label:'Units held', type:'number', half:true, step:'1' },
+    { k:'face',     label:'Face value each', type:'money', half:true },
+    { k:'buy',      label:'Price paid each', type:'money', half:true },
+    { k:'price',    label:'Price now each', type:'money', half:true },
+    { k:'coupon',   label:'Coupon % a year', type:'number', half:true, step:'0.01' },
+    { k:'maturity', label:'Matures on', type:'date', half:true },
+    { k:'note2', type:'note', label:'The coupon is paid on face value, not on ' +
+      'what you paid. A bond bought at 96 still pays its coupon on 100.' }
+  ].concat(common);
+  if(kind === 'fd') return [
+    { k:'name',      label:'Bank / issuer' },
+    { k:'principal', label:'Amount deposited', type:'money', half:true },
+    { k:'rate',      label:'Rate % a year', type:'number', half:true, step:'0.01' },
+    { k:'start',     label:'Deposited on', type:'date', half:true },
+    { k:'months',    label:'Term in months', type:'number', half:true, step:'1' },
+    { k:'comp',      label:'Compounded', type:'select', half:true,
+      options:[{v:'4',t:'Quarterly'},{v:'12',t:'Monthly'},{v:'2',t:'Half-yearly'},
+               {v:'1',t:'Yearly'}] },
+    { k:'payout',    label:'Interest', type:'select', half:true,
+      options:[{v:'cumulative',t:'Left to compound'},{v:'periodic',t:'Paid out'}] },
+    { k:'note2', type:'note', label:'Indian banks compound a term deposit ' +
+      'quarterly. At 7% over five years, quarterly against yearly is a real ' +
+      'difference, so it is set here rather than assumed.' }
+  ].concat(common);
+  return [
+    { k:'name',    label:'Bank' },
+    { k:'monthly', label:'Instalment each month', type:'money', half:true },
+    { k:'rate',    label:'Rate % a year', type:'number', half:true, step:'0.01' },
+    { k:'start',   label:'First instalment', type:'date', half:true },
+    { k:'months',  label:'Number of instalments', type:'number', half:true, step:'1' },
+    { k:'comp',    label:'Compounded', type:'select', half:true,
+      options:[{v:'4',t:'Quarterly'},{v:'12',t:'Monthly'}] },
+    { k:'note2', type:'note', label:'Each instalment earns for the time it has ' +
+      'left to run, so the first is worth more at maturity than the last.' }
+  ].concat(common);
+}
+
+let INV_KIND = 'all';
+function renderInvest(){
+  const live = DB.invest.filter(h => !h.closed);
+  let cost = 0, value = 0, income = 0;
+  for(const h of live){
+    const v = holdingValue(h);
+    cost += v.cost; value += v.value; income += v.income || 0;
+  }
+  const gain = value - cost;
+
+  let h = '<div class="card"><h2>Portfolio</h2>' +
+    '<div class="right"><div class="muted small">Value</div>' +
+    '<div class="big">' + esc(money(value)) + '</div>' +
+    '<div class="work ' + (gain<0?'neg':'pos') + '">' + esc(money(gain)) + ' on ' +
+    esc(money(cost)) + ' put in' + (cost ? ' · ' + pct(gain/cost*100) : '') + '</div></div>' +
+    (income ? kv('Interest and coupons a year', esc(money(income))) : '') +
+    '<div class="row wrap" style="margin-top:10px;gap:6px">' +
+    Object.keys(KINDS).map(k => '<button class="btn sm" data-add="inv:' + k + '">+ ' +
+      esc(KINDS[k]) + '</button>').join('') + '</div></div>';
+
+  const byKind = {};
+  for(const hd of live){
+    const v = holdingValue(hd);
+    byKind[KINDS[hd.kind]] = (byKind[KINDS[hd.kind]]||0) + v.value;
+  }
+  if(value) h += '<div class="card"><h2>Spread</h2>' +
+    donut(Object.keys(byKind).map(k => ({label:k, value:byKind[k]})),
+          'invested', money(value)) + '</div>';
+
+  h += '<div class="card"><div class="seg">' +
+    ['all'].concat(Object.keys(KINDS)).map(k =>
+      '<button data-invkind="' + k + '" aria-pressed="' + (INV_KIND===k) + '">' +
+      esc(k === 'all' ? 'All' : (k === 'mf' ? 'MF' : (k === 'fd' ? 'FD' :
+        (k === 'rd' ? 'RD' : KINDS[k])))) + '</button>').join('') + '</div></div>';
+
+  const list = DB.invest.filter(x => INV_KIND === 'all' || x.kind === INV_KIND);
+  if(!list.length) h += emptyMsg('Nothing here yet.');
+
+  for(const hd of list){
+    const v = holdingValue(hd), d = v.detail;
+    h += '<div class="item" data-edit="inv" data-id="' + hd.id + '">' +
+      '<div class="top"><span class="nm">' + esc(hd.name || KINDS[hd.kind]) + '</span>' +
+      '<span class="chip">' + esc(KINDS[hd.kind]) + '</span>' +
+      (hd.closed ? '<span class="chip">closed</span>' : '') +
+      '<span class="amt">' + esc(money(v.value)) + '</span></div>';
+
+    if(hd.kind === 'equity' || hd.kind === 'mf'){
+      h += '<div class="small muted">' + num(toNum(hd.units), 3) + ' ' +
+        (hd.kind === 'mf' ? 'units' : 'shares') + ' · cost ' +
+        esc(money(toNum(hd.buy), 2)) + ' · now ' + esc(money(toNum(hd.price) ||
+        toNum(hd.buy), 2)) + (hd.asof ? ' as at ' + esc(fmtDate(hd.asof)) : '') + '</div>' +
+        '<div class="small ' + (v.gain<0?'neg':'pos') + '">' + esc(money(v.gain)) +
+        ' · ' + pct(d.gainPct) + '</div>' +
+        '<div class="work">' + num(toNum(hd.units),3) + ' &times; ' +
+        esc(money(toNum(hd.price)||toNum(hd.buy),2)) + ' = ' + esc(money(v.value)) + '</div>';
+      if(hd.asof && hd.asof < monthAdd(thisMonth(), -1) + '-01'){
+        h += '<div class="small" style="color:var(--warn)">Price is over a month old.</div>';
+      }
+    } else if(hd.kind === 'bond'){
+      h += '<div class="small muted">' + num(toNum(hd.units),0) + ' &times; face ' +
+        esc(money(toNum(hd.face))) + ' · coupon ' + num(toNum(hd.coupon),2) + '%' +
+        (hd.maturity ? ' · matures ' + esc(fmtDate(hd.maturity)) : '') + '</div>' +
+        '<div class="small pos">' + esc(money(d.coupon)) + ' a year in coupons</div>' +
+        '<div class="work">' + num(toNum(hd.units),0) + ' &times; ' +
+        esc(money(toNum(hd.face))) + ' &times; ' + num(toNum(hd.coupon),2) +
+        '% = ' + esc(money(d.coupon)) + ' a year</div>';
+    } else if(hd.kind === 'fd'){
+      h += '<div class="small muted">' + esc(money(toNum(hd.principal))) + ' at ' +
+        num(toNum(hd.rate),2) + '% · ' + Math.round(toNum(hd.months)) + ' months' +
+        (d.matures ? ' · matures ' + esc(monthName(d.matures)) : '') + '</div>' +
+        kv('Worth today', esc(money(d.value))) +
+        kv('At maturity', esc(money(d.maturity))) +
+        (d.periodic ? kv('Paid out each period', esc(money(d.periodic))) : '') +
+        '<div class="work">A = P(1 + r/' + (toNum(hd.comp)||4) + '00)<sup>' +
+        (toNum(hd.comp)||4) + 't</sup> = ' + esc(money(toNum(hd.principal))) +
+        '(1 + ' + num(toNum(hd.rate)/(toNum(hd.comp)||4)/100, 5) + ')<sup>' +
+        num((toNum(hd.comp)||4) * toNum(hd.months)/12, 1) + '</sup></div>';
+    } else if(hd.kind === 'rd'){
+      h += '<div class="small muted">' + esc(money(toNum(hd.monthly))) +
+        ' a month at ' + num(toNum(hd.rate),2) + '% · ' + d.done + ' of ' + d.N +
+        ' paid' + (d.matures ? ' · matures ' + esc(monthName(d.matures)) : '') + '</div>' +
+        barPct(d.done, d.N) +
+        kv('Put in so far', esc(money(d.paid))) +
+        kv('Worth today', esc(money(d.value))) +
+        kv('At maturity', esc(money(d.maturity))) +
+        '<div class="work">Each instalment compounds for the months it has left: ' +
+        'M = &Sigma; A(1 + r/' + ((toNum(hd.comp)||4)*100) + ')<sup>(N&minus;k+1)/' +
+        (12/(toNum(hd.comp)||4)) + '</sup>. Interest ' + esc(money(d.interest)) + '.</div>';
+    }
+    if(hd.note) h += '<div class="small muted" style="margin-top:5px">' + esc(hd.note) + '</div>';
+    h += '</div>';
+  }
+
+  h += calculatorHtml();
+  el('tab-invest').innerHTML = h;
+}
+
+/* =====================================================================
+   The calculator
+   Projection and step-up in one engine, run month by month rather than
+   solved in closed form. A step-up SIP has no closed form worth trusting —
+   the instalment changes every twelve months — and the same loop then serves
+   the flat case, the lump sum, the RD and the FD without a second formula to
+   keep in step with this one.
+
+       monthly growth factor  g = (1 + r/(100 n))^(n/12)
+
+   n is how many times a year the instrument compounds: 4 for a bank deposit,
+   12 for a fund valued monthly. Writing it this way means the FD in the
+   calculator and the FD in the portfolio are the same arithmetic.
+   ===================================================================== */
+const CALC0 = { kind:'sip', monthly:10000, lump:0, rate:12, years:10, step:10,
+                target:0, solve:'value', comp:12, face:1000, coupon:7.5, view:'year' };
+
+function calcRun(c){
+  const n     = toNum(c.comp) || 12;
+  const g     = Math.pow(1 + toNum(c.rate)/(100*n), n/12);   // one month's growth
+  const N     = Math.max(1, Math.round(toNum(c.years) * 12));
+  const step  = toNum(c.step) / 100;
+  const base  = toNum(c.monthly);
+  const rows  = [];
+  let bal = toNum(c.lump), paid = toNum(c.lump), inst = base;
+
+  for(let k = 1; k <= N; k++){
+    // The instalment steps up on each anniversary, not each January.
+    inst = base * Math.pow(1 + step, Math.floor((k-1)/12));
+    if(c.kind !== 'lump'){ bal += inst; paid += inst; }
+    bal *= g;
+    rows.push({ k, month:k, inst: c.kind === 'lump' ? 0 : inst,
+                paid, value:bal, gain:bal - paid });
+  }
+  // The run as a cash flow: what went in each month, and what it is worth at
+  // the end. Its IRR is the return actually earned on money that went in a
+  // bit at a time — for a flat rate it comes back as that rate, compounded,
+  // which is the check that it is right.
+  // An instalment is paid at the START of its month and is grown by that
+  // month's factor, so month k's payment sits at time k-1 in the flow, not at
+  // time k. Placing it a month late reads the return about a quarter of a
+  // point high, which is exactly the sort of error nobody would ever spot.
+  const flows = new Array(rows.length + 1).fill(0);
+  flows[0] -= toNum(c.lump);
+  rows.forEach((r,ix) => { flows[ix] -= r.inst; });
+  flows[rows.length] += bal;
+  const im = irr(flows);
+  return { rows, N, g, paid, value:bal, gain:bal - paid,
+           instFirst: base, instLast: inst, flows,
+           irrMonthly: im,
+           annual: im === null ? null : (Math.pow(1+im, 12) - 1) * 100 };
+}
+/* The return on money that went in a bit at a time.
+
+   Dividing the final pot by everything ever paid in and taking a root gives a
+   figure that is always too low: it treats the last instalment as though it
+   had been sitting there since the first day. The honest answer is the rate
+   that makes the whole run of payments and the final value balance —
+
+       0 = SUM over k of  flow(k) / (1+i)^k        k in months
+
+   — solved by bisection, because there is no closed form and a bisection over
+   a run of one-signed payments followed by one positive value cannot land on
+   a second root. It is returned as a monthly rate; the caller compounds it
+   over whatever period it is quoting. */
+function irr(flows){
+  const npv = i => flows.reduce((s,f,k) => s + f/Math.pow(1+i, k), 0);
+  if(!flows.some(f => f > 0) || !flows.some(f => f < 0)) return null;
+  let lo = -0.9999, hi = 10;
+  if(npv(lo) < 0 || npv(hi) > 0) return null;
+  for(let n = 0; n < 200; n++){
+    const mid = (lo+hi)/2;
+    if(npv(mid) > 0) lo = mid; else hi = mid;
+  }
+  return (lo+hi)/2;
+}
+/* FV is proportional to the instalment once the step-up and the rate are
+   fixed, so the amount needed for a target is one division, not a search. */
+function calcSolveMonthly(c){
+  const unit = calcRun(Object.assign({}, c, { monthly:1, lump:0 }));
+  const fromLump = calcRun(Object.assign({}, c, { monthly:0 })).value;
+  const need = toNum(c.target) - fromLump;
+  return unit.value > 0 ? Math.max(0, need) / unit.value : 0;
+}
+function calcSolveLump(c){
+  const g = Math.pow(1 + toNum(c.rate)/(100*(toNum(c.comp)||12)), (toNum(c.comp)||12)/12);
+  const N = Math.max(1, Math.round(toNum(c.years)*12));
+  const fromMonthly = calcRun(Object.assign({}, c, { lump:0 })).value;
+  return Math.max(0, (toNum(c.target) - fromMonthly)) / Math.pow(g, N);
+}
+/* Group the months into periods and state the return earned in each one, on
+   its own opening value — which is the honest per-period figure once money is
+   still going in. A percentage on a pot that grew because more was paid into
+   it is not a return, and is not shown as one. */
+function calcPeriods(run, every){
+  const out = [];
+  for(let s = 0; s < run.rows.length; s += every){
+    const slice = run.rows.slice(s, s + every);
+    if(!slice.length) break;
+    const last = slice[slice.length-1];
+    const openValue = s === 0 ? 0 : run.rows[s-1].value;
+    const openPaid  = s === 0 ? 0 : run.rows[s-1].paid;
+    const inFlow = last.paid - openPaid;
+    const growth = last.value - openValue - inFlow;
+    // The period's own cash flow: the pot it opened with, the instalments paid
+    // during it, and what it closed at. Dividing the growth by the opening
+    // value instead would credit the period with returns earned on money that
+    // only arrived half way through it, and read high in the early periods
+    // exactly where the opening value is smallest.
+    const flows = new Array(slice.length + 1).fill(0);
+    flows[0] -= openValue;
+    slice.forEach((r,ix) => { flows[ix] -= r.inst; });
+    flows[slice.length] += last.value;
+    const im = irr(flows);
+    out.push({ label: every === 3 ? 'Q' + (out.length+1) : 'Year ' + (out.length+1),
+               months: slice.length, paid:last.paid, value:last.value,
+               gain:last.gain, inFlow, growth,
+               ret: im === null ? null : (Math.pow(1+im, slice.length) - 1) * 100 });
+  }
+  return out;
+}
+
+function calculatorHtml(){
+  const c = Object.assign({}, CALC0, S.calc || {});
+  const kindName = { sip:'Mutual fund SIP', rd:'Recurring deposit',
+                     fd:'Fixed deposit', lump:'Lump sum', bond:'Bond' };
+  const run = calcRun(c);
+  const every = c.view === 'q' ? 3 : 12;
+  const periods = calcPeriods(run, every);
+
+  let h = '<div class="card" id="calc"><h2>Projection &amp; step-up calculator</h2>' +
+    '<div class="seg" style="margin-bottom:10px">' +
+    ['sip','rd','fd','lump','bond'].map(k => '<button data-calc-kind="' + k +
+      '" aria-pressed="' + (c.kind===k) + '">' +
+      esc(k === 'sip' ? 'SIP' : k === 'rd' ? 'RD' : k === 'fd' ? 'FD' :
+          k === 'lump' ? 'Lump' : 'Bond') + '</button>').join('') + '</div>';
+
+  h += '<div class="f2">';
+  if(c.kind !== 'lump' && c.kind !== 'bond'){
+    h += '<div class="f"><label>Each month</label><input type="number" ' +
+      'inputmode="decimal" data-calc="monthly" value="' + esc(c.monthly) + '"></div>' +
+      '<div class="f"><label>Step up % a year</label><input type="number" ' +
+      'inputmode="decimal" step="0.5" data-calc="step" value="' + esc(c.step) + '"></div>';
+  }
+  h += '<div class="f"><label>' + (c.kind === 'lump' || c.kind === 'bond'
+        ? 'Amount' : 'Lump sum to start') + '</label><input type="number" ' +
+      'inputmode="decimal" data-calc="lump" value="' + esc(c.lump) + '"></div>' +
+    '<div class="f"><label>Return % a year</label><input type="number" ' +
+      'inputmode="decimal" step="0.1" data-calc="rate" value="' + esc(c.rate) + '"></div>' +
+    '<div class="f"><label>For how many years</label><input type="number" ' +
+      'inputmode="decimal" step="0.5" data-calc="years" value="' + esc(c.years) + '"></div>' +
+    '<div class="f"><label>Compounded</label><select data-calc="comp">' +
+      opts([{v:'12',t:'Monthly'},{v:'4',t:'Quarterly'},{v:'2',t:'Half-yearly'},
+            {v:'1',t:'Yearly'}], String(c.comp)) + '</select></div></div>';
+
+  h += '<div class="f"><label>Work out</label><select data-calc="solve">' +
+    opts([{v:'value',t:'What it grows to'},
+          {v:'monthly',t:'What I must put in each month'},
+          {v:'lump',t:'What lump sum I must start with'}], c.solve) + '</select></div>';
+  if(c.solve !== 'value'){
+    h += '<div class="f"><label>Target amount</label><input type="number" ' +
+      'inputmode="decimal" data-calc="target" value="' + esc(c.target) + '"></div>';
+  }
+
+  /* The answer */
+  if(c.solve === 'monthly'){
+    const need = calcSolveMonthly(c);
+    const proof = calcRun(Object.assign({}, c, { monthly:need }));
+    h += '<div class="right" style="margin-top:12px"><div class="muted small">' +
+      'Starting instalment</div><div class="big">' + esc(money(need)) + '</div>' +
+      '<div class="work">stepping up ' + num(toNum(c.step),1) + '% a year to ' +
+      esc(money(proof.instLast)) + ' by the end · ' + esc(money(proof.paid)) +
+      ' paid in · reaches ' + esc(money(proof.value)) + '</div></div>';
+  }else if(c.solve === 'lump'){
+    const need = calcSolveLump(c);
+    h += '<div class="right" style="margin-top:12px"><div class="muted small">' +
+      'Lump sum needed today</div><div class="big">' + esc(money(need)) + '</div>' +
+      '<div class="work">at ' + num(toNum(c.rate),2) + '% for ' + num(toNum(c.years),1) +
+      ' years' + (toNum(c.monthly) ? ', alongside ' + esc(money(toNum(c.monthly))) +
+      ' a month' : '') + '</div></div>';
+  }else{
+    h += '<div class="right" style="margin-top:12px"><div class="muted small">' +
+      'Worth at the end</div><div class="big">' + esc(money(run.value)) + '</div>' +
+      '<div class="work ' + (run.gain<0?'neg':'pos') + '">' + esc(money(run.paid)) +
+      ' put in · ' + esc(money(run.gain)) + ' earned' +
+      (run.annual === null ? '' : ' · ' + num(run.annual,2) +
+       '% a year on the money, counting when each instalment went in') + '</div>' +
+      (c.kind !== 'lump' && c.kind !== 'bond' && toNum(c.step) ?
+        '<div class="work">Instalment ' + esc(money(run.instFirst)) + ' rising to ' +
+        esc(money(run.instLast)) + ' in the final year</div>' : '') + '</div>';
+  }
+
+  if(c.kind === 'bond'){
+    const per = toNum(c.lump) * toNum(c.coupon) / 100;
+    h += '<div class="f2" style="margin-top:10px">' +
+      '<div class="f"><label>Coupon % a year</label><input type="number" ' +
+      'inputmode="decimal" step="0.01" data-calc="coupon" value="' + esc(c.coupon) +
+      '"></div><div class="f"><label>&nbsp;</label><div class="num" ' +
+      'style="padding:9px 0">' + esc(money(per)) + ' a year</div></div></div>' +
+      '<div class="work">Coupon is paid on face value and does not compound ' +
+      'unless you reinvest it; the figure above assumes you do, at the return ' +
+      'rate entered.</div>';
+  }
+
+  /* Every three months and every year, side by side with the choice. */
+  h += '<div class="seg" style="margin:14px 0 8px">' +
+    '<button data-calc="view" data-v="q"    aria-pressed="' + (c.view==='q') +
+      '">Every 3 months</button>' +
+    '<button data-calc="view" data-v="year" aria-pressed="' + (c.view==='year') +
+      '">Every year</button></div>';
+  h += '<div class="scroll"><table class="sched"><thead><tr>' +
+    '<th>' + (every === 3 ? 'Quarter' : 'Year') + '</th><th>Put in</th>' +
+    '<th>Earned</th><th>Return</th><th>Worth</th></tr></thead><tbody>' +
+    periods.map(p => '<tr><td>' + esc(p.label) + '</td><td class="num">' +
+      esc(money(p.inFlow)) + '</td><td class="num pos">' + esc(money(p.growth)) +
+      '</td><td class="num">' + (p.ret === null ? '—' : num(p.ret,2) + '%') +
+      '</td><td class="num">' + esc(money(p.value)) + '</td></tr>').join('') +
+    '</tbody></table></div>' +
+    '<div class="work">Return is the rate the period actually earned, worked ' +
+    'out from the pot it opened with, the instalments paid during it and what ' +
+    'it closed at — so an instalment paid in the last month is not credited ' +
+    'with a full period&rsquo;s growth. "Put in" is money added, not return.</div>';
+
+  h += '<div class="row wrap" style="margin-top:10px;gap:6px">' +
+    '<button class="btn sm" data-calc-add="1">Add this to the portfolio</button>' +
+    '</div>';
+  h += '<div class="work">Nothing here is a forecast. It is what the rate you ' +
+    'typed produces, arithmetically. A fund does not return the same percentage ' +
+    'every year, and this does not pretend it does.</div></div>';
+  return h;
+}
+
+/* =====================================================================
+   Goals
+   ===================================================================== */
+const GOAL_FIELDS = [
+  { k:'name',   label:'Goal', ph:'Emergency fund, house deposit…' },
+  { k:'target', label:'Target amount', type:'money', half:true },
+  { k:'by',     label:'Wanted by', type:'date', half:true },
+  { k:'note',   label:'Note', type:'textarea' }
+];
+function renderGoals(){
+  let h = '<div class="card"><h2>Goals</h2>' +
+    kv('Set aside altogether', esc(money(DB.goals.reduce((s,g) => s + goalSaved(g), 0)))) +
+    '<button class="btn sm" data-add="goal" style="margin-top:10px">Add goal</button></div>';
+  if(!DB.goals.length) h += emptyMsg('No goals set.');
+
+  for(const g of DB.goals){
+    const saved = goalSaved(g), target = toNum(g.target);
+    const left = Math.max(0, target - saved);
+    const months = g.by ? monthDiff(thisMonth(), ym(g.by)) : 0;
+    h += '<div class="item">' +
+      '<div class="top"><span class="nm">' + esc(g.name||'Goal') + '</span>' +
+      '<span class="amt">' + esc(money(saved)) + ' <span class="muted small">of ' +
+      esc(money(target)) + '</span></span></div>' +
+      barPct(saved, target) +
+      '<div class="tiny muted" style="margin-top:4px">' +
+      (target ? (saved/target*100).toFixed(1) + '% there' : 'no target set') +
+      (g.by ? ' · wanted by ' + esc(fmtDate(g.by)) : '') + '</div>' +
+      (left && months > 0
+        ? '<div class="work">' + esc(money(left / months)) + ' a month for the ' +
+          months + ' months left would get there.</div>'
+        : (left && g.by ? '<div class="work" style="color:var(--warn)">The date ' +
+           'has passed with ' + esc(money(left)) + ' still to go.</div>' : '')) +
+      '<div class="row" style="margin-top:8px;gap:6px">' +
+      '<button class="btn sec sm" data-edit="goal" data-id="' + g.id + '">Edit</button>' +
+      '<button class="btn sec sm" data-putgoal="' + g.id + '">Put money in</button></div>' +
+      ((g.ledger||[]).length ? '<details style="margin-top:6px"><summary>' +
+        (g.ledger||[]).length + ' payments in</summary>' +
+        (g.ledger||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))
+          .map((x,ix) => '<div class="kv"><span class="k">' + esc(fmtDate(x.date)) +
+          '</span><span class="num">' + esc(money(toNum(x.amount))) + '</span></div>')
+          .join('') + '</details>' : '') +
+      '</div>';
+  }
+  el('tab-goals').innerHTML = h;
+}
+
+/* =====================================================================
+   Data — the backup, and the settings
+   Export is the backup, not a convenience. Clearing the browser's website
+   data erases every one of these lists, and iOS evicts storage for a page
+   left unopened for long enough. Hence the banner that nags after 14 days.
+   ===================================================================== */
+function lastBackup(){ return localStorage.getItem(K.backup + 'all') || ''; }
+function backupDays(){
+  const b = lastBackup();
+  if(!b) return null;
+  const d = dateFromIso(b);
+  return d ? Math.floor((new Date() - d) / 86400000) : null;
+}
+function renderBanner(){
+  const days = backupDays();
+  const rows = DB.income.length + DB.loans.length + DB.spend.length +
+               DB.invest.length + DB.goals.length + DB.fixed.length;
+  const snooze = localStorage.getItem(K.snooze) || '';
+  let h = '';
+  if(rows && snooze !== today()){
+    if(days === null){
+      h = '<div class="banner">Nothing has been backed up yet. This data lives ' +
+        'on this phone only — <button class="btn sm" data-go="data">export it</button>.</div>';
+    }else if(days >= 14){
+      h = '<div class="banner' + (days >= 30 ? ' bad' : '') + '">Last backup was ' +
+        days + ' days ago. <button class="btn sm" data-go="data">Export now</button> ' +
+        '<button class="btn sec sm" data-snooze="1">Not today</button></div>';
+    }
+  }
+  el('backup').innerHTML = h;
+}
+function download(name, text, mime){
+  const blob = new Blob([text], { type: (mime || 'text/csv') + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  localStorage.setItem(K.backup + 'all', today());
+  renderBanner();
+}
+function csv(rows){
+  // Quote everything. A note with a comma in it broke this in the deck log.
+  return rows.map(r => r.map(c => {
+    const s = c === null || c === undefined ? '' : String(c);
+    return '"' + s.replace(/"/g,'""') + '"';
+  }).join(',')).join('\r\n') + '\r\n';
+}
+function exportCsv(){
+  const out = [['list','id','name','field1','field2','field3','field4','field5','note']];
+  for(const i of DB.income)
+    out.push(['income', i.id, i.name, i.amount, i.freq, i.start, i.end||'', '', i.note||'']);
+  for(const l of DB.loans)
+    out.push(['loan', l.id, l.name, l.principal, l.rate, l.months, l.emi, l.start, l.note||'']);
+  for(const l of DB.loans) for(const x of (l.extras||[]))
+    out.push(['prepay', l.id, l.name, x.amount, x.date, '', '', '', x.note||'']);
+  for(const f of DB.fixed)
+    out.push(['fixed', f.id, f.name, f.amount, f.freq, f.start, f.end||'', f.cat||'', f.note||'']);
+  for(const s of DB.spend)
+    out.push(['spend', s.id, s.cat||'Other', s.amount, s.date, '', '', '', s.note||'']);
+  for(const h of DB.invest)
+    out.push(['invest:' + h.kind, h.id, h.name, h.units||h.principal||h.monthly||'',
+              h.buy||h.rate||'', h.price||h.months||'', h.start||h.asof||'',
+              h.face||h.comp||'', h.note||'']);
+  for(const g of DB.goals)
+    out.push(['goal', g.id, g.name, g.target, g.by||'', goalSaved(g), '', '', g.note||'']);
+  for(const g of DB.goals) for(const x of (g.ledger||[]))
+    out.push(['goalpay', g.id, g.name, x.amount, x.date, '', '', '', '']);
+  for(const r of DB.receipt)
+    out.push(['receipt', r.incomeId||'', '', r.amount, r.date, '', '', '', r.note||'']);
+  download('ledger-' + today() + '.csv', csv(out));
+}
+function exportJson(){
+  download('ledger-backup-' + today() + '.json',
+    JSON.stringify({ app:'ledger', version:1, saved:today(), settings:S, data:DB }, null, 1),
+    'application/json');
+}
+function importJson(file){
+  const fr = new FileReader();
+  fr.onload = () => {
+    let obj;
+    try{ obj = JSON.parse(fr.result); }
+    catch(e){ alert('That file is not a Ledger backup — it would not parse.'); return; }
+    if(!obj || obj.app !== 'ledger' || !obj.data){
+      alert('That file is not a Ledger backup.'); return;
+    }
+    const counts = Object.keys(obj.data)
+      .map(k => k + ' ' + (Array.isArray(obj.data[k]) ? obj.data[k].length : 0))
+      .join(', ');
+    if(!confirm('Replace everything on this phone with the backup?\n\n' + counts +
+                '\n\nSaved ' + (obj.saved || 'unknown date') + '. This cannot be undone.')) return;
+    for(const name of ['income','receipt','loans','fixed','spend','invest','goals']){
+      DB[name] = Array.isArray(obj.data[name]) ? obj.data[name] : [];
+      save(name);
+    }
+    if(obj.settings) { Object.assign(S, obj.settings); save('set'); }
+    document.documentElement.setAttribute('data-theme', S.theme === 'dark' ? 'dark' : 'light');
+    render();
+    alert('Restored.');
+  };
+  fr.readAsText(file);
+}
+function renderData(){
+  const days = backupDays(), b = lastBackup();
+  let used = 0;
+  for(const k in K) { const v = localStorage.getItem(K[k]); if(v) used += v.length; }
+
+  let h = '<div class="card"><h2>Backup</h2>' +
+    '<div class="work">Everything is in this browser, on this phone, and nowhere ' +
+    'else. It is not uploaded and it does not sync. Clearing the browser&rsquo;s ' +
+    'website data erases it, and iOS can evict storage for a page left unopened ' +
+    'for long enough. The export is the backup.</div>' +
+    kv('Last export', b ? esc(fmtDate(b)) + ' (' + days + ' days ago)' : 'never') +
+    kv('Roughly in use', num(used/1024, 0) + ' KB of about 5,000 KB') +
+    '<div class="row wrap" style="margin-top:10px;gap:6px">' +
+    '<button class="btn" data-export="json">Backup (JSON)</button>' +
+    '<button class="btn sec" data-export="csv">Export CSV</button>' +
+    '<label class="btn sec sm" style="cursor:pointer">Restore a backup' +
+    '<input type="file" id="importFile" accept="*/*" style="display:none"></label>' +
+    '</div>' +
+    '<div class="work">The CSV is for reading and for a spreadsheet. The JSON is ' +
+    'what restores the app exactly, prepayments and goal payments included — the ' +
+    'CSV flattens those and cannot rebuild them.</div></div>';
+
+  h += '<div class="card"><h2>Counts</h2>' +
+    kv('Income sources', DB.income.length) +
+    kv('Receipts recorded', DB.receipt.length) +
+    kv('Loans', DB.loans.length) +
+    kv('Fixed outgoings', DB.fixed.length) +
+    kv('Expenses', DB.spend.length) +
+    kv('Holdings', DB.invest.length) +
+    kv('Goals', DB.goals.length) + '</div>';
+
+  h += '<div class="card"><h2>Settings</h2>' +
+    '<div class="f2"><div class="f"><label>Currency symbol</label>' +
+    '<input data-set="cur" value="' + esc(S.cur) + '"></div>' +
+    '<div class="f"><label>Number grouping</label><select data-set="locale">' +
+    opts([{v:'en-IN',t:'Indian (1,23,456)'},{v:'en-US',t:'Western (123,456)'}],
+         S.locale) + '</select></div></div>' +
+    '<div class="f"><label>Theme</label><select data-set="theme">' +
+    opts([{v:'light',t:'Light'},{v:'dark',t:'Dark'}], S.theme) + '</select></div>' +
+    '<div class="f"><label>Spending categories</label>' +
+    '<textarea data-set="spendCatsText" rows="3">' + esc(S.spendCats.join(', ')) +
+    '</textarea><div class="work">Separated by commas. Removing one leaves the ' +
+    'expenses already filed under it alone.</div></div>' +
+    '<button class="btn sm" data-savesettings="1">Save settings</button></div>';
+
+  h += '<div class="card"><h2>Start again</h2>' +
+    '<div class="work">Deletes every record on this phone. Export first.</div>' +
+    '<button class="btn danger sm" data-wipe="1" style="margin-top:8px">Erase everything</button>' +
+    '</div>';
+
+  el('tab-data').innerHTML = h;
+  const fi = el('importFile');
+  if(fi) fi.onchange = e => { if(e.target.files[0]) importJson(e.target.files[0]); };
+}
+
+/* =====================================================================
+   Events — one listener on the document, records addressed by data-
+   ===================================================================== */
+function render(){
+  renderBanner();
+  el('netTop').textContent = money(netWorth().net);
+  if(TAB === 'month')  renderMonth();
+  if(TAB === 'income') renderIncome();
+  if(TAB === 'loans')  renderLoans();
+  if(TAB === 'spend')  renderSpend();
+  if(TAB === 'invest') renderInvest();
+  if(TAB === 'goals')  renderGoals();
+  if(TAB === 'data')   renderData();
+}
+function upsert(name, rec){
+  const i = DB[name].findIndex(x => x.id === rec.id);
+  if(i >= 0) DB[name][i] = rec; else DB[name].push(rec);
+  if(save(name)) render();
+}
+function removeRec(name, id){
+  DB[name] = DB[name].filter(x => x.id !== id);
+  if(save(name)) render();
+}
+function editRecord(name, fields, id, title){
+  const isNew = !id;
+  const rec = isNew ? { id:uid() } : DB[name].find(x => x.id === id);
+  if(!rec) return;
+  editor((isNew ? 'New ' : '') + title, fields, Object.assign({}, rec),
+    r => upsert(name, r),
+    isNew ? null : () => { if(confirm('Delete this?')) removeRec(name, id); });
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tab],[data-go],[data-go-month],[data-pie],' +
+    '[data-add],[data-edit],[data-openloan],[data-prepay],[data-delextra],' +
+    '[data-invkind],[data-putgoal],[data-export],[data-wipe],[data-snooze],' +
+    '[data-savesettings],[data-calc-kind],[data-calc-add],[data-calc="view"]');
+  if(!t) return;
+  const d = t.dataset;
+
+  if(d.tab)      { show(d.tab); return; }
+  if(d.go)       { show(d.go); return; }
+  if(d.goMonth)  { S.month = d.goMonth; save('set'); render(); return; }
+  if(d.pie)      { PIE_VIEW = d.pie; renderMonth(); return; }
+  if(d.invkind)  { INV_KIND = d.invkind; renderInvest(); return; }
+  if(d.openloan) { OPEN_LOAN = (OPEN_LOAN === d.openloan) ? null : d.openloan;
+                   renderLoans(); return; }
+  if(d.snooze)   { localStorage.setItem(K.snooze, today()); renderBanner(); return; }
+
+  if(d.add){
+    if(d.add === 'income') return editRecord('income', INCOME_FIELDS, null, 'income source');
+    if(d.add === 'loan')   return editRecord('loans', LOAN_FIELDS, null, 'loan');
+    if(d.add === 'fixed')  return editRecord('fixed', FIXED_FIELDS, null, 'fixed outgoing');
+    if(d.add === 'spend'){
+      return editor('New expense', spendFields(),
+        { id:uid(), date:today(), cat:S.spendCats[0] },
+        r => upsert('spend', r), null);
+    }
+    if(d.add === 'goal')   return editRecord('goals', GOAL_FIELDS, null, 'goal');
+    if(d.add === 'receipt'){
+      const src = DB.income.map(i => ({v:i.id, t:i.name || 'Untitled'}));
+      return editor('Record a receipt', [
+        { k:'date',     label:'Date',   type:'date', half:true },
+        { k:'amount',   label:'Amount', type:'money', half:true },
+        { k:'incomeId', label:'Against', type:'select',
+          options:[{v:'',t:'— not one of the listed sources —'}].concat(src) },
+        { k:'note',     label:'Note' }
+      ], { id:uid(), date:today() }, r => upsert('receipt', r), null);
+    }
+    if(d.add.startsWith('inv:')){
+      const kind = d.add.slice(4);
+      return editor('New ' + KINDS[kind].toLowerCase(), investFields(kind),
+        { id:uid(), kind, start:today(), asof:today(),
+          comp: (kind === 'fd' || kind === 'rd') ? '4' : undefined },
+        r => upsert('invest', r), null);
+    }
+  }
+
+  if(d.edit){
+    const id = d.id;
+    if(d.edit === 'income') return editRecord('income', INCOME_FIELDS, id, 'income source');
+    if(d.edit === 'loan')   return editRecord('loans', LOAN_FIELDS, id, 'loan');
+    if(d.edit === 'fixed')  return editRecord('fixed', FIXED_FIELDS, id, 'fixed outgoing');
+    if(d.edit === 'spend')  return editRecord('spend', spendFields(), id, 'expense');
+    if(d.edit === 'goal')   return editRecord('goals', GOAL_FIELDS, id, 'goal');
+    if(d.edit === 'receipt'){
+      const src = DB.income.map(i => ({v:i.id, t:i.name || 'Untitled'}));
+      return editRecord('receipt', [
+        { k:'date',     label:'Date',   type:'date', half:true },
+        { k:'amount',   label:'Amount', type:'money', half:true },
+        { k:'incomeId', label:'Against', type:'select',
+          options:[{v:'',t:'— not one of the listed sources —'}].concat(src) },
+        { k:'note',     label:'Note' }
+      ], id, 'receipt');
+    }
+    if(d.edit === 'inv'){
+      const h = DB.invest.find(x => x.id === id);
+      if(!h) return;
+      return editRecord('invest', investFields(h.kind), id, KINDS[h.kind].toLowerCase());
+    }
+  }
+
+  if(d.prepay){
+    const loan = DB.loans.find(l => l.id === d.prepay);
+    if(!loan) return;
+    return editor('Prepayment towards ' + (loan.name||'loan'), [
+      { k:'date',   label:'Date',   type:'date', half:true },
+      { k:'amount', label:'Amount', type:'money', half:true },
+      { k:'note',   label:'Note' },
+      { k:'n', type:'note', label:'A prepayment comes off the balance in the ' +
+        'month it is made, and the rest of the schedule is worked out again ' +
+        'from there — which is the whole reason this screen exists.' }
+    ], { date:today() }, r => {
+      loan.extras = (loan.extras || []).concat([{ date:r.date, amount:toNum(r.amount),
+                                                  note:r.note||'' }]);
+      upsert('loans', loan);
+    }, null);
+  }
+  if(d.delextra){
+    const [id, ix] = d.delextra.split(':');
+    const loan = DB.loans.find(l => l.id === id);
+    if(loan && confirm('Remove this prepayment?')){
+      loan.extras.splice(Number(ix), 1);
+      upsert('loans', loan);
+    }
+    return;
+  }
+  if(d.putgoal){
+    const g = DB.goals.find(x => x.id === d.putgoal);
+    if(!g) return;
+    return editor('Into ' + (g.name||'goal'), [
+      { k:'date',   label:'Date',   type:'date', half:true },
+      { k:'amount', label:'Amount', type:'money', half:true }
+    ], { date:today() }, r => {
+      g.ledger = (g.ledger || []).concat([{ date:r.date, amount:toNum(r.amount) }]);
+      upsert('goals', g);
+    }, null);
+  }
+
+  if(d.calcKind){
+    S.calc = Object.assign({}, CALC0, S.calc || {}, { kind:d.calcKind,
+      comp: (d.calcKind === 'fd' || d.calcKind === 'rd') ? 4 : 12 });
+    save('set'); renderInvest();
+    el('calc').scrollIntoView({block:'start'});
+    return;
+  }
+  if(t.dataset.calc === 'view'){
+    S.calc = Object.assign({}, CALC0, S.calc || {}, { view:t.dataset.v });
+    save('set'); renderInvest();
+    el('calc').scrollIntoView({block:'start'});
+    return;
+  }
+  if(d.calcAdd){
+    const c = Object.assign({}, CALC0, S.calc || {});
+    const months = Math.round(toNum(c.years) * 12);
+    const kind = c.kind === 'sip' ? 'mf' : c.kind === 'lump' ? 'mf' : c.kind;
+    const rec = { id:uid(), kind, start:today(), note:'From the calculator: ' +
+      num(toNum(c.rate),2) + '% for ' + num(toNum(c.years),1) + ' years' +
+      (toNum(c.step) ? ', stepping up ' + num(toNum(c.step),1) + '% a year' : '') };
+    if(kind === 'rd'){ rec.monthly = toNum(c.monthly); rec.rate = toNum(c.rate);
+                       rec.months = months; rec.comp = String(c.comp); }
+    else if(kind === 'fd'){ rec.principal = toNum(c.lump); rec.rate = toNum(c.rate);
+                       rec.months = months; rec.comp = String(c.comp);
+                       rec.payout = 'cumulative'; }
+    else if(kind === 'bond'){ rec.units = 1; rec.face = toNum(c.lump);
+                       rec.buy = toNum(c.lump); rec.coupon = toNum(c.coupon); }
+    else { rec.sip = toNum(c.monthly); rec.units = 0; rec.buy = 0; rec.price = 0;
+           rec.asof = today(); }
+    return editor('Add to the portfolio', investFields(kind), rec,
+      r => { upsert('invest', r); INV_KIND = 'all'; }, null);
+  }
+
+  if(d.export){ d.export === 'json' ? exportJson() : exportCsv(); return; }
+  if(d.savesettings){
+    document.querySelectorAll('[data-set]').forEach(n => {
+      if(n.dataset.set === 'spendCatsText'){
+        S.spendCats = n.value.split(',').map(s => s.trim()).filter(Boolean);
+        if(!S.spendCats.length) S.spendCats = DEFAULT_CATS.slice();
+      } else S[n.dataset.set] = n.value;
+    });
+    document.documentElement.setAttribute('data-theme', S.theme === 'dark' ? 'dark' : 'light');
+    if(save('set')) render();
+    return;
+  }
+  if(d.wipe){
+    if(!confirm('Erase every record on this phone?')) return;
+    if(!confirm('Really? There is no undo, and no copy anywhere else.')) return;
+    for(const name of ['income','receipt','loans','fixed','spend','invest','goals']){
+      DB[name] = []; save(name);
+    }
+    render();
+  }
+});
+
+/* The calculator recomputes as you type rather than on a button, because the
+   question is nearly always "and what if it were 12 instead of 10". */
+document.addEventListener('input', e => {
+  const n = e.target.closest('[data-calc]');
+  if(n && n.dataset.calc !== 'view'){
+    const c = Object.assign({}, CALC0, S.calc || {});
+    c[n.dataset.calc] = n.value === '' ? 0 : toNum(n.value);
+    if(n.dataset.calc === 'solve') c.solve = n.value;
+    S.calc = c; save('set');
+    const active = document.activeElement, k = n.dataset.calc,
+          pos = n.selectionStart;
+    renderInvest();
+    const again = document.querySelector('[data-calc="' + k + '"]');
+    if(again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(err){} }
+  }
+});
+document.addEventListener('change', e => {
+  const n = e.target.closest('select[data-calc]');
+  if(n){
+    const c = Object.assign({}, CALC0, S.calc || {});
+    c[n.dataset.calc] = n.dataset.calc === 'solve' ? n.value : toNum(n.value);
+    S.calc = c; save('set'); renderInvest();
+  }
+});
+
+/* ---------- dialog buttons ---------- */
+el('dlgSave').onclick = () => {
+  const rec = readFields();
+  el('dlg').close();
+  if(DLG && DLG.onSave) DLG.onSave(rec);
+  DLG = null;
+};
+el('dlgCancel').onclick = el('dlgX').onclick = () => { el('dlg').close(); DLG = null; };
+el('dlgDelete').onclick = () => {
+  const fn = DLG && DLG.onDelete;
+  el('dlg').close(); DLG = null;
+  if(fn) fn();
+};
+
+/* ---------- boot ---------- */
+load();
+show('month');
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

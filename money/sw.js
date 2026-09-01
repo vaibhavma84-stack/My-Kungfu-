@@ -1,6 +1,13 @@
 // Caches the whole app on first visit so it opens with no signal afterwards.
 // Bump CACHE whenever index.html changes — the old cache is then discarded.
-const CACHE = 'gasplanet-deck-log-v51';
+//
+// This worker is registered from ./money/ and so its scope is ./money/ only.
+// The deck log's worker at the site root has the wider scope; the narrower one
+// wins for pages under it, which is what keeps the two apps apart. The root
+// worker also skips this path explicitly, because on a first visit — before
+// this worker has installed — the root one would otherwise be the one
+// answering, and it answers every navigation with the deck log.
+const CACHE = 'ledger-v1';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './icon-180.png', './icon-192.png', './icon-512.png'
@@ -26,16 +33,8 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
-  // Page loads answer from cache first, so the app opens instantly at sea even
-  // when the radio is up but there is no usable link. A fresh copy is fetched
-  // in the background and picked up on the next launch.
-  // The Ledger app lives under ./money/ and registers its own worker, whose
-  // narrower scope wins once it is installed. Before that first install this
-  // worker is the one answering, and it would hand back the deck log's own
-  // index.html for a navigation to ./money/ — the money app opening as the
-  // deck log. Leave anything under ./money/ to the network and to its worker.
-  if (new URL(req.url).pathname.includes('/money/')) return;
-
+  // Cache first, so the app opens instantly with no signal. A fresh copy is
+  // fetched in the background and picked up on the launch after this one.
   if (req.mode === 'navigate') {
     event.respondWith(
       caches.match('./index.html').then(cached => {

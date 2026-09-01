@@ -250,3 +250,109 @@ It is built around one company's documents and one specific ship.
 - Play Store also needs an App Bundle rather than an APK, a release keystore, a
   privacy policy, and — for a new personal account — a closed test with 12
   testers for 14 days.
+
+---
+
+# The Ledger app (`money/`)
+
+A second app in the same repository: income, loans, day-to-day spending,
+investments and goals. Built to the deck log's rules — one HTML file, no
+libraries, nothing fetched — for the same reason, and it earns them again on
+its own terms: a price feed that quietly went stale is worse than no price
+feed, and this is a screen people make decisions on.
+
+## Why a separate app rather than another tab
+
+The deck log is a work app. Someone else may be looking at it on the bridge.
+Personal finances do not belong in it, and the 48 MB `index.html` does not need
+another tab.
+
+## The trap that comes with the separate folder, and the one that does not
+
+**`localStorage` is per origin, not per path.** On GitHub Pages the deck log at
+the site root and the Ledger at `/money/` are one origin, so they share one
+store and one 5 MB quota. Every Ledger key is prefixed `money_`, nothing here
+touches a `gasplanet_` key, and a test asserts it. The quota is genuinely
+shared; the Data tab shows how much of it has gone.
+
+**Service worker scope is per path, and that is a trap too.** The root worker's
+scope is `./`, which covers `/money/`. The narrower worker wins once it is
+installed — but on a first visit it is not installed yet, and the root worker
+answers every navigation in its scope with the deck log's own `index.html`. The
+money app would have opened as the deck log. The root worker now returns early
+for anything under `/money/`, which is why its `CACHE` went to v51.
+
+## The arithmetic, and why it is written the way it is
+
+Every instrument runs through **one month-by-month loop** rather than a closed
+form per instrument.
+
+- A **prepayment part way through a loan** has no closed form, and prepayment
+  is the whole reason anyone opens that screen.
+- A **step-up SIP** has no closed form worth trusting — the instalment changes
+  every twelve months.
+- One loop that serves the loan, the FD, the RD and the SIP is one place for a
+  mistake to live, rather than five formulas to keep in step with each other.
+
+The monthly growth factor is written once, `g = (1 + r/(100n))^(n/12)`, with
+`n` the compounds a year. That is what makes the FD in the calculator and the
+FD in the portfolio the same arithmetic rather than two things that happen to
+agree today.
+
+The tests re-derive every figure from the published closed form, written out in
+the test file against its own definition, and compare. It is the only check
+that can catch a wrong one: the UI renders a wrong EMI exactly as convincingly
+as a right one. This is the `factor-check.py` argument, applied to money.
+
+## Things that are the way they are on purpose
+
+- **Indian banks compound a term deposit quarterly.** It is set on the card, not
+  assumed. At 7% over five years, quarterly against yearly is real money.
+- **An RD is a sum over its instalments**, each compounded for the months it has
+  left to run. The single-rate shortcut — everything compounding for the whole
+  term — is out by thousands over a five-year RD, always in the bank's favour.
+  A test pins the app away from it.
+- **The return quoted is money-weighted, not the pot divided by what went in.**
+  The first version divided the final value by everything ever paid in and took
+  a root, which reported 5.84% on a run that returned 12.68%: it treats the last
+  instalment as though it had been there since the first day. The figure is now
+  the rate that balances the actual payments against the final value, solved by
+  bisection. On a flat rate it comes back as exactly that rate, every period —
+  which is the check that it is right, and is asserted.
+- **An instalment is paid at the start of its month.** The loop grows it by that
+  month's factor, so its cash flow sits at month *k*−1, not *k*. Placing it a
+  month late read the return about a quarter point high — the sort of error
+  nobody would ever spot on the screen.
+- **An EMI at or below the first month's interest is named, not looped.** The
+  balance never falls; the card says so rather than printing a century of
+  instalments.
+- **A prepayment larger than the balance is trimmed.** It clears the loan; it
+  does not run it into credit.
+- **An FD is worth exactly its maturity value on its maturity date.** Elapsed
+  time is counted in months, because deposits are quoted in months. Measuring it
+  in average-length years left "worth today" a few rupees under "at maturity" on
+  the day itself, and two figures on one card disagreeing is how trust in all of
+  them goes.
+- **A rate a day needs enough days behind it.** On the 1st of a month, one
+  expense divided by one elapsed day and multiplied out gave a month-end figure
+  larger than the year's income. The span now also covers any expense dated
+  later in the month, and below five days no rate is quoted at all.
+- **Rent is not a day-to-day expense.** It arrives whether you look or not, like
+  an EMI, so fixed outgoings are their own list with their own cycle. The
+  day-to-day ledger is for the spending that varies, which is the only spending
+  worth reading a rate into.
+- **A yearly bonus is not a twelfth of itself every month.** Both figures are
+  shown: the average, for planning, and the month it actually lands in.
+- **A quarterly item is anchored on its own start month**, not on the calendar
+  quarter. One started in February falls in February, May, August, November.
+- **The pie is six hues and then "Other".** Colours are assigned in a fixed
+  order and a category never gets recoloured because another one dropped out —
+  a glance month to month has to mean something. Both palettes were checked by
+  script for colour-blind separation against this app's own card colours rather
+  than eyeballed, and every slice is labelled and repeated in the list beneath,
+  so no slice is told apart by its colour alone.
+- **The prices are the ones you wrote down, and the card says when.** There is
+  no feed. A price more than a month old is marked as old rather than shown as
+  current.
+- **Nothing in the calculator is a forecast**, and it says so. A fund does not
+  return the same percentage every year.
