@@ -14,6 +14,14 @@ const WANT = [
   'Risk Assessment', 'Load / Discharge Orders', 'BWRF', 'BWRB', 'GRB', 'OLB',
   'Rodent log', 'Sounding log', 'PTW - WAH', 'NOR', 'MSDS', 'VEF', 'DLB', 'MARVS ENTRY'
 ];
+const WANT_DEP = [
+  'Hourly calculations sheet', 'Pumping log', 'Manifold log', 'Comparison sheets',
+  'Cargo plan', 'Stowage plan', 'Condition entries each stage', 'Risk Assessment',
+  'Departure condition', 'Booster / heater log', 'Taking over checklist', 'Cargo receipt',
+  'Cargo documents in envelope', 'Port log', 'BWRF', 'BWRB', 'OLB',
+  'Vessel Search Checklist', 'Load / Disch. Orders', 'PTW - WAH', 'MSDS', 'MARVS ENTRY',
+  'Post Cargo form'
+];
 
 (async () => {
   const b = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
@@ -24,6 +32,20 @@ const WANT = [
 
   const jobs = () => p.evaluate(() => JSON.parse(localStorage.getItem('gasplanet_todo_v1') || '[]'));
   const calls = () => p.evaluate(() => JSON.parse(localStorage.getItem('gasplanet_portcalls_v1') || '[]'));
+
+  // The panel used to sit inside the job-entry form, so "Hide" took it down
+  // with it and the feature simply was not there to be found.
+  await p.click('#toggleFormBtn');
+  await p.waitForTimeout(250);
+  ok('hiding the job entry form does not hide the pre-arrival panel',
+     await p.locator('#portCallWrap').isVisible());
+  ok('and the job entry really is collapsed, so that is what was tested',
+     await p.evaluate(() => {
+       const w = document.getElementById('addWrap');
+       return w.classList.contains('collapsed') && w.getBoundingClientRect().height < 4;
+     }));
+  await p.click('#toggleFormBtn');
+  await p.waitForTimeout(250);
 
   await p.fill('#paPort', 'Singapore');
   await p.fill('#paDate', '2026-09-20');
@@ -80,6 +102,61 @@ const WANT = [
   ok('and the two sets do not share a call id',
      new Set(t.map(j => j.call)).size === 2);
 
+  // --- the departure set ---------------------------------------------------
+  // Leaving brings its own paperwork, and it is a different list.
+  await p.selectOption('#paKind', 'departure');
+  await p.waitForTimeout(150);
+  ok('choosing departure says how many jobs that will be',
+     /23 jobs will be raised/.test(await p.textContent('#paNote')),
+     await p.textContent('#paNote'));
+  ok('and the date is labelled for leaving, not arriving',
+     (await p.textContent('#paDateLabel')).indexOf('Departure') === 0,
+     await p.textContent('#paDateLabel'));
+
+  await p.fill('#paPort', 'Dongying');
+  await p.fill('#paDate', '2026-09-28');
+  await p.click('#paAddBtn');
+  await p.waitForTimeout(300);
+  t = await jobs();
+  const dep = t.filter(j => / — Dongying$/.test(j.job));
+  ok('the departure set is raised in full', dep.length === WANT_DEP.length, dep.length + ' jobs');
+  const missDep = WANT_DEP.filter(w => !dep.some(j => j.job.indexOf(w + ' —') === 0));
+  ok('every item on the departure list is there, spelled as given',
+     missDep.length === 0, missDep.join(' | '));
+  ok('all of them due on the departure date', dep.every(j => j.due === '2026-09-28'),
+     [...new Set(dep.map(j => j.due))].join(', '));
+  ok('its risk assessment and permit are flagged too',
+     dep.filter(j => j.ra).length === 1 && dep.filter(j => j.ptw).length === 1);
+  ok('and the remarks say which kind of call it is',
+     dep.every(j => j.remarks === 'Departure Dongying'),
+     [...new Set(dep.map(j => j.remarks))].join(' | '));
+
+  // an arrival and a departure at the same port on one date is a real thing
+  await p.selectOption('#paKind', 'arrival');
+  await p.fill('#paPort', 'Dongying');
+  await p.fill('#paDate', '2026-09-28');
+  await p.click('#paAddBtn');
+  await p.waitForTimeout(300);
+  t = await jobs();
+  ok('an arrival on the same day at the same port is allowed alongside it',
+     t.filter(j => / — Dongying$/.test(j.job)).length === WANT_DEP.length + WANT.length,
+     t.filter(j => / — Dongying$/.test(j.job)).length);
+  // but the same one twice is still refused
+  await p.selectOption('#paKind', 'departure');
+  await p.fill('#paPort', 'dongying');
+  await p.fill('#paDate', '2026-09-28');
+  await p.click('#paAddBtn');
+  await p.waitForTimeout(250);
+  ok('while the same departure twice is still refused',
+     (await jobs()).filter(j => / — Dongying$/.test(j.job)).length === WANT_DEP.length + WANT.length);
+  ok('and says which kind it means',
+     /Departure for dongying/i.test(await p.textContent('#paNote')),
+     await p.textContent('#paNote'));
+  ok('the list marks each call with its kind',
+     (await p.textContent('#paList')).indexOf('Departure') >= 0);
+
+  await p.selectOption('#paKind', 'arrival');
+
   // an ETA moves
   await p.evaluate(() => {
     const row = document.querySelector('#paList .pa-row input[data-pa-date]');
@@ -130,8 +207,9 @@ const WANT = [
      t.filter(j => / — Singapore$/.test(j.job)).map(j => j.job + ':' + j.done).join(' | '));
   ok('but keeps what was already completed — that is a record, not a plan',
      t.some(j => j.job.indexOf('Cargo Plan — Singapore') === 0 && j.done));
-  ok('and the call is gone from the list', c.length === 1 && c[0].port === 'Rotterdam',
-     JSON.stringify(c));
+  ok('and the call is gone from the list',
+     !c.some(x => x.port === 'Singapore') && c.length === 3,
+     JSON.stringify(c.map(x => x.port + '/' + x.kind)));
   ok('the other call is untouched',
      t.filter(j => / — Rotterdam$/.test(j.job)).length === WANT.length);
 
@@ -139,7 +217,8 @@ const WANT = [
   await p.reload();
   await p.waitForTimeout(600);
   ok('the calls are still listed after a restart',
-     await p.locator('#paList .pa-row').count() === 1);
+     await p.locator('#paList .pa-row').count() === 3,
+     await p.locator('#paList .pa-row').count());
 
   ok('no page errors', errs.length === 0, errs.join(' | '));
   await b.close();

@@ -19,8 +19,8 @@ function ok(name, cond, got){
 
   await p.click('#topTabs button[data-tab="tools"]');
   ok('the tile is there', await p.locator('[data-tool="map"]').count() === 1);
-  ok('six live tools on the launcher',
-     await p.locator('.tool-tile[data-tool]').count() === 6,
+  ok('seven live tools on the launcher',
+     await p.locator('.tool-tile[data-tool]').count() === 7,
      await p.locator('.tool-tile[data-tool]').count());
   await p.click('[data-tool="map"]');
   await p.waitForTimeout(900);
