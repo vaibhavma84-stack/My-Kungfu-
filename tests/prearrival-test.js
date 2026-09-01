@@ -190,7 +190,10 @@ const WANT_DEP = [
     'Paint store MSDS', 'Chemical store PPE', 'Chemical store MSDS',
     'All securing by wires', 'Reducer installed', 'Visitors list at gangway',
     'MSDS at gangway', 'Tide table at gangway', 'Briefing card at gangway',
-    'Cargo meeting', 'Pre-arrivals entry in DLB and port log'
+    'Cargo meeting', 'Pre-arrivals entry in DLB and port log',
+    'Accommodation at positive pressure', 'Vents close and pressure arrange',
+    'Anemometer alarm', 'MARVS setting boards',
+    'Drip trays', 'Scuppers', 'SOPEP equipment'
   ];
   await p.selectOption('#paKind', 'lastmin');
   await p.waitForTimeout(200);
