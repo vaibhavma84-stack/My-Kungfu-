@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One week. Height must be wrap_content: RemoteViews.addView cannot set
-     LayoutParams, so a 0dp height here would give every row zero height and
-     the whole grid would render blank. -->
+<!-- One week.
+
+     wrap_content AND a weight, which is the combination that matters here.
+     Weight alone with a 0dp height is the usual way to divide a column, but
+     RemoteViews.addView gives the row no LayoutParams of its own, and a row
+     measured at zero renders nothing at all: the grid comes out blank.
+     wrap_content guarantees the row is at least as tall as its content; the
+     weight then hands it an equal share of whatever height is left over, so
+     six weeks fill the widget instead of huddling at the top of it. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/row_cells"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:layout_weight="1"
     android:orientation="horizontal"
     android:baselineAligned="false" />
