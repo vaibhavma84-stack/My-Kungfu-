@@ -1,6 +1,6 @@
 // Caches the whole app on first visit so it opens with no signal afterwards.
 // Bump CACHE whenever index.html changes — the old cache is then discarded.
-const CACHE = 'gasplanet-deck-log-v46';
+const CACHE = 'gasplanet-deck-log-v47';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './icon-180.png', './icon-192.png', './icon-512.png'
