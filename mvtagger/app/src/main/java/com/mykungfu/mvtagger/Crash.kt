@@ -22,9 +22,27 @@ object CrashLog {
 
     fun file(context: Context) = File(context.filesDir, FILE)
 
+    /**
+     * First line of the file, so a crash left by an older build can be told
+     * apart from one this build actually caused.
+     */
+    private const val VERSION_MARKER = "crashVersionCode="
+
+    private fun versionCode(context: Context): Long = runCatching {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        // longVersionCode is API 28; this app runs back to 24.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
+    }.getOrDefault(-1L)
+
     fun save(context: Context, throwable: Throwable, note: String? = null) {
         runCatching {
             val text = StringWriter().also { writer ->
+                writer.append(VERSION_MARKER).append(versionCode(context).toString()).append('\n')
                 note?.let { writer.append(it).append("\n\n") }
                 writer.append("MV Tagger ").append(versionOf(context)).append('\n')
                 writer.append("Android ").append(android.os.Build.VERSION.RELEASE)
@@ -37,9 +55,30 @@ object CrashLog {
         }
     }
 
+    /**
+     * The last crash, but only if this build caused it.
+     *
+     * An upgrade is the usual way a crash gets fixed, so a report left by the
+     * previous version is exactly the one that should no longer be shown --
+     * otherwise the fixed build opens on the error screen from the broken one
+     * and looks just as dead. Stale reports are discarded on sight.
+     */
     fun read(context: Context): String? = runCatching {
         val f = file(context)
-        if (f.exists() && f.length() > 0) f.readText() else null
+        if (!f.exists() || f.length() == 0L) return@runCatching null
+        val text = f.readText()
+
+        val firstLine = text.lineSequence().firstOrNull().orEmpty()
+        if (!firstLine.startsWith(VERSION_MARKER)) {
+            f.delete()
+            return@runCatching null
+        }
+        val from = firstLine.removePrefix(VERSION_MARKER).trim().toLongOrNull()
+        if (from != versionCode(context)) {
+            f.delete()
+            return@runCatching null
+        }
+        text.substringAfter('\n').trim().ifBlank { null }
     }.getOrNull()
 
     fun clear(context: Context) {
