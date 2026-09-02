@@ -73,21 +73,40 @@ jobs:
       # An Actions artifact is a zip behind a sign-in, which a phone browser
       # cannot get at. A release asset is a plain direct download, so the phone
       # can fetch the APK itself from a fixed URL.
+      #
+      # Never delete the release first. That is what this did originally, and
+      # when the create afterwards failed with a 403 it left nothing at the
+      # download link at all -- someone trying to install in that window got a
+      # 404 for a release that had existed minutes earlier. Updating in place
+      # means the worst case is a stale APK, not a missing one, and a failure
+      # here is loud rather than destructive.
       - name: Publish the APK for installing on the phone
         working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: mvtagger-latest
+          TITLE: MV Tagger v${{ github.run_number }}
         run: |
+          set -euo pipefail
           cp mvtagger/app/build/outputs/apk/debug/app-debug.apk MVTagger.apk
-          gh release delete mvtagger-latest --yes --cleanup-tag || true
-          gh release create mvtagger-latest MVTagger.apk \
-            --title "MV Tagger v${{ github.run_number }}" \
-            --prerelease \
-            --target "${{ github.sha }}" \
-            --notes "Build v${{ github.run_number }}, from ${{ github.sha }} on ${{ steps.name.outputs.stamp }}.
+
+          NOTES="Build v${{ github.run_number }}, from ${{ github.sha }} on ${{ steps.name.outputs.stamp }}.
 
           Install straight from the phone: tap MVTagger.apk below, then allow
           installing from this source when Android asks.
 
           It installs alongside Deck Log -- different app, different data, and
           neither one touches the other."
+
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release exists; replacing the asset in place."
+            gh release upload "$TAG" MVTagger.apk --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
+          else
+            echo "No release yet; creating it."
+            gh release create "$TAG" MVTagger.apk \
+              --title "$TITLE" \
+              --prerelease \
+              --target "${{ github.sha }}" \
+              --notes "$NOTES"
+          fi
