@@ -106,3 +106,21 @@ failure deletes the partial rather than leaving something that looks finished.
 `gradle :core:test` from `mvtagger/` runs the whole test suite and needs no
 Android SDK. CI runs it before every APK build, so a change that breaks the
 tagger cannot reach a release.
+
+`python3 check-regexes.py core/src/main app/src/main` runs alongside it, and
+exists because of how v1 shipped broken. The JVM and Android do not use the
+same regex engine: Android's is ICU's, and ICU is stricter. This pattern
+
+```kotlin
+Regex("""\{(\w+)}""")     // the closing } is not escaped
+```
+
+is fine on a JVM and a syntax error on ICU. It sat in a static initialiser that
+runs on first launch, so the app died before drawing anything while all 59
+tests passed. The script compiles every regex literal in the sources against
+ICU itself, which is the only way to catch that class of bug without a phone.
+
+It is the standing hazard of testing off-device: the tests are fast because
+they do not need an emulator, and the price is that engine differences only
+show up on the phone. Anything else that differs between the two deserves the
+same treatment.

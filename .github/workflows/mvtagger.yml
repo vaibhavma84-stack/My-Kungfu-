@@ -29,6 +29,13 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # The JVM and Android do not share a regex engine, so a pattern the tests
+      # accept can still kill the app on launch -- which is exactly how v1
+      # shipped. Every pattern is compiled against ICU, the engine the phone
+      # uses, before anything else runs.
+      - name: Check the regexes against Android's engine
+        run: python3 check-regexes.py core/src/main app/src/main
+
       # The tagging, filename parsing and matching all live in :core, which is a
       # plain JVM module. Running its tests first means a broken MP4 writer is
       # caught here rather than on a phone, with a video that no longer plays.
