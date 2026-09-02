@@ -42,8 +42,13 @@ object RenameTemplate {
     /** Longest base name produced, leaving room for an extension and a suffix. */
     private const val MAX_BASE = 120
 
-    private val TOKEN = Regex("""\{(\w+)}""")
-    private val OPTIONAL = Regex("""\[([^\[\]]*)]""")
+    // Both closing delimiters are escaped deliberately. The JVM's regex engine
+    // treats a dangling `}` or `]` as a literal, but Android's is ICU-backed and
+    // is stricter about them -- and these compile in a static initialiser that
+    // runs at launch, so being lenient here means the app dies on the phone
+    // while every test still passes on a laptop.
+    private val TOKEN = Regex("""\{(\w+)\}""")
+    private val OPTIONAL = Regex("""\[([^\[\]]*)\]""")
 
     /**
      * The new base name (no extension) for [tags], or null if the template
