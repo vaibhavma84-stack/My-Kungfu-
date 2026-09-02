@@ -1,7 +1,17 @@
 package com.mykungfu.mvtagger
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.graphics.Color as AndroidColor
+import android.graphics.Typeface
 import android.os.Bundle
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -20,16 +30,90 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            MvTaggerTheme {
-                val state by viewModel.state.collectAsState()
-                AppScreen(
-                    state = state,
-                    viewModel = viewModel,
-                    onOpenExternally = ::openInAnotherApp,
-                )
-            }
+
+        // If the last run died, show why rather than starting up and, very
+        // likely, dying the same way again.
+        CrashLog.read(this)?.let {
+            showError(it)
+            return
         }
+
+        try {
+            setContent {
+                MvTaggerTheme {
+                    val state by viewModel.state.collectAsState()
+                    AppScreen(
+                        state = state,
+                        viewModel = viewModel,
+                        onOpenExternally = ::openInAnotherApp,
+                    )
+                }
+            }
+        } catch (t: Throwable) {
+            // Composition failed. Record it and fall back to plain Android
+            // views, which cannot depend on whatever just broke.
+            CrashLog.save(this, t, "Failed while building the screen.")
+            showError(CrashLog.read(this) ?: t.stackTraceToString())
+        }
+    }
+
+    /**
+     * The error screen, built without Compose on purpose: if Compose is what
+     * failed, a Compose error screen would fail too.
+     */
+    private fun showError(text: String) {
+        val dark = (resources.configuration.uiMode and
+                android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val background = if (dark) AndroidColor.parseColor("#101418") else AndroidColor.WHITE
+        val foreground = if (dark) AndroidColor.parseColor("#E2E8F0") else AndroidColor.parseColor("#1A1C1E")
+
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 72, 48, 48)
+            setBackgroundColor(background)
+        }
+
+        column.addView(TextView(this).apply {
+            setText("MV Tagger could not start")
+            textSize = 20f
+            setTextColor(foreground)
+            setTypeface(null, Typeface.BOLD)
+        })
+        column.addView(TextView(this).apply {
+            setText("Copy this and send it over — it says exactly what went wrong.")
+            textSize = 14f
+            setTextColor(foreground)
+            setPadding(0, 16, 0, 24)
+        })
+        column.addView(Button(this).apply {
+            setText("Copy the error")
+            setOnClickListener {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("MV Tagger crash", text))
+                Toast.makeText(this@MainActivity, "Copied", Toast.LENGTH_SHORT).show()
+            }
+        })
+        column.addView(Button(this).apply {
+            setText("Clear and try again")
+            setOnClickListener {
+                CrashLog.clear(this@MainActivity)
+                recreate()
+            }
+        })
+        column.addView(TextView(this).apply {
+            setText(text)
+            textSize = 11f
+            setTextColor(foreground)
+            typeface = Typeface.MONOSPACE
+            setTextIsSelectable(true)
+            setPadding(0, 24, 0, 0)
+        })
+
+        setContentView(ScrollView(this).apply {
+            setBackgroundColor(background)
+            addView(column)
+        })
     }
 
     /**
