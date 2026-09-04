@@ -79,8 +79,29 @@ object FilenameParser {
     private val YEAR = Regex("""(?<!\d)(19\d{2}|20\d{2})(?!\d)""")
     private val SEPARATORS = listOf(" - ", " – ", " — ", " -- ", " _ ")
 
-    /** Three or more underscores: a separator a download tool flattened. */
-    private val UNDERSCORE_RUN = Regex("_{3,}")
+    /**
+     * A run of underscores: a separator a download tool flattened.
+     *
+     * Two, not three. Tools differ in what they do with the pipe itself --
+     * some replace it, giving " | " -> "___", and some delete it, leaving the
+     * two spaces around it as "__". Both are the same separator, and a real
+     * title almost never carries a double space.
+     */
+    private val UNDERSCORE_RUN = Regex("_{2,}")
+
+    /**
+     * Words that are a whole segment and say nothing.
+     *
+     * "Maine Pi Rakhi Hai | Song | Tu Jhoothi Main Makkaar" has three fields
+     * and only two of them are worth anything. Left in, the useless one is
+     * first in line to be tried with the song -- so the search asks for
+     * "Maine Pi Rakhi Hai Song" while the film sits unused behind it.
+     */
+    private val SEGMENT_NOISE = setOf(
+        "song", "songs", "video", "videos", "audio", "lyrical", "lyric",
+        "lyrics", "official", "full", "hd", "4k", "teaser", "trailer",
+        "promo", "jukebox", "reprise", "cover", "remix", "new", "latest",
+    )
 
     /** A trailing "song", with any of the words that usually come before it. */
     private val TRAILING_SONG = Regex(
@@ -184,11 +205,28 @@ object FilenameParser {
         val extras: List<String>,
     )
 
+    /**
+     * Whether a field carries anything worth searching for.
+     *
+     * A bare "Song", a stray track number: these are fields in the name and
+     * nothing in the answer. Dropping them matters more than it looks, because
+     * the first field after the song is the one tried alongside it, and every
+     * attempt spent on a word like "Song" is one the film does not get.
+     */
+    private fun meaningless(part: String): Boolean {
+        val words = part.split(Regex("""[^\p{L}\p{N}]+""")).filter { it.isNotBlank() }
+        if (words.isEmpty()) return true
+        // A lone short number is a track number, not a field. Four digits is a
+        // year, which is worth keeping.
+        if (words.size == 1 && words[0].length <= 3 && words[0].all { it.isDigit() }) return true
+        return words.all { it.lowercase() in SEGMENT_NOISE }
+    }
+
     private fun split(text: String): Split {
         // Pipes first: a name with pipes is the film convention, and its dashes
         // (if any) are inside one of the fields rather than the top-level split.
         if (text.contains('|')) {
-            val parts = text.split('|').map { it.trim() }.filter { it.isNotEmpty() }
+            val parts = text.split('|').map { it.trim() }.filter { !meaningless(it) }
             if (parts.size >= 2) {
                 // The first field is the song, often with the film attached by a
                 // dash: "Kesariya - Brahmastra". Those have to come apart --

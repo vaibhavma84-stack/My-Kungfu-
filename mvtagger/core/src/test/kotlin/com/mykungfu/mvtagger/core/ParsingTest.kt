@@ -1,6 +1,7 @@
 package com.mykungfu.mvtagger.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -151,6 +152,38 @@ class FilenameParserTest {
         assertTrue(
             "the first query still carries the cast: " + p.queries.first(),
             !p.queries.first().contains("Deepika"),
+        )
+    }
+
+    /**
+     * The second real file reported from the phone, and the reason the first
+     * fix was not enough.
+     *
+     * This one used double underscores, not triple: the downloader deleted the
+     * pipe and left the two spaces either side of it. Same separator, one
+     * character shorter, and a rule written for three or more walked straight
+     * past it.
+     *
+     * It also has a field that is the single word "Song". Left in, that field
+     * is the first one tried alongside the song title, so the search asks for
+     * "Maine Pi Rakhi Hai Song" and the film -- the one thing that would have
+     * found it -- waits behind a word that means nothing.
+     */
+    @Test
+    fun `double underscores are the same separator as triple`() {
+        val p = FilenameParser.parse(
+            "Maine_Pi_Rakhi_Hai__Song__Tu_Jhoothi_Main_Makkaar__Ranbir_Shraddha" +
+                    "_Pritam_Shreya_G_Divya_K_Amitabh_B(2160p).mp4"
+        )
+        assertEquals("Maine Pi Rakhi Hai", p.title)
+        assertTrue("extras were " + p.extras, p.extras.contains("Tu Jhoothi Main Makkaar"))
+        assertFalse("a bare \"Song\" is not a field: " + p.extras, p.extras.contains("Song"))
+        assertEquals("Maine Pi Rakhi Hai", p.queries.first())
+        assertTrue(
+            "the film has to be tried with the song: " + p.queries,
+            p.queries.any {
+                it.contains("Maine Pi Rakhi Hai") && it.contains("Tu Jhoothi Main Makkaar")
+            },
         )
     }
 
