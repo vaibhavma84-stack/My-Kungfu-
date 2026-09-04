@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -51,3 +51,31 @@ jobs:
           name: Grabber-apk
           path: grabber/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      # Actions artifacts are zipped and need a signed-in browser, which the
+      # GitHub mobile app cannot do. A release asset on a public repository is
+      # a plain direct download, so the phone can fetch the APK itself.
+      #
+      # The tag is "grabber-latest", never "latest". The deck log owns "latest"
+      # in this repository and deletes it before publishing each of its own
+      # builds -- publishing there would destroy the deck log's release, and
+      # the delete below would eventually take it out entirely. Two apps
+      # sharing one repository have to keep their tags apart.
+      - name: Publish the APK as the Grabber release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp grabber/app/build/outputs/apk/debug/app-debug.apk Grabber.apk
+          gh release delete grabber-latest --yes --cleanup-tag || true
+          gh release create grabber-latest Grabber.apk \
+            --target "${GITHUB_SHA}" \
+            --title "Grabber v${{ github.run_number }}" \
+            --notes "Android video downloader — a different app from the Deck Log, which lives in this same repository under its own \`latest\` release.
+
+          Build v${{ github.run_number }} from ${{ github.sha }}.
+
+          **Install:** tap \`Grabber.apk\` below, then allow installing from this source when Android asks. Built for arm64 phones.
+
+          Every build is signed with the same key, so this installs as an upgrade over any previous copy and keeps your download history.
+
+          **Not yet run on a real phone.** It compiles and the signature is verified, but no device or emulator was available to test it on. Expect a few seconds of silence on first launch while the bundled Python engine unpacks."
