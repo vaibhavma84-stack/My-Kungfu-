@@ -61,7 +61,7 @@ class DownloadService : Service() {
         }
         // Android 14 wants the notification up almost immediately, well before
         // the first download has anything to report.
-        startForegroundSafely(buildNotification("Starting", null, 0, false))
+        startForegroundSafely(buildNotification("Starting", null, 0f, true))
         ensureWorker()
         return START_STICKY
     }
