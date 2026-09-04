@@ -235,6 +235,17 @@ object TagJob {
                 replaceSidecars(
                     context, outputTree, parentDocumentId, currentName, tags, settings
                 )
+                if (settings.writeLibraryFiles) {
+                    runCatching {
+                        writeLibraryFiles(
+                            context, outputTree, parentDocumentId,
+                            Organiser.folder(
+                                settings.folderTemplateFor(tags.mediaKind), tags
+                            ),
+                            currentName, tags,
+                        )
+                    }
+                }
                 Outcome(
                     ok = true, path = currentName, embedded = false,
                     message = "Updated the details beside " + currentName + ". " +

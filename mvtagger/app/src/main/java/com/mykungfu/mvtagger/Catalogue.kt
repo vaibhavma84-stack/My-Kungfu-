@@ -9,6 +9,7 @@ import com.mykungfu.mvtagger.core.LyricsLanguage
 import com.mykungfu.mvtagger.core.MediaClassifier
 import com.mykungfu.mvtagger.core.MediaKind
 import com.mykungfu.mvtagger.core.Sidecar
+import com.mykungfu.mvtagger.core.VideoTags
 import com.mykungfu.mvtagger.core.TextScript
 import com.mykungfu.mvtagger.core.Transliterate
 
@@ -171,10 +172,15 @@ object Catalogue {
         path: List<String>,
     ): Entry {
         val uri = Saf.documentUri(tree, doc.documentId)
+        // Inside the file first. For a container that cannot hold tags at all,
+        // the .json written beside it is the only record there is -- and until
+        // this read it, a correction to an MKV episode was written and then
+        // looked for in the one place it could never be, so the library went
+        // back to the filename and the correction appeared to have been lost.
         val tags = if (Sidecar.canEmbed(doc.name)) {
             TagJob.readExisting(context, uri, doc.name)
         } else {
-            null
+            sidecarTags(context, tree, doc.parentDocumentId, doc.name)
         }
 
         // The file's own word first; the folder the app filed it in second; the
@@ -196,8 +202,9 @@ object Catalogue {
 
         // Shrunk and kept now, while the file is already open, rather than
         // decoding a full-size cover later for a list row.
-        val hasArtwork = tags?.artwork
-            ?.let { ArtCache.store(context, doc.documentId, it.bytes) }
+        val embedded = tags?.artwork?.let { ArtCache.store(context, doc.documentId, it.bytes) }
+        val hasArtwork = embedded
+            ?: readArtworkSidecar(context, tree, doc)
             ?: false
 
         return Entry(
@@ -219,6 +226,51 @@ object Catalogue {
             folder = path,
             hasArtwork = hasArtwork,
         )
+    }
+
+    /**
+     * The details written beside a file that cannot hold them inside it.
+     *
+     * Only consulted for those files. An MP4 says what it is from within, and a
+     * stale .json left over from an earlier name should never be able to
+     * contradict it.
+     */
+    fun sidecarTags(
+        context: Context,
+        tree: Uri,
+        parentDocumentId: String,
+        fileName: String,
+    ): VideoTags? {
+        val name = Sidecar.jsonName(FilenameParser.stripExtension(fileName))
+        val found = runCatching {
+            Saf.findChild(context.contentResolver, tree, parentDocumentId, name)
+        }.getOrNull() ?: return null
+        val text = Saf.readText(
+            context.contentResolver, Saf.documentUri(tree, found.documentId)
+        ) ?: return null
+        return runCatching { Sidecar.parse(text) }.getOrNull()
+    }
+
+    /**
+     * The cover for one of those, which is a file rather than an atom.
+     *
+     * Returns null when there is none to find, so the caller can tell "no cover
+     * here" from "there was one and it would not decode".
+     */
+    private fun readArtworkSidecar(context: Context, tree: Uri, doc: Saf.Doc): Boolean? {
+        val base = FilenameParser.stripExtension(doc.name)
+        val resolver = context.contentResolver
+        for (extension in listOf("jpg", "png")) {
+            val found = runCatching {
+                Saf.findChild(resolver, tree, doc.parentDocumentId, base + "." + extension)
+            }.getOrNull() ?: continue
+            val bytes = runCatching {
+                resolver.openInputStream(Saf.documentUri(tree, found.documentId))
+                    ?.use { it.readBytes() }
+            }.getOrNull() ?: continue
+            return ArtCache.store(context, doc.documentId, bytes)
+        }
+        return null
     }
 
     /**

@@ -49,6 +49,11 @@ object Sidecar {
         fields["lyrics"] = tags.lyrics
         fields["source"] = tags.source
         fields["sourceId"] = tags.sourceId
+        // Without these an episode's sidecar says nothing about which episode
+        // it is, which is most of what there is to know about one.
+        fields["kind"] = tags.mediaKind.name
+        fields["show"] = tags.showName
+        fields["network"] = tags.network
 
         val parts = ArrayList<String>()
         for ((k, v) in fields) if (!v.isNullOrBlank()) {
@@ -56,6 +61,8 @@ object Sidecar {
         }
         tags.trackNumber?.let { parts += "  " + quote("trackNumber") + ": " + it }
         tags.trackTotal?.let { parts += "  " + quote("trackTotal") + ": " + it }
+        tags.seasonNumber?.let { parts += "  " + quote("season") + ": " + it }
+        tags.episodeNumber?.let { parts += "  " + quote("episode") + ": " + it }
         sb.append(parts.joinToString(",\n"))
         sb.append("\n}\n")
         return sb.toString()
@@ -84,6 +91,55 @@ object Sidecar {
      * An `.lrc` file. Timestamped lyrics are used as they are; plain lyrics get
      * the header only, which is still what a player expects to find.
      */
+    /**
+     * Reads a `.json` sidecar back.
+     *
+     * This existed only as a writer, which made it a note to nobody. A file
+     * that cannot hold tags inside it -- an MKV episode, most often -- had its
+     * details written here and then had them read from nowhere: the library
+     * went back to the filename, and a correction saved to the sidecar was
+     * invisible the moment the folder was rescanned. It looked exactly like
+     * the save had failed.
+     *
+     * Returns null for anything that is not a readable sidecar, so a stray
+     * .json sitting beside a video cannot poison an entry.
+     */
+    fun parse(text: String): VideoTags? {
+        val json = Json.parseOrNull(text)
+        fun str(name: String) = json[name].string?.trim()?.ifBlank { null }
+
+        val kind = runCatching { MediaKind.valueOf(json["kind"].string ?: "") }
+            .getOrDefault(MediaKind.MUSIC_VIDEO)
+
+        val tags = VideoTags(
+            mediaKind = kind,
+            title = str("title"),
+            artist = str("artist"),
+            albumArtist = str("albumArtist"),
+            album = str("album"),
+            date = str("date") ?: str("year"),
+            genre = str("genre"),
+            language = str("language"),
+            composer = str("composer"),
+            lyricist = str("lyricist"),
+            comment = str("comment"),
+            description = str("description"),
+            longDescription = str("longDescription"),
+            artistBio = str("artistBio"),
+            albumInfo = str("albumInfo"),
+            lyrics = str("lyrics"),
+            source = str("source"),
+            sourceId = str("sourceId"),
+            showName = str("show"),
+            network = str("network"),
+            trackNumber = json["trackNumber"].int,
+            trackTotal = json["trackTotal"].int,
+            seasonNumber = json["season"].int,
+            episodeNumber = json["episode"].int,
+        )
+        return if (tags.isEmpty) null else tags
+    }
+
     fun lrc(tags: VideoTags): String? {
         val body = tags.syncedLyrics?.takeIf { it.isNotBlank() }
             ?: tags.lyrics?.takeIf { it.isNotBlank() }

@@ -429,7 +429,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
         val loaded = withContext(Dispatchers.IO) {
             val app = getApplication<Application>()
-            TagJob.readExisting(app, item.uri, item.name) to TagJob.durationMs(app, item.uri)
+            // Inside the file, then the .json beside it. Without the second,
+            // opening a corrected MKV a second time would start from the
+            // filename again and quietly undo the first correction.
+            val existing = TagJob.readExisting(app, item.uri, item.name)
+                .takeIf { !it.isEmpty }
+                ?: Catalogue.sidecarTags(app, tree, item.parentDocumentId, item.name)
+                ?: VideoTags(mediaKind = entry.kind)
+            existing to TagJob.durationMs(app, item.uri)
         }
         _state.value = _state.value.copy(
             detail = Detail(
