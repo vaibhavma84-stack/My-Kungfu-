@@ -3,13 +3,14 @@ package com.mykungfu.mvtagger
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.content.res.Configuration
 import android.media.AudioManager
 import android.net.Uri
+import android.view.View
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,9 +18,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,20 +42,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+
+/** How far a double tap jumps, which is what every other player uses. */
+private const val SKIP_MS = 10_000L
+
+/** Playing at this while a finger is held down. */
+private const val HELD_SPEED = 2f
 
 /**
  * Playing a file, inside the app.
@@ -69,11 +82,21 @@ import kotlin.math.roundToInt
  * plainly and the file can still be handed to another app, which may have its
  * own decoders and succeed where this cannot.
  *
- * The screen behaves the way every other video player does, because those
- * habits are worth more than any invention here: the system bars go away, the
- * title bar goes away when the phone is turned sideways, dragging up and down
- * the left of the picture changes brightness and the right changes volume, and
- * the transport controls are the standard ones with a scrubber.
+ * The gestures are the ones every other player uses, because those habits are
+ * worth more than anything invented here:
+ *
+ *     left, up and down       brightness
+ *     right, up and down      volume
+ *     middle, left and right  scrub
+ *     double tap left/right   back or forward ten seconds
+ *     double tap middle       pause and play
+ *     tap                     the ordinary controls
+ *
+ * Paused, two buttons step a frame at a time.
+ *
+ * And a lock, which matters more the more of those there are: a phone held in
+ * two hands catches palms constantly, and without a lock every one of these is
+ * a way to lose your place.
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
@@ -84,11 +107,16 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
-    val landscape =
-        LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     var failure by remember(playing.uri) { mutableStateOf<String?>(null) }
     var indicator by remember { mutableStateOf<String?>(null) }
+    var locked by remember { mutableStateOf(false) }
+    var showUnlock by remember { mutableStateOf(false) }
+    var controlsUp by remember { mutableStateOf(true) }
+    var subtitleMenu by remember { mutableStateOf(false) }
+    var subtitles by remember { mutableStateOf<List<TextTrack>>(emptyList()) }
+    var view by remember { mutableStateOf<PlayerView?>(null) }
+    var running by remember { mutableStateOf(true) }
 
     val player = remember(playing.uri) {
         ExoPlayer.Builder(context).build().apply {
@@ -106,8 +134,17 @@ fun PlayerScreen(
             override fun onPlayerError(error: PlaybackException) {
                 failure = describe(error)
             }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                subtitles = textTracksOf(tracks)
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                running = isPlaying
+            }
         }
         player.addListener(listener)
+        subtitles = textTracksOf(player.currentTracks)
         onDispose {
             player.removeListener(listener)
             player.release()
@@ -142,6 +179,16 @@ fun PlayerScreen(
         }
     }
 
+    // Locking takes the ordinary controls away with it. Leaving them up would
+    // put a pause button on a screen that is meant to ignore being touched.
+    LaunchedEffect(locked, view) {
+        view?.let { it.useController = !locked }
+        if (locked) {
+            view?.hideController()
+            subtitleMenu = false
+        }
+    }
+
     // The level shown while a drag is happening, gone shortly after it stops.
     LaunchedEffect(indicator) {
         if (indicator != null) {
@@ -150,7 +197,18 @@ fun PlayerScreen(
         }
     }
 
-    BackHandler { onClose() }
+    LaunchedEffect(showUnlock) {
+        if (showUnlock) {
+            delay(2500)
+            showUnlock = false
+        }
+    }
+
+    // Locked, back reveals the way out rather than taking it -- otherwise the
+    // lock would be a button that stops nothing at all.
+    BackHandler {
+        if (locked) showUnlock = true else onClose()
+    }
 
     val audio = remember(context) {
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -160,34 +218,103 @@ fun PlayerScreen(
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             factory = { viewContext ->
-                PlayerView(viewContext).also { view ->
-                    view.player = player
-                    view.useController = true
-                    view.controllerShowTimeoutMs = 3500
-                    view.setShowNextButton(false)
-                    view.setShowPreviousButton(false)
-                    view.keepScreenOn = true
-                    view.showController()
+                PlayerView(viewContext).also { made ->
+                    made.player = player
+                    made.useController = true
+                    made.controllerShowTimeoutMs = 3500
+                    made.setShowNextButton(false)
+                    made.setShowPreviousButton(false)
+                    made.keepScreenOn = true
+                    made.setControllerVisibilityListener(
+                        PlayerView.ControllerVisibilityListener { visibility ->
+                            controlsUp = visibility == View.VISIBLE
+                        }
+                    )
+                    made.showController()
+                    view = made
                 }
             },
             modifier = Modifier
                 .fillMaxSize()
                 /*
+                   Taps: one shows the controls, two skip. They have to be
+                   handled together, because telling them apart is the whole
+                   problem -- a single tap cannot be acted on until enough time
+                   has passed to know a second one is not coming.
+
+                   That means the controls no longer toggle themselves and this
+                   has to do it, which is why the view is kept in hand.
+                */
+                .pointerInput(locked) {
+                    // Whether the two-speed was this gesture's doing. Without
+                    // it, every tap would put the speed back to one and undo a
+                    // speed chosen from the controls.
+                    var boosted = false
+
+                    detectTapGestures(
+                        onTap = {
+                            if (locked) {
+                                showUnlock = true
+                            } else {
+                                view?.let { if (controlsUp) it.hideController() else it.showController() }
+                            }
+                        },
+                        onDoubleTap = { at ->
+                            if (locked) return@detectTapGestures
+                            when (sideAt(at.x, size.width)) {
+                                Side.LEFT -> {
+                                    player.seekTo((player.currentPosition - SKIP_MS).coerceAtLeast(0))
+                                    indicator = "− 10s"
+                                }
+                                Side.RIGHT -> {
+                                    player.seekTo(player.currentPosition + SKIP_MS)
+                                    indicator = "+ 10s"
+                                }
+                                Side.NONE -> {
+                                    if (player.isPlaying) player.pause() else player.play()
+                                }
+                            }
+                        },
+                        /*
+                           Two speed while held, which is the fastest way
+                           through a slow stretch without losing your place.
+                           The speed is put back on release whatever happens,
+                           including a gesture that is cancelled -- a player
+                           left at double speed would look broken.
+                        */
+                        onPress = {
+                            // Waits for the finger to come up, or for the
+                            // gesture to be cancelled -- the speed has to go
+                            // back either way.
+                            tryAwaitRelease()
+                            if (boosted) {
+                                player.setPlaybackSpeed(1f)
+                                boosted = false
+                            }
+                        },
+                        onLongPress = {
+                            if (!locked) {
+                                boosted = true
+                                player.setPlaybackSpeed(HELD_SPEED)
+                                indicator = "2×"
+                            }
+                        },
+                    )
+                }
+                /*
                    Brightness on the left of the picture, volume on the right,
                    which is the arrangement every other player uses.
 
-                   Only the drag is consumed. A tap goes on through to the view
-                   underneath, so the ordinary transport controls -- including
-                   the scrubber -- still appear on a tap, which is what they are
-                   for.
+                   Only the drag is consumed. A tap goes on through, so the
+                   handler above still sees it.
                 */
-                .pointerInput(maxVolume) {
+                .pointerInput(maxVolume, locked) {
                     var side = Side.NONE
                     var level = 0f
 
                     detectVerticalDragGestures(
                         onDragStart = { at ->
-                            side = sideAt(at.x, size.width)
+                            side = if (locked) Side.NONE else sideAt(at.x, size.width)
                             level = when (side) {
                                 Side.LEFT -> brightnessOf(activity)
                                 Side.RIGHT ->
@@ -233,14 +360,15 @@ fun PlayerScreen(
                    whole gesture re-buffering and arrives late; this shows where
                    it is going and goes there once.
                 */
-                .pointerInput(Unit) {
+                .pointerInput(locked) {
                     var scrubbing = false
                     var target = 0L
                     var from = 0L
 
                     detectHorizontalDragGestures(
                         onDragStart = { at ->
-                            scrubbing = sideAt(at.x, size.width) == Side.NONE &&
+                            scrubbing = !locked &&
+                                    sideAt(at.x, size.width) == Side.NONE &&
                                     player.duration > 0
                             from = player.currentPosition
                             target = from
@@ -273,8 +401,9 @@ fun PlayerScreen(
                 },
         )
 
-        // Sideways, the picture is the point and the title bar is in its way.
-        if (!landscape) {
+        // The top row comes and goes with the transport controls, so sideways
+        // the picture is uninterrupted until you ask for something.
+        if (controlsUp && !locked) {
             Row(
                 Modifier.fillMaxWidth().padding(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -290,9 +419,109 @@ fun PlayerScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { onOpenExternally(playing.uri, playing.mimeType) }) {
-                    Text("Another app")
+
+                if (subtitles.isNotEmpty()) {
+                    Box {
+                        TextButton(onClick = { subtitleMenu = true }) {
+                            Text("Subtitles", color = Color.White)
+                        }
+                        DropdownMenu(
+                            expanded = subtitleMenu,
+                            onDismissRequest = { subtitleMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(if (subtitles.none { it.on }) "Off  ✓" else "Off") },
+                                onClick = {
+                                    player.trackSelectionParameters =
+                                        player.trackSelectionParameters.buildUpon()
+                                            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                                            .build()
+                                    subtitleMenu = false
+                                },
+                            )
+                            for (track in subtitles) {
+                                DropdownMenuItem(
+                                    text = { Text(track.label + if (track.on) "  ✓" else "") },
+                                    onClick = {
+                                        player.trackSelectionParameters =
+                                            player.trackSelectionParameters.buildUpon()
+                                                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                                                .setOverrideForType(
+                                                    TrackSelectionOverride(
+                                                        track.group.mediaTrackGroup, track.index
+                                                    )
+                                                )
+                                                .build()
+                                        subtitleMenu = false
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
+
+                IconButton(onClick = { locked = true }) {
+                    Icon(Icons.Default.Lock, contentDescription = "Lock the screen", tint = Color.White)
+                }
+                TextButton(onClick = { onOpenExternally(playing.uri, playing.mimeType) }) {
+                    Text("Another app", color = Color.White)
+                }
+            }
+        }
+
+        /*
+           A frame at a time, which only means anything while paused.
+
+           There is no API for stepping a frame: what there is, is an exact
+           seek. So this works out how long one frame lasts from the video's
+           own frame rate and moves by that much. A file that does not state
+           its rate is assumed to be 25 -- wrong for some, and still close
+           enough to land on a different frame, which is the whole point.
+
+           Backwards is the expensive direction. An exact seek back has to
+           decode from the previous keyframe, so on a long-GOP file it takes a
+           moment; that is the format's doing rather than something to fix
+           here.
+        */
+        if (controlsUp && !locked && !running) {
+            Row(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 96.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.6f)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val step = frameMs(player)
+                TextButton(onClick = {
+                    player.seekTo((player.currentPosition - step).coerceAtLeast(0L))
+                }) { Text("◀ frame", color = Color.White) }
+                Text(
+                    clock(player.currentPosition),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                TextButton(onClick = {
+                    val end = player.duration
+                    val to = player.currentPosition + step
+                    player.seekTo(if (end > 0L) to.coerceAtMost(end) else to)
+                }) { Text("frame ▶", color = Color.White) }
+            }
+        }
+
+        // Locked, the only thing on screen is the way out of it, and only
+        // after a tap -- otherwise the lock would be its own distraction.
+        if (locked && showUnlock) {
+            IconButton(
+                onClick = { locked = false; showUnlock = false },
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(12.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.6f)),
+            ) {
+                Icon(Icons.Default.Lock, contentDescription = "Unlock", tint = Color.White)
             }
         }
 
@@ -331,6 +560,51 @@ fun PlayerScreen(
             }
         }
     }
+}
+
+/** One subtitle track a file carries, and whether it is the one showing. */
+private class TextTrack(
+    val group: Tracks.Group,
+    val index: Int,
+    val label: String,
+    val on: Boolean,
+)
+
+/**
+ * The subtitle tracks inside the file.
+ *
+ * The app goes to real trouble to write these into an MP4 and until now gave
+ * no way to turn one on, which made the whole exercise invisible.
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+private fun textTracksOf(tracks: Tracks): List<TextTrack> =
+    tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }.flatMap { group ->
+        (0 until group.length).mapNotNull { index ->
+            if (!group.isTrackSupported(index)) return@mapNotNull null
+            val format = group.getTrackFormat(index)
+            TextTrack(
+                group = group,
+                index = index,
+                label = format.label
+                    ?: format.language?.takeIf { it.isNotBlank() && it != "und" }
+                    ?: ("Subtitles " + (index + 1)),
+                on = group.isTrackSelected(index),
+            )
+        }
+    }
+
+/**
+ * How long one frame lasts, from the video's own rate.
+ *
+ * Unstated rates are common enough in this library that a fallback is needed
+ * rather than a disabled button; 25 is the safe middle, and being wrong about
+ * it costs a step of the wrong size rather than a step that does nothing.
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+private fun frameMs(player: ExoPlayer): Long {
+    val rate = player.videoFormat?.frameRate ?: -1f
+    val perFrame = if (rate > 0f) (1000f / rate) else 40f
+    return perFrame.toLong().coerceAtLeast(1L)
 }
 
 /** Which third of the picture a gesture started in. */
