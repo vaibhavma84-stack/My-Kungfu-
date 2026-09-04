@@ -64,6 +64,13 @@ data class Settings(
     val deleteOriginalAfterSaving: Boolean = false,
     /** Browse the collection as a wall of covers rather than a list. */
     val collectionAsGrid: Boolean = true,
+    /**
+     * Write the poster.jpg and .nfo files Infuse, Plex and Jellyfin look for.
+     *
+     * Costs a few kilobytes per file and saves those apps from guessing the
+     * library from filenames, which they do badly on Indian film music.
+     */
+    val writeLibraryFiles: Boolean = true,
 ) {
     val subtitleLanguageList: List<String>
         get() = subtitleLanguages.split(',', ' ')
@@ -121,6 +128,7 @@ class Store(context: Context) {
         subtitleLanguages = prefs.getString(KEY_SUB_LANGS, null) ?: "en",
         deleteOriginalAfterSaving = prefs.getBoolean(KEY_DELETE_ORIGINAL, false),
         collectionAsGrid = prefs.getBoolean(KEY_GRID, true),
+        writeLibraryFiles = prefs.getBoolean(KEY_LIBRARY_FILES, true),
     )
 
     fun save(settings: Settings) {
@@ -148,6 +156,7 @@ class Store(context: Context) {
             putString(KEY_SUB_LANGS, settings.subtitleLanguages)
             putBoolean(KEY_DELETE_ORIGINAL, settings.deleteOriginalAfterSaving)
             putBoolean(KEY_GRID, settings.collectionAsGrid)
+            putBoolean(KEY_LIBRARY_FILES, settings.writeLibraryFiles)
         }.apply()
     }
 
@@ -196,5 +205,6 @@ class Store(context: Context) {
         const val KEY_SUB_LANGS = "subtitleLanguages"
         const val KEY_DELETE_ORIGINAL = "deleteOriginalAfterSaving"
         const val KEY_GRID = "collectionAsGrid"
+        const val KEY_LIBRARY_FILES = "writeLibraryFiles"
     }
 }

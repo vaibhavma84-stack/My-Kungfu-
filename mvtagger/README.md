@@ -29,6 +29,12 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
   as it was. Changing the artist or title also renames and refiles it, since
   that is what the naming templates are built from; changing only the language
   leaves it where it is.
+- **Reads on an iPad or a TV box.** The folder layout it writes is the one
+  Infuse, Plex and Jellyfin expect -- `Movies/Title (Year)/`,
+  `TV Shows/Show/Season 01/`, `Music Videos/Artist/` -- and it writes the
+  `poster.jpg` and `.nfo` files they look for, so they read what the file
+  says rather than guessing from its name. Guessing goes badly on film
+  music: a song's name means nothing to a film catalogue.
 - **Library.** Point it at one or more folders. It scans them, including
   subfolders, and lists every video it finds.
 - **Recognises three kinds of file** from the name: music videos, films, and

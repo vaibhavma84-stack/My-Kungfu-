@@ -1457,6 +1457,20 @@ private fun SettingsScreen(
                 "Write .json/.lrc alongside files that cannot hold tags",
                 settings.writeSidecars,
             ) { viewModel.applySettings(settings.copy(writeSidecars = it)) }
+            Toggle(
+                "Write poster.jpg and .nfo for Infuse, Plex and Jellyfin",
+                settings.writeLibraryFiles,
+            ) { viewModel.applySettings(settings.copy(writeLibraryFiles = it)) }
+            Text(
+                "A few kilobytes beside each file, saying plainly what it is. " +
+                        "Left without them those apps identify a library by guessing " +
+                        "from filenames and fetching their own details, which goes " +
+                        "badly on film music — a song's name means nothing to a film " +
+                        "catalogue. The folder layout this app writes is already the " +
+                        "one they expect, so nothing moves.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             HorizontalDivider()
             Text("Naming", style = MaterialTheme.typography.titleMedium)

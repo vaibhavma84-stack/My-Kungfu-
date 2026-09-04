@@ -4,6 +4,8 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.mykungfu.mvtagger.core.FilenameParser
+import com.mykungfu.mvtagger.core.LibraryFiles
+import com.mykungfu.mvtagger.core.MediaKind
 import com.mykungfu.mvtagger.core.Mp4Metadata
 import com.mykungfu.mvtagger.core.Organiser
 import com.mykungfu.mvtagger.core.RenameTemplate
@@ -125,6 +127,14 @@ object TagJob {
         if (!embedded && settings.writeSidecars) {
             runCatching {
                 writeSidecars(context, outputTree, parentId, created.name, tags, settings)
+            }
+        }
+
+        if (settings.writeLibraryFiles) {
+            runCatching {
+                writeLibraryFiles(
+                    context, outputTree, parentId, folder, created.name, tags
+                )
             }
         }
 
@@ -280,6 +290,14 @@ object TagJob {
         var finalName = created.name
         if (!finalName.equals(wantedName, ignoreCase = true)) {
             if (Saf.rename(resolver, created.uri, wantedName) != null) finalName = wantedName
+        }
+
+        if (settings.writeLibraryFiles) {
+            runCatching {
+                writeLibraryFiles(
+                    context, outputTree, destinationParent, folder, finalName, tags
+                )
+            }
         }
 
         val displayPath = (folder + finalName).joinToString("/")
@@ -483,6 +501,90 @@ object TagJob {
                     if (it.isPng) "image/png" else "image/jpeg",
                     it.bytes,
                 )
+            }
+        }
+    }
+
+    /**
+     * The poster and .nfo that Infuse, Plex and Jellyfin look for.
+     *
+     * The folder layout this app already writes is the one all three expect, so
+     * nothing moves; what they are missing is a statement of what each file is.
+     * Left without one they identify a library by guessing from filenames and
+     * then fetching their own details -- a second guess at a question already
+     * answered, and a bad guess on Indian film music, where a song's name means
+     * nothing to a film catalogue.
+     *
+     * The poster goes in the folder rather than beside the file, which is where
+     * they look, and is written once: for a film that is its own folder, and
+     * for a series the show's folder rather than each season's. An existing
+     * poster is left alone -- it may have been put there on purpose.
+     *
+     * Best effort throughout. These are a convenience for other apps, and
+     * failing to write one is not a reason to fail a save that has already
+     * written the video itself.
+     */
+    private fun writeLibraryFiles(
+        context: Context,
+        outputTree: Uri,
+        parentId: String,
+        folder: List<String>,
+        fileName: String,
+        tags: VideoTags,
+    ) {
+        if (!LibraryFiles.worthWriting(tags)) return
+        val resolver = context.contentResolver
+        val base = FilenameParser.stripExtension(fileName)
+
+        fun put(where: String, name: String, mime: String, bytes: ByteArray, replace: Boolean) {
+            val existing = Saf.findChild(resolver, outputTree, where, name)
+            if (existing != null && !replace) return
+            val uri = if (existing != null) {
+                Saf.documentUri(outputTree, existing.documentId)
+            } else {
+                Saf.createFile(resolver, outputTree, where, name, mime)?.uri ?: return
+            }
+            Saf.openOutput(resolver, uri)?.use { it.write(bytes) }
+        }
+
+        runCatching {
+            put(
+                parentId, LibraryFiles.nfoName(base), "text/xml",
+                LibraryFiles.nfo(tags).toByteArray(Charsets.UTF_8),
+                replace = true,
+            )
+        }
+
+        val artwork = tags.artwork
+        if (tags.mediaKind == MediaKind.MOVIE && artwork != null) {
+            // A film has a folder to itself, so the folder poster is this film's.
+            runCatching {
+                put(parentId, LibraryFiles.POSTER, "image/jpeg", artwork.bytes, replace = false)
+            }
+        }
+
+        if (tags.mediaKind == MediaKind.TV_EPISODE) {
+            // The show's folder, which is one level up from the season -- but
+            // only when there is a season folder to come up from. The template
+            // drops the season segment when the file never said which season it
+            // was, and going up regardless would put the series file at the top
+            // of the library, claiming every show in it.
+            val lastIsSeason = folder.lastOrNull()?.startsWith("Season", ignoreCase = true) == true
+            val showId = if (lastIsSeason && folder.size >= 2) {
+                Saf.ensurePath(resolver, outputTree, folder.dropLast(1)) ?: return
+            } else {
+                parentId
+            }
+            runCatching {
+                LibraryFiles.showNfo(tags)?.let {
+                    put(
+                        showId, LibraryFiles.SHOW_NFO, "text/xml",
+                        it.toByteArray(Charsets.UTF_8), replace = true,
+                    )
+                }
+                if (artwork != null) {
+                    put(showId, LibraryFiles.POSTER, "image/jpeg", artwork.bytes, replace = false)
+                }
             }
         }
     }
