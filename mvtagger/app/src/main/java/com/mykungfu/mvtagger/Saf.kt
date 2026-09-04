@@ -54,6 +54,30 @@ object Saf {
         "rmvb", "f4v", "mts",
     )
 
+    /**
+     * The MIME type for a filename.
+     *
+     * Used both when creating a file and when handing one to another app: a
+     * player that filters on `video/x-matroska` will not offer itself for a
+     * bare `video/*`, so the specific type is what makes the right apps appear
+     * in the chooser.
+     */
+    fun mimeForName(fileName: String): String =
+        when (fileName.substringAfterLast('.', "").lowercase()) {
+            "mp4", "m4v" -> "video/mp4"
+            "mov", "qt" -> "video/quicktime"
+            "mkv" -> "video/x-matroska"
+            "webm" -> "video/webm"
+            "avi" -> "video/x-msvideo"
+            "wmv" -> "video/x-ms-wmv"
+            "flv" -> "video/x-flv"
+            "3gp", "3g2" -> "video/3gpp"
+            "ts", "m2ts", "mts" -> "video/mp2t"
+            "mpg", "mpeg" -> "video/mpeg"
+            "ogv" -> "video/ogg"
+            else -> "video/*"
+        }
+
     fun isVideo(name: String, mimeType: String): Boolean {
         if (mimeType.startsWith("video/")) return true
         val ext = name.substringAfterLast('.', "").lowercase()

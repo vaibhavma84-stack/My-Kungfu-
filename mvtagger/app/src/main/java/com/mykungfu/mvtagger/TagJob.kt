@@ -78,7 +78,7 @@ object TagJob {
                 message = "Could not create the folder " + folder.joinToString("/"),
             )
 
-        val created = Saf.createFile(resolver, outputTree, parentId, fileName, mimeFor(extension))
+        val created = Saf.createFile(resolver, outputTree, parentId, fileName, Saf.mimeForName(fileName))
             ?: return Outcome(false, message = "Could not create $fileName in the output folder")
         val displayPath = (folder + created.name).joinToString("/")
 
@@ -337,21 +337,6 @@ object TagJob {
         Saf.openOutput(context.contentResolver, doc.uri)?.use {
             it.write(Subtitles.toSrt(Subtitles.tidy(subtitles.cues)).toByteArray(Charsets.UTF_8))
         }
-    }
-
-    private fun mimeFor(extension: String): String = when (extension.lowercase()) {
-        "mp4", "m4v" -> "video/mp4"
-        "mov", "qt" -> "video/quicktime"
-        "mkv" -> "video/x-matroska"
-        "webm" -> "video/webm"
-        "avi" -> "video/x-msvideo"
-        "wmv" -> "video/x-ms-wmv"
-        "flv" -> "video/x-flv"
-        "3gp" -> "video/3gpp"
-        "ts", "m2ts", "mts" -> "video/mp2t"
-        "mpg", "mpeg" -> "video/mpeg"
-        "ogv" -> "video/ogg"
-        else -> "video/*"
     }
 
     /**

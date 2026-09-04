@@ -120,13 +120,45 @@ class MainActivity : ComponentActivity() {
      * Hands the file to whatever the phone already plays video with. The app
      * deliberately has no player of its own -- there are good ones installed
      * already, and one more would be the least interesting part of this.
+     *
+     * [mimeType] is the specific type for the file rather than a bare
+     * `video/*`: a player that declares only `video/x-matroska` will not offer
+     * itself for the vague one, so being specific is what makes the right apps
+     * appear in the chooser. If nothing answers the specific type -- some
+     * players list only `video/*` -- it is worth asking again the vague way
+     * before telling the user there is nothing to open it with.
+     *
+     * The read grant rides along on the intent, so the player can open a file
+     * in a folder it was never given access to itself.
      */
-    private fun openInAnotherApp(uri: android.net.Uri) {
+    private fun openInAnotherApp(uri: android.net.Uri, mimeType: String) {
+        if (launchViewer(uri, mimeType)) return
+        if (mimeType != "video/*" && launchViewer(uri, "video/*")) return
+        Toast.makeText(
+            this,
+            "No app on this phone offered to open that file.",
+            Toast.LENGTH_LONG,
+        ).show()
+    }
+
+    /** Returns false when the chooser could not be started, rather than failing quietly. */
+    private fun launchViewer(uri: android.net.Uri, mimeType: String): Boolean {
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "video/*")
+            setDataAndType(uri, mimeType)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        runCatching { startActivity(Intent.createChooser(intent, "Play with")) }
+        if (intent.resolveActivity(packageManager) == null) return false
+        return try {
+            startActivity(Intent.createChooser(intent, "Play with"))
+            true
+        } catch (e: android.content.ActivityNotFoundException) {
+            false
+        } catch (t: Throwable) {
+            // A player that is installed but refuses the handover: say what
+            // happened, because a tap that does nothing looks like a bug here.
+            Toast.makeText(this, "Could not open it: " + t.message, Toast.LENGTH_LONG).show()
+            true
+        }
     }
 }
 

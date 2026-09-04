@@ -87,7 +87,7 @@ import com.mykungfu.mvtagger.core.VideoTags
 fun AppScreen(
     state: UiState,
     viewModel: AppViewModel,
-    onOpenExternally: (Uri) -> Unit,
+    onOpenExternally: (Uri, String) -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
 
@@ -137,7 +137,7 @@ private fun MainScreen(
     snackbar: SnackbarHostState,
     onAddSource: () -> Unit,
     onPickOutput: () -> Unit,
-    onOpenExternally: (Uri) -> Unit,
+    onOpenExternally: (Uri, String) -> Unit,
 ) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -226,7 +226,7 @@ private fun ToDoContent(state: UiState, viewModel: AppViewModel, onAddSource: ()
 private fun CollectionContent(
     state: UiState,
     viewModel: AppViewModel,
-    onOpen: (Uri) -> Unit,
+    onOpen: (Uri, String) -> Unit,
 ) {
     val outputTree = state.settings.outputUri
 
@@ -305,7 +305,10 @@ private fun CollectionContent(
             items(group.entries, key = { it.documentId }) { entry ->
                 CollectionRow(entry) {
                     outputTree?.let { tree ->
-                        onOpen(Saf.documentUri(tree, entry.documentId))
+                        onOpen(
+                            Saf.documentUri(tree, entry.documentId),
+                            Saf.mimeForName(entry.name),
+                        )
                     }
                 }
             }
@@ -505,7 +508,7 @@ private fun DetailScreen(
     state: UiState,
     detail: Detail,
     viewModel: AppViewModel,
-    onOpenExternally: (Uri) -> Unit,
+    onOpenExternally: (Uri, String) -> Unit,
     snackbar: SnackbarHostState,
 ) {
     val tags = detail.tags
@@ -520,7 +523,9 @@ private fun DetailScreen(
                 },
                 title = { Text(detail.item.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
-                    IconButton(onClick = { onOpenExternally(detail.item.uri) }) {
+                    IconButton(onClick = {
+                        onOpenExternally(detail.item.uri, Saf.mimeForName(detail.item.name))
+                    }) {
                         Icon(Icons.Default.PlayArrow, contentDescription = "Play in another app")
                     }
                 },
