@@ -71,6 +71,17 @@ data class Detail(
     val albumChoices: List<String> = emptyList(),
     /** Subtitles found or fetched for this file, ready to go into it. */
     val subtitles: SubtitleTrack? = null,
+    /**
+     * True when this is a file already finished and filed, opened to correct
+     * something, rather than a new one on its way through.
+     *
+     * It changes what saving means. A new file is written into the output
+     * folder and the source is left alone; a finished one is the copy, so
+     * saving rewrites it in place and there is nothing to fall back on if that
+     * goes wrong -- which is why [TagJob.retag] checks the new file before
+     * letting go of the old.
+     */
+    val editingExisting: Boolean = false,
 ) {
     /** True when saving will repackage this file into MP4 on the way out. */
     fun willConvert(settings: Settings): Boolean =
@@ -317,6 +328,57 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Opens a file that is already finished and filed, to correct it.
+     *
+     * Everything shown comes from the tags inside the file, because that is
+     * where they were written and what other devices will read. The lookup and
+     * every field work as they do for a new file; only saving differs, and that
+     * is [Detail.editingExisting].
+     */
+    fun openCollectionEntry(entry: Entry) = viewModelScope.launch {
+        val tree = settings.outputUri
+        if (tree == null) {
+            _state.value = _state.value.copy(message = "Choose an output folder in Settings first.")
+            return@launch
+        }
+        if (entry.parentDocumentId.isBlank()) {
+            _state.value = _state.value.copy(
+                message = "Tap refresh to read the output folder, then try again.",
+            )
+            return@launch
+        }
+        val item = Item(
+            id = "collection|" + entry.documentId,
+            treeUri = tree,
+            documentId = entry.documentId,
+            parentDocumentId = entry.parentDocumentId,
+            name = entry.name,
+            size = entry.size,
+            kind = entry.kind,
+            guess = entry.heading,
+            status = ItemStatus.SAVED,
+        )
+        _state.value = _state.value.copy(
+            detail = Detail(
+                item, VideoTags(mediaKind = entry.kind),
+                loading = "Reading the file…", editingExisting = true,
+            )
+        )
+        val loaded = withContext(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            TagJob.readExisting(app, item.uri, item.name) to TagJob.durationMs(app, item.uri)
+        }
+        _state.value = _state.value.copy(
+            detail = Detail(
+                item,
+                seedFromName(item, loaded.first),
+                durationMs = loaded.second,
+                editingExisting = true,
+            )
+        )
+    }
+
     fun closeDetail() {
         _state.value = _state.value.copy(detail = null)
     }
@@ -491,6 +553,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = _state.value.copy(message = "Choose an output folder in Settings first.")
             return@launch
         }
+        if (detail.editingExisting) {
+            saveEdit(detail)
+            return@launch
+        }
         _state.value = _state.value.copy(detail = detail.copy(loading = "Saving…"))
 
         val outcome = withContext(Dispatchers.IO) {
@@ -523,6 +589,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             message = outcome.message,
             collectionScanned = false,
         )
+    }
+
+    /**
+     * Writes a correction back to a file that is already in the collection.
+     *
+     * Nothing in the to-do list changes -- this file left it long ago. The
+     * collection is marked for rereading instead, because the file may now have
+     * a different name, sit in a different folder, and certainly says something
+     * different about itself.
+     */
+    private suspend fun saveEdit(detail: Detail) {
+        _state.value = _state.value.copy(
+            detail = detail.copy(loading = "Writing the file again…")
+        )
+        val outcome = withContext(Dispatchers.IO) {
+            TagJob.retag(
+                context = getApplication<Application>(),
+                outputTree = detail.item.treeUri,
+                documentId = detail.item.documentId,
+                parentDocumentId = detail.item.parentDocumentId,
+                currentName = detail.item.name,
+                tags = detail.tags,
+                settings = settings,
+            )
+        }
+        _state.value = _state.value.copy(
+            detail = if (outcome.ok) null else detail.copy(loading = null),
+            message = outcome.message,
+            collectionScanned = false,
+        )
+        if (outcome.ok) scanCollection()
     }
 
     fun skip(item: Item) {

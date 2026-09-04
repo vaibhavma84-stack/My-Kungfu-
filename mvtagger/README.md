@@ -16,7 +16,17 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
   what you have finished: everything in the output folder, with its cover,
   grouped the way you would look for it -- music videos by language, episodes
   by series, films by year. It reads the tags inside each file rather than the
-  filenames, which is the point of having written them there.
+  filenames, which is the point of having written them there. Tapping a row
+  hands the file to whatever you play video with; the pencil beside it opens
+  the file to be corrected.
+- **Correcting something already done.** A wrong language, a wrong singer, a
+  film that came back as the wrong film -- open it from *Collection*, fix the
+  fields, and save. The details live inside the file, so this writes the file
+  again, which takes about as long as copying it. The file you have is kept
+  until the new one has been checked, and if anything fails it is left exactly
+  as it was. Changing the artist or title also renames and refiles it, since
+  that is what the naming templates are built from; changing only the language
+  leaves it where it is.
 - **Library.** Point it at one or more folders. It scans them, including
   subfolders, and lists every video it finds.
 - **Recognises three kinds of file** from the name: music videos, films, and

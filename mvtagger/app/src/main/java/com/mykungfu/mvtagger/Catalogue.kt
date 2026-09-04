@@ -20,6 +20,8 @@ import com.mykungfu.mvtagger.core.Transliterate
  */
 data class Entry(
     val documentId: String,
+    /** The folder document it sits in, so the file can be rewritten in place. */
+    val parentDocumentId: String,
     val name: String,
     val size: Long,
     val modified: Long,
@@ -77,7 +79,9 @@ data class Entry(
 object Catalogue {
 
     private const val PREFS = "mvtagger-collection"
-    private const val KEY_INDEX = "entries"
+    // Bumped when a field the app needs is added, so an index written by an
+    // older build is rescanned rather than loaded with the field missing.
+    private const val KEY_INDEX = "entries2"
 
     /** Folder names the app itself creates, used when a file has no tags. */
     private val KIND_BY_FOLDER = mapOf(
@@ -117,6 +121,7 @@ object Catalogue {
                 val known = cached[key]
                 out += known?.copy(
                     folder = path,
+                    parentDocumentId = docId,
                     // The thumbnail lives in the cache directory, which Android
                     // may clear at any time, so its presence is checked rather
                     // than remembered.
@@ -167,6 +172,7 @@ object Catalogue {
 
         return Entry(
             documentId = doc.documentId,
+            parentDocumentId = doc.parentDocumentId,
             name = doc.name,
             size = doc.size,
             modified = doc.lastModified,
@@ -215,6 +221,7 @@ object Catalogue {
                 val id = entry["id"].string ?: return@mapNotNull null
                 Entry(
                     documentId = id,
+                    parentDocumentId = entry["parent"].string ?: return@mapNotNull null,
                     name = entry["name"].string ?: return@mapNotNull null,
                     size = entry["size"].string?.toLongOrNull() ?: 0L,
                     modified = entry["modified"].string?.toLongOrNull() ?: 0L,
@@ -241,6 +248,7 @@ object Catalogue {
             if (index > 0) json.append(',')
             json.append('{')
             json.append(field("id", e.documentId)).append(',')
+            json.append(field("parent", e.parentDocumentId)).append(',')
             json.append(field("name", e.name)).append(',')
             json.append(quote("size")).append(':').append(e.size).append(',')
             json.append(quote("modified")).append(':').append(e.modified).append(',')

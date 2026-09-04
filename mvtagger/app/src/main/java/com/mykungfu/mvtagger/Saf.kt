@@ -224,6 +224,22 @@ object Saf {
         return Created(uri, actual)
     }
 
+    /**
+     * A file of this name already in this folder, or null.
+     *
+     * Used when rewriting something the app itself wrote earlier: [createFile]
+     * deliberately steps a duplicate name aside, which is right for a new file
+     * and wrong for replacing one, where the whole point is to land on the same
+     * name.
+     */
+    fun findChild(
+        resolver: ContentResolver,
+        treeUri: Uri,
+        parentDocumentId: String,
+        name: String,
+    ): Doc? = listChildren(resolver, treeUri, parentDocumentId)
+        .firstOrNull { !it.isDirectory && it.name.equals(name, ignoreCase = true) }
+
     /** Size in bytes, or null if the provider will not say. */
     fun querySize(resolver: ContentResolver, uri: Uri): Long? =
         resolver.query(

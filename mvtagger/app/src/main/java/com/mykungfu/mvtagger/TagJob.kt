@@ -176,6 +176,123 @@ object TagJob {
     }
 
     /**
+     * Changes the details on a file that is already finished and filed.
+     *
+     * The details live inside the file, so there is no small edit to make:
+     * changing one means writing the file again. That is done to a new document
+     * first, and the old one is removed only once the new one has been checked
+     * -- the same rule the delete-original setting follows, and it matters more
+     * here, because by this point the file in the output folder may be the only
+     * copy left.
+     *
+     * If the write fails, or does not check out, or the old file will not go,
+     * nothing changes and the file stays exactly as it was.
+     *
+     * Renaming and refiling follow from the new details, since the templates
+     * are built out of them -- correcting an artist moves the file into that
+     * artist's folder. Correcting only the language, which no default template
+     * uses, rewrites the tags and leaves the file where it is.
+     */
+    fun retag(
+        context: Context,
+        outputTree: Uri,
+        documentId: String,
+        parentDocumentId: String,
+        currentName: String,
+        tags: VideoTags,
+        settings: Settings,
+    ): Outcome {
+        val resolver = context.contentResolver
+        val sourceUri = Saf.documentUri(outputTree, documentId)
+        val extension = FilenameParser.extensionOf(currentName)
+        val wantedName = RenameTemplate.fileName(
+            settings.nameTemplateFor(tags.mediaKind), tags, extension
+        ) ?: currentName
+
+        if (!Sidecar.canEmbed(currentName)) {
+            // Nothing inside this container can hold the details, so the files
+            // beside it are all there is to rewrite. The video is left where it
+            // is rather than copied gigabyte for gigabyte to change a name.
+            if (!settings.writeSidecars) {
+                return Outcome(
+                    false,
+                    message = extension.uppercase() + " cannot hold details inside it, " +
+                            "and writing files alongside is switched off in Settings, " +
+                            "so there is nothing here to change.",
+                )
+            }
+            return try {
+                replaceSidecars(
+                    context, outputTree, parentDocumentId, currentName, tags, settings
+                )
+                Outcome(
+                    ok = true, path = currentName, embedded = false,
+                    message = "Updated the details beside " + currentName + ". " +
+                            extension.uppercase() + " cannot hold them inside it, so the " +
+                            "video itself was left where it is.",
+                )
+            } catch (e: Exception) {
+                Outcome(false, message = "Failed: " + (e.message ?: e.toString()))
+            }
+        }
+
+        val folder = Organiser.folder(settings.folderTemplateFor(tags.mediaKind), tags)
+        val destinationParent = Saf.ensurePath(resolver, outputTree, folder)
+            ?: return Outcome(
+                false,
+                message = "Could not create the folder " + folder.joinToString("/"),
+            )
+
+        val created = Saf.createFile(
+            resolver, outputTree, destinationParent, wantedName, Saf.mimeForName(wantedName)
+        ) ?: return Outcome(false, message = "Could not create " + wantedName + " to write into")
+
+        try {
+            writeTagged(context, sourceUri, created.uri, tags)
+        } catch (e: Exception) {
+            Saf.delete(resolver, created.uri)
+            return Outcome(
+                false,
+                message = "Failed, and " + currentName + " is untouched: " +
+                        (e.message ?: e.toString()),
+            )
+        }
+
+        if (!verifyWritten(context, created.uri, sourceUri, embedded = true, tags = tags)) {
+            Saf.delete(resolver, created.uri)
+            return Outcome(
+                false,
+                message = "The rewritten file did not check out, so it was thrown away " +
+                        "and " + currentName + " is exactly as it was.",
+            )
+        }
+
+        if (!Saf.delete(resolver, sourceUri)) {
+            Saf.delete(resolver, created.uri)
+            return Outcome(
+                false,
+                message = "Could not replace " + currentName + ", so it was left as it was.",
+            )
+        }
+
+        // While both existed the new document had to step around the old one's
+        // name. With the old one gone the wanted name is free.
+        var finalName = created.name
+        if (!finalName.equals(wantedName, ignoreCase = true)) {
+            if (Saf.rename(resolver, created.uri, wantedName) != null) finalName = wantedName
+        }
+
+        val displayPath = (folder + finalName).joinToString("/")
+        val moved = !finalName.equals(currentName, ignoreCase = true) ||
+                destinationParent != parentDocumentId
+        return Outcome(
+            ok = true, path = displayPath, embedded = true,
+            message = if (moved) "Updated, and filed as " + displayPath
+            else "Updated " + finalName + ".",
+        )
+    }
+
+    /**
      * Whether the new file is genuinely good enough to delete the old one for.
      *
      * "The save reported success" is not enough. A provider can report a write
@@ -302,6 +419,54 @@ object TagJob {
         fun put(name: String, mime: String, bytes: ByteArray) {
             val doc = Saf.createFile(resolver, outputTree, parentId, name, mime) ?: return
             Saf.openOutput(resolver, doc.uri)?.use { it.write(bytes) }
+        }
+
+        put(
+            Sidecar.jsonName(base), "application/json",
+            Sidecar.json(tags, fileName).toByteArray(Charsets.UTF_8),
+        )
+        Sidecar.lrc(tags)?.let {
+            put(Sidecar.lrcName(base), "text/plain", it.toByteArray(Charsets.UTF_8))
+        }
+        if (settings.fetchArtwork) {
+            tags.artwork?.let {
+                put(
+                    Sidecar.artworkName(base, it),
+                    if (it.isPng) "image/png" else "image/jpeg",
+                    it.bytes,
+                )
+            }
+        }
+    }
+
+    /**
+     * The same files as [writeSidecars], but landing on the names already
+     * there.
+     *
+     * [Saf.createFile] steps a duplicate name aside, which is what a new file
+     * wants and the opposite of what this wants: rewriting the details for a
+     * file means replacing its .json, not leaving the stale one in place beside
+     * a "(2)" copy that nothing will ever read.
+     */
+    private fun replaceSidecars(
+        context: Context,
+        outputTree: Uri,
+        parentId: String,
+        fileName: String,
+        tags: VideoTags,
+        settings: Settings,
+    ) {
+        val resolver = context.contentResolver
+        val base = FilenameParser.stripExtension(fileName)
+
+        fun put(name: String, mime: String, bytes: ByteArray) {
+            val existing = Saf.findChild(resolver, outputTree, parentId, name)
+            val uri = if (existing != null) {
+                Saf.documentUri(outputTree, existing.documentId)
+            } else {
+                Saf.createFile(resolver, outputTree, parentId, name, mime)?.uri ?: return
+            }
+            Saf.openOutput(resolver, uri)?.use { it.write(bytes) }
         }
 
         put(

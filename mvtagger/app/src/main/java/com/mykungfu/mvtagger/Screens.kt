@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -303,14 +304,18 @@ private fun CollectionContent(
                 )
             }
             items(group.entries, key = { it.documentId }) { entry ->
-                CollectionRow(entry) {
-                    outputTree?.let { tree ->
-                        onOpen(
-                            Saf.documentUri(tree, entry.documentId),
-                            Saf.mimeForName(entry.name),
-                        )
-                    }
-                }
+                CollectionRow(
+                    entry,
+                    onPlay = {
+                        outputTree?.let { tree ->
+                            onOpen(
+                                Saf.documentUri(tree, entry.documentId),
+                                Saf.mimeForName(entry.name),
+                            )
+                        }
+                    },
+                    onEdit = { viewModel.openCollectionEntry(entry) },
+                )
             }
         }
     }
@@ -322,10 +327,15 @@ private fun plural(kind: MediaKind): String = when (kind) {
     MediaKind.TV_EPISODE -> "Series"
 }
 
+/**
+ * Tapping the row hands the file to a player; the pencil opens it to be
+ * corrected. Two things one tap apart, because both are wanted often and
+ * neither should need a menu.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CollectionRow(entry: Entry, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+private fun CollectionRow(entry: Entry, onPlay: () -> Unit, onEdit: () -> Unit) {
+    Card(onClick = onPlay, modifier = Modifier.fillMaxWidth()) {
         Row(
             Modifier.padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -348,6 +358,16 @@ private fun CollectionRow(entry: Entry, onClick: () -> Unit) {
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                if (entry.kind == MediaKind.MUSIC_VIDEO) {
+                    Text(
+                        entry.languageLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Default.Edit, contentDescription = "Correct the details")
             }
         }
     }
@@ -639,8 +659,24 @@ private fun DetailScreen(
 
             HorizontalDivider()
             detail.destination(state.settings)?.let {
-                Text("Will be saved as", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    if (detail.editingExisting) "Will be filed as" else "Will be saved as",
+                    style = MaterialTheme.typography.labelMedium,
+                )
                 Text(it, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
+            }
+
+            if (detail.editingExisting) {
+                Text(
+                    "The details live inside the file, so saving writes it again -- " +
+                            "about as long as copying it. The file you have now is kept " +
+                            "until the new one has been checked, and if anything goes " +
+                            "wrong it is left exactly as it is. Correcting the artist or " +
+                            "the title also renames and refiles it; correcting only the " +
+                            "language leaves it where it is.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             // Only ever shown for a container that cannot hold tags, which is
@@ -679,9 +715,16 @@ private fun DetailScreen(
                 ) {
                     Icon(Icons.Default.Check, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Save to output folder")
+                    Text(
+                        if (detail.editingExisting) "Save the corrections"
+                        else "Save to output folder"
+                    )
                 }
-                OutlinedButton(onClick = { viewModel.skip(detail.item) }) { Text("Skip") }
+                // Skipping is a to-do list idea. A file already in the
+                // collection is not waiting to be dealt with.
+                if (!detail.editingExisting) {
+                    OutlinedButton(onClick = { viewModel.skip(detail.item) }) { Text("Skip") }
+                }
             }
             Spacer(Modifier.height(24.dp))
         }
