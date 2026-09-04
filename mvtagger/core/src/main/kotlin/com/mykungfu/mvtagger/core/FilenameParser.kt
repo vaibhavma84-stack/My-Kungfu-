@@ -14,7 +14,17 @@ data class ParsedName(
     val album: String? = null,
     val year: String? = null,
     val trackNumber: Int? = null,
+    /** The best single query. Kept for callers that only want one. */
     val query: String = "",
+    /**
+     * Queries to try in order, best first.
+     *
+     * Indian film music needs this. "Kesariya" alone is ambiguous, "Kesariya
+     * Brahmastra" finds it at once, and which combination works depends on how
+     * the uploader happened to name the file -- so several are tried rather
+     * than betting everything on one guess.
+     */
+    val queries: List<String> = emptyList(),
     /** Leftover pipe-separated fields: singers, music director, film. */
     val extras: List<String> = emptyList(),
     val language: String? = null,
@@ -50,6 +60,15 @@ object FilenameParser {
         "hd", "fhd", "uhd", "hq", "x264", "x265", "h264", "h265", "hevc",
         "aac", "mp3", "m4a", "webm", "bluray", "brrip", "dvdrip", "web-dl",
         "60fps", "copyright free", "free download",
+        // Labels and channels, which are in the name of most Indian uploads and
+        // are never part of the song.
+        "t-series", "t series", "zee music company", "zee music", "sony music india",
+        "sony music", "tips official", "tips music", "saregama", "yrf", "eros now",
+        "shemaroo", "venus", "speed records", "white hill music", "geet mp3",
+        "times music", "aditya music", "lahari music", "think music",
+        "full audio", "audio jukebox", "jukebox", "teaser", "making of",
+        "out now", "latest hindi song", "new hindi song", "hindi song",
+        "latest song", "new song", "bollywood song",
     )
 
     /** A YouTube id as yt-dlp leaves it: exactly eleven of this alphabet. */
@@ -96,9 +115,18 @@ object FilenameParser {
 
         val (artist, title, album, extras) = split(work)
 
-        val query = listOfNotNull(artist, title).joinToString(" ")
-            .ifBlank { work }
-            .trim()
+        // Several attempts, best first, deduplicated. The film is worth as much
+        // as the singer for finding an Indian track, and the uploader decides
+        // which of the two is even in the name.
+        val queries = listOfNotNull(
+            listOfNotNull(artist, title).joinToString(" ").trim().ifBlank { null },
+            listOfNotNull(title, album).joinToString(" ").trim().ifBlank { null },
+            extras.firstOrNull()?.let { listOfNotNull(title, it).joinToString(" ").trim() },
+            title?.trim(),
+            work.trim(),
+        ).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(4)
+
+        val query = queries.firstOrNull() ?: work.trim()
 
         return ParsedName(
             artist = artist?.takeIf { it.isNotBlank() },
@@ -107,6 +135,7 @@ object FilenameParser {
             year = year,
             trackNumber = trackNumber,
             query = query,
+            queries = queries,
             extras = extras,
             language = Languages.fromScript(TextScript.dominant(work))
                 ?.takeIf { TextScript.hasNonLatin(work) },
@@ -126,16 +155,32 @@ object FilenameParser {
         if (text.contains('|')) {
             val parts = text.split('|').map { it.trim() }.filter { it.isNotEmpty() }
             if (parts.size >= 2) {
-                val title = parts[0]
-                val rest = parts.drop(1)
-                // "Song | Film | Singer | Composer" -- the field after the song
-                // is the film often enough to be a useful default, and it is
-                // shown to the user before anything is written.
+                // The first field is the song, often with the film attached by a
+                // dash: "Kesariya - Brahmastra". Those have to come apart --
+                // searching for the two glued together finds nothing at all.
+                val head = parts[0]
+                var song = head
+                var film: String? = null
+                for (sep in SEPARATORS) {
+                    val at = head.indexOf(sep)
+                    if (at > 0) {
+                        song = head.substring(0, at).trim()
+                        film = head.substring(at + sep.length).trim().ifBlank { null }
+                        break
+                    }
+                }
                 return Split(
-                    artist = rest.getOrNull(1),
-                    title = title,
-                    album = rest.getOrNull(0),
-                    extras = rest,
+                    // The fields after the song are the film, the cast, the
+                    // singers and the composer, in no reliable order -- the one
+                    // straight after the song is as often an actor as a singer.
+                    // Naming an actor as the artist poisons the search and gets
+                    // written to the file if the lookup then fails, so nothing
+                    // is claimed here. They are kept as extras, which the
+                    // scoring tries against every field.
+                    artist = null,
+                    title = song,
+                    album = film,
+                    extras = parts.drop(1),
                 )
             }
         }

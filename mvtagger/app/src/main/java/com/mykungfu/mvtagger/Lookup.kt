@@ -30,6 +30,12 @@ import com.mykungfu.mvtagger.core.Wikipedia
  */
 object Lookup {
 
+    /** Further attempts cost round trips for rapidly diminishing returns. */
+    private const val MAX_QUERY_ATTEMPTS = 3
+
+    /** A match this strong will not be improved on by searching again. */
+    private const val GOOD_ENOUGH_TO_STOP = 0.75
+
     data class MusicResult(
         val ranked: List<Matching.Scored>,
         /** Everything found, used by the artwork rule to reach album covers. */
@@ -49,27 +55,44 @@ object Lookup {
         preferredLanguage: String? = null,
         storefronts: List<String> = ITunes.STOREFRONTS,
     ): MusicResult {
-        val query = parsed.query.ifBlank { return MusicResult(emptyList(), emptyList()) }
-        val found = ArrayList<Candidate>()
+        val attempts = parsed.queries
+            .ifEmpty { listOfNotNull(parsed.query.takeIf { it.isNotBlank() }) }
+        if (attempts.isEmpty()) return MusicResult(emptyList(), emptyList())
 
-        for (store in storefronts) {
-            for (entity in listOf("musicVideo", "song")) {
-                Net.getTextOrNull(ITunes.searchUrl(query, entity, store, limit = 10))
-                    ?.let { found += ITunes.parse(it, store) }
+        val found = ArrayList<Candidate>()
+        var ranked: List<Matching.Scored> = emptyList()
+
+        // One query is not enough for Indian film music: whether the song, the
+        // film or the singer is in the filename depends entirely on who
+        // uploaded it. Each attempt costs a handful of round trips on a phone,
+        // so this stops the moment something clearly lands and caps the rest.
+        for ((index, query) in attempts.take(MAX_QUERY_ATTEMPTS).withIndex()) {
+            for (store in storefronts) {
+                for (entity in listOf("musicVideo", "song")) {
+                    Net.getTextOrNull(ITunes.searchUrl(query, entity, store, limit = 10))
+                        ?.let { found += ITunes.parse(it, store) }
+                }
             }
+
+            // MusicBrainz second: slower and thinner on film music, but the only
+            // source that states a release language.
+            val mbQuery = MusicBrainz.recordingQuery(
+                parsed.title, parsed.artist, query, parsed.album
+            )
+            Net.getTextOrNull(MusicBrainz.recordingSearchUrl(mbQuery, limit = 10))
+                ?.let { found += MusicBrainz.parseRecordings(it) }
+
+            ranked = Matching.rank(
+                found.distinctBy { it.source + ":" + it.id },
+                parsed, durationMs, preferredLanguage,
+            )
+            val best = ranked.firstOrNull()?.score ?: 0.0
+            if (best >= GOOD_ENOUGH_TO_STOP) break
+            if (index == attempts.lastIndex) break
         }
 
-        // MusicBrainz second: slower and thinner on film music, but the only
-        // source that states a release language.
-        val mbQuery = MusicBrainz.recordingQuery(parsed.title, parsed.artist, query)
-        Net.getTextOrNull(MusicBrainz.recordingSearchUrl(mbQuery, limit = 10))
-            ?.let { found += MusicBrainz.parseRecordings(it) }
-
         val deduped = found.distinctBy { it.source + ":" + it.id }
-        return MusicResult(
-            ranked = Matching.rank(deduped, parsed, durationMs, preferredLanguage),
-            all = deduped,
-        )
+        return MusicResult(ranked = ranked, all = deduped)
     }
 
     /** Films. iTunes has posters and plots for these and still needs no key. */

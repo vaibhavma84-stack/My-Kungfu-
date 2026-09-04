@@ -31,14 +31,62 @@ class FilenameParserTest {
     }
 
     @Test
-    fun `the hindi pipe convention puts the song first and the film second`() {
+    fun `the film convention separates the song from the film`() {
         val p = FilenameParser.parse(
             "Kesariya – Brahmastra | Ranbir Kapoor | Arijit Singh | Pritam.mp4"
         )
-        assertEquals("Kesariya – Brahmastra", p.title)
-        assertEquals("Ranbir Kapoor", p.album)
-        assertEquals("Arijit Singh", p.artist)
+        // The song and the film are joined by a dash inside the first field.
+        // Glued together they find nothing, which is what made Hindi tracks
+        // miss.
+        assertEquals("Kesariya", p.title)
+        assertEquals("Brahmastra", p.album)
+        assertTrue("the film should be searched for too, was " + p.queries,
+            p.queries.any { it.contains("Kesariya") && it.contains("Brahmastra") })
+    }
+
+    @Test
+    fun `an actor is never taken for the singer`() {
+        val p = FilenameParser.parse(
+            "Kesariya – Brahmastra | Ranbir Kapoor | Arijit Singh | Pritam.mp4"
+        )
+        // Ranbir Kapoor is the actor. Claiming him as the artist poisons the
+        // search and gets written to the file if the lookup then fails, so
+        // nothing is claimed at all -- the names stay as extras for scoring.
+        assertNull(p.artist)
+        assertTrue("Arijit Singh" in p.extras)
         assertTrue("Pritam" in p.extras)
+    }
+
+    @Test
+    fun `the film is tried even when it is a separate pipe field`() {
+        val p = FilenameParser.parse("Tum Hi Ho | Aashiqui 2 | Arijit Singh.mp4")
+        assertEquals("Tum Hi Ho", p.title)
+        assertTrue("should try the song with the film, was " + p.queries,
+            p.queries.any { it.contains("Tum Hi Ho") && it.contains("Aashiqui 2") })
+    }
+
+    @Test
+    fun `a long film credit still finds the song and the film`() {
+        val p = FilenameParser.parse(
+            "Chaleya - Jawan | Shah Rukh Khan | Nayanthara | Anirudh | Arijit Singh.mkv"
+        )
+        assertEquals("Chaleya", p.title)
+        assertEquals("Jawan", p.album)
+    }
+
+    @Test
+    fun `record labels and channels are not searched for`() {
+        val p = FilenameParser.parse("Kesariya Full Video | T-Series | 4K.mp4")
+        val all = p.queries.joinToString(" ").lowercase()
+        assertTrue("label leaked into the query: " + p.queries, "t-series" !in all)
+        assertTrue("resolution leaked into the query: " + p.queries, "4k" !in all)
+        assertTrue("Kesariya" in p.queries.joinToString(" "))
+    }
+
+    @Test
+    fun `western names still resolve to one good query`() {
+        val p = FilenameParser.parse("Adele - Hello (Official Music Video).mp4")
+        assertEquals("Adele Hello", p.queries.first())
     }
 
     @Test

@@ -224,12 +224,25 @@ object MusicBrainz {
     fun recordingSearchUrl(query: String, limit: Int = 12) =
         BASE + "/recording/?query=" + urlEncode(query) + "&fmt=json&limit=" + limit
 
-    /** A fielded query beats a bare one when the split is trustworthy. */
-    fun recordingQuery(title: String?, artist: String?, fallback: String): String {
+    /**
+     * A fielded query beats a bare one when the split is trustworthy.
+     *
+     * [album] carries the film for Indian tracks, and it narrows the search
+     * just as well as a singer does -- which matters, because the singer is
+     * usually not in the filename at all while the film almost always is.
+     */
+    fun recordingQuery(
+        title: String?,
+        artist: String?,
+        fallback: String,
+        album: String? = null,
+    ): String {
         val t = title?.trim().orEmpty()
         val a = artist?.trim().orEmpty()
+        val r = album?.trim().orEmpty()
         return when {
             t.isNotEmpty() && a.isNotEmpty() -> "recording:\"" + t + "\" AND artist:\"" + a + "\""
+            t.isNotEmpty() && r.isNotEmpty() -> "recording:\"" + t + "\" AND release:\"" + r + "\""
             t.isNotEmpty() -> "recording:\"" + t + "\""
             else -> fallback
         }

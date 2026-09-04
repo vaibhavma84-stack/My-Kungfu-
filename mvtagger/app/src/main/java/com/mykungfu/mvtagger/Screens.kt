@@ -435,6 +435,23 @@ private fun DetailScreen(
                 Text(it, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
             }
 
+            // Only ever shown for a container that cannot hold tags, which is
+            // exactly when the user needs to know what is about to happen.
+            detail.conversion?.let { verdict ->
+                val converting = detail.willConvert(state.settings)
+                Text(
+                    if (converting)
+                        "Will be repackaged as MP4 so the artwork and details go inside " +
+                                "the file. Nothing is re-encoded, so the picture is " +
+                                "unchanged. " + verdict.reason
+                    else
+                        "This container cannot hold tags inside it, so the details will " +
+                                "be written to files alongside. " + verdict.reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = { viewModel.save() },
@@ -629,6 +646,18 @@ private fun SettingsScreen(
             Toggle("Artist and album background", settings.fetchBackground) {
                 viewModel.applySettings(settings.copy(fetchBackground = it))
             }
+            Toggle(
+                "Repackage MKV and similar as MP4",
+                settings.convertToMp4,
+            ) { viewModel.applySettings(settings.copy(convertToMp4 = it)) }
+            Text(
+                "Only MP4 has a standard place for artwork and details. When a file " +
+                        "cannot hold them, its audio and video are moved into an MP4 " +
+                        "container untouched -- nothing is re-encoded, so no quality is " +
+                        "lost. VP9 or Opus (most .webm) cannot be moved and are left alone.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Toggle(
                 "Write .json/.lrc alongside files that cannot hold tags",
                 settings.writeSidecars,

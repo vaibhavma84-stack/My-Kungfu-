@@ -35,6 +35,12 @@ data class Settings(
     val autoApplyThreshold: Double = 0.80,
     /** Also write .json/.lrc/poster files for containers that cannot be tagged. */
     val writeSidecars: Boolean = true,
+    /**
+     * Repackage into MP4 when the container cannot hold tags, so the artwork
+     * and details end up inside the file instead of beside it. Nothing is
+     * re-encoded; see [Remux].
+     */
+    val convertToMp4: Boolean = true,
 ) {
     fun nameTemplateFor(kind: MediaKind): String = when (kind) {
         MediaKind.MUSIC_VIDEO -> musicNameTemplate
@@ -78,6 +84,7 @@ class Store(context: Context) {
         fetchBackground = prefs.getBoolean(KEY_BACKGROUND, true),
         autoApplyThreshold = prefs.getFloat(KEY_THRESHOLD, 0.80f).toDouble(),
         writeSidecars = prefs.getBoolean(KEY_SIDECARS, true),
+        convertToMp4 = prefs.getBoolean(KEY_CONVERT, true),
     )
 
     fun save(settings: Settings) {
@@ -97,6 +104,7 @@ class Store(context: Context) {
             putBoolean(KEY_BACKGROUND, settings.fetchBackground)
             putFloat(KEY_THRESHOLD, settings.autoApplyThreshold.toFloat())
             putBoolean(KEY_SIDECARS, settings.writeSidecars)
+            putBoolean(KEY_CONVERT, settings.convertToMp4)
         }.apply()
     }
 
@@ -137,5 +145,6 @@ class Store(context: Context) {
         const val KEY_BACKGROUND = "fetchBackground"
         const val KEY_THRESHOLD = "autoApplyThreshold"
         const val KEY_SIDECARS = "writeSidecars"
+        const val KEY_CONVERT = "convertToMp4"
     }
 }

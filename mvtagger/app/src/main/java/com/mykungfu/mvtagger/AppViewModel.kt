@@ -13,7 +13,7 @@ import com.mykungfu.mvtagger.core.Matching
 import com.mykungfu.mvtagger.core.MediaClassifier
 import com.mykungfu.mvtagger.core.MediaKind
 import com.mykungfu.mvtagger.core.Organiser
-import com.mykungfu.mvtagger.core.RenameTemplate
+import com.mykungfu.mvtagger.core.Sidecar
 import com.mykungfu.mvtagger.core.VideoTags
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,13 +50,19 @@ data class Detail(
     val durationMs: Int? = null,
     val loading: String? = null,
     val chosen: Candidate? = null,
+    /** Whether this file's streams can move into an MP4, and why not if they cannot. */
+    val conversion: Remux.Verdict? = null,
 ) {
+    /** True when saving will repackage this file into MP4 on the way out. */
+    fun willConvert(settings: Settings): Boolean =
+        !Sidecar.canEmbed(item.name) && settings.convertToMp4 && conversion?.possible == true
+
     /** Where this would be written, shown before anything is committed. */
     fun destination(settings: Settings): String? = Organiser.previewPath(
         settings.folderTemplateFor(tags.mediaKind),
         settings.nameTemplateFor(tags.mediaKind),
         tags,
-        item.extension,
+        if (willConvert(settings)) "mp4" else item.extension,
     )
 }
 
@@ -184,15 +190,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             detail = Detail(item, VideoTags(mediaKind = item.kind), loading = "Reading the file…")
         )
         val loaded = withContext(Dispatchers.IO) {
-            val existing = TagJob.readExisting(getApplication<Application>(), item.uri, item.name)
-            val duration = TagJob.durationMs(getApplication<Application>(), item.uri)
+            val app = getApplication<Application>()
+            val existing = TagJob.readExisting(app, item.uri, item.name)
+            val duration = TagJob.durationMs(app, item.uri)
             // Start from what the file already says, topped up with what the
             // filename suggests, so nothing is blank before a lookup runs.
             val seeded = seedFromName(item, existing)
-            seeded to duration
+            // Worked out now rather than at save time, so the screen can say up
+            // front whether the tags will end up inside the file.
+            val verdict = if (Sidecar.canEmbed(item.name)) null else Remux.inspect(app, item.uri)
+            Triple(seeded, duration, verdict)
         }
         _state.value = _state.value.copy(
-            detail = Detail(item, loaded.first, durationMs = loaded.second)
+            detail = Detail(
+                item, loaded.first,
+                durationMs = loaded.second,
+                conversion = loaded.third,
+            )
         )
     }
 

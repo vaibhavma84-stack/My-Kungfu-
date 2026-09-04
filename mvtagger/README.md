@@ -38,16 +38,32 @@ the output folder, so a wrong match costs you a delete and nothing else.
 
 | | Listed and renamed | Tags written inside the file |
 |---|---|---|
-| `.mp4`, `.m4v`, `.mov` | yes | **yes** |
-| `.mkv`, `.webm`, `.avi`, `.wmv`, `.flv`, `.ts`, `.mpg`, `.3gp`, `.ogv`, … | yes | no — details are written to `.json`, `.lrc` and a poster file alongside |
+| `.mp4`, `.m4v`, `.mov` | yes | **yes**, directly |
+| `.mkv`, `.ts`, `.avi`, `.flv`, `.3gp` carrying H.264/H.265 video and AAC audio | yes | **yes**, by repackaging into MP4 first |
+| `.webm` and anything carrying VP9, AV1, Opus, Vorbis, AC-3 or DTS | yes | no — details written to `.json`, `.lrc` and a poster file alongside |
 
-Only the MP4 family has a standard place to put this metadata, and it is the
-format Apple devices read, so that is the one the app writes into. A fragmented
-MP4 (one built for streaming, with a `moof` box) is copied and renamed but
-cannot be tagged; the app says so rather than pretending.
+Only the MP4 family has a standard place for this metadata, and it is what
+Apple devices read, so that is what the app writes into.
 
-**It does not convert or re-encode anything.** A WebM stays a WebM; a 1080p
-file stays 1080p. See "What it deliberately does not do" below.
+**Repackaging is not re-encoding.** When a file cannot hold tags, its existing
+audio and video streams are moved into an MP4 container exactly as they are --
+the same operation as `ffmpeg -c copy`. Not one pixel is decoded or
+recompressed, so there is no quality loss, and it runs at disk speed. A 4K file
+stays 4K. Subtitle tracks are dropped, because Android's muxer cannot write
+them into MP4.
+
+What cannot be repackaged is a codec MP4 has no slot for. VP9 or AV1 video and
+Opus or Vorbis audio -- which is what a `.webm` from YouTube usually holds --
+would have to be decoded and re-encoded to get into an MP4, which does cost
+quality and time. The app says which codec stopped it rather than failing
+vaguely. For those, re-downloading as MP4 is faster and lossless:
+
+```
+yt-dlp -f "bv*[ext=mp4]+ba[ext=m4a]" <url>
+```
+
+A fragmented MP4 (built for streaming, with a `moof` box) is copied and renamed
+but cannot be tagged; the app says so rather than pretending.
 
 ## Setting it up
 
@@ -94,12 +110,15 @@ failure deletes the partial rather than leaving something that looks finished.
 
 - **No player.** Your phone already has good ones; the app hands the file to
   whichever you pick.
-- **No format conversion.** Turning a 4K WebM into a 4K MP4 without re-encoding
-  needs a muxer that can put VP9 and Opus into MP4, which Android's own
-  `MediaMuxer` cannot do. The only real route is bundling FFmpeg, which is tens
-  of megabytes and a project of its own.
-- **No upscaling.** Nothing can add detail to a 1080p file that was never
-  recorded. Stretching it to 4K makes a bigger file, not a better picture.
+- **No re-encoding.** Repackaging into MP4 is lossless and supported; actually
+  transcoding one codec into another is not. A VP9/Opus `.webm` cannot become an
+  MP4 without it, and doing it on a phone would take far longer than
+  re-downloading the file and would look worse. The only route to it is bundling
+  FFmpeg, which is tens of megabytes and a project of its own.
+- **No upscaling.** This one is not a matter of effort. A 1080p file does not
+  contain 4K detail; nothing can recover what was never recorded. Scaling it up
+  produces a file four times the size that looks the same at best. Televisions
+  and iPads already scale on playback, which is the right place for it.
 
 ## Changing it
 

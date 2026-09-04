@@ -17,6 +17,15 @@ import com.mykungfu.mvtagger.core.VideoTags
  * into the output folder under the organised path, and the source folder is
  * left exactly as it was -- which means a wrong match costs nothing but a
  * delete, and there is no half-rewritten video to lose.
+ *
+ * There are three ways a file can come out, in order of preference:
+ *
+ * 1. **MP4 family** -- tags are written straight into it.
+ * 2. **Something else whose streams MP4 can hold** -- the audio and video are
+ *    moved into an MP4 container untouched (see [Remux]) and tagged. Nothing is
+ *    re-encoded, so no quality is lost.
+ * 3. **Anything left** -- copied and renamed, with the details written to files
+ *    alongside, and the app says plainly that is what happened.
  */
 object TagJob {
 
@@ -26,6 +35,8 @@ object TagJob {
         val path: String? = null,
         /** True when the tags went inside the file rather than into sidecars. */
         val embedded: Boolean = false,
+        /** True when the file was repackaged into MP4 on the way. */
+        val converted: Boolean = false,
         val message: String,
     )
 
@@ -40,34 +51,51 @@ object TagJob {
         val resolver = context.contentResolver
         val outputTree = settings.outputUri
             ?: return Outcome(false, message = "No output folder chosen yet.")
+        val sourceUri = Saf.documentUri(sourceTree, documentId)
 
-        val extension = FilenameParser.extensionOf(sourceName)
+        // A container that cannot hold tags is worth repackaging, because the
+        // whole point is that the details travel inside the file.
+        val embedsDirectly = Sidecar.canEmbed(sourceName)
+        val conversion =
+            if (!embedsDirectly && settings.convertToMp4) Remux.inspect(context, sourceUri)
+            else null
+        val converting = conversion?.possible == true
+
+        val extension = if (converting) "mp4" else FilenameParser.extensionOf(sourceName)
         val fileName = RenameTemplate.fileName(
             settings.nameTemplateFor(tags.mediaKind), tags, extension
-        ) ?: sourceName
+        ) ?: if (converting) FilenameParser.stripExtension(sourceName) + ".mp4" else sourceName
         val folder = Organiser.folder(settings.folderTemplateFor(tags.mediaKind), tags)
 
         val parentId = Saf.ensurePath(resolver, outputTree, folder)
-            ?: return Outcome(false, message = "Could not create the folder " + folder.joinToString("/"))
+            ?: return Outcome(
+                false,
+                message = "Could not create the folder " + folder.joinToString("/"),
+            )
 
         val created = Saf.createFile(resolver, outputTree, parentId, fileName, mimeFor(extension))
             ?: return Outcome(false, message = "Could not create $fileName in the output folder")
-
         val displayPath = (folder + created.name).joinToString("/")
-        val sourceUri = Saf.documentUri(sourceTree, documentId)
 
         val embedded = try {
-            if (Sidecar.canEmbed(sourceName)) {
-                writeTagged(context, sourceUri, created.uri, tags)
-                true
-            } else {
-                copyOnly(context, sourceUri, created.uri)
-                false
+            when {
+                embedsDirectly -> {
+                    writeTagged(context, sourceUri, created.uri, tags)
+                    true
+                }
+                converting -> {
+                    convertThenTag(context, sourceUri, created.uri, outputTree, parentId, created.name, tags)
+                    true
+                }
+                else -> {
+                    copyOnly(context, sourceUri, created.uri)
+                    false
+                }
             }
         } catch (e: Mp4Metadata.UnsupportedContainer) {
-            // The container looked taggable but was not -- a fragmented MP4, or
-            // one whose moov is unusable. Keep the copy, fall back to sidecars,
-            // and say so rather than pretending it worked.
+            // It looked taggable and was not -- a fragmented MP4, or one whose
+            // moov is unusable. Keep the copy, fall back to sidecars, and say
+            // so rather than pretending it worked.
             return try {
                 copyOnly(context, sourceUri, created.uri)
                 writeSidecars(context, outputTree, parentId, created.name, tags, settings)
@@ -92,13 +120,60 @@ object TagJob {
             }
         }
 
-        val note = if (embedded) {
-            "Tagged and saved to " + displayPath
-        } else {
-            "Saved to " + displayPath + ". " + extension.uppercase() +
-                    " cannot hold tags inside it, so the details were written alongside."
+        val message = when {
+            converting ->
+                "Converted to MP4 and tagged, saved to " + displayPath +
+                        ". Nothing was re-encoded, so the picture is unchanged."
+            embedded -> "Tagged and saved to " + displayPath
+            else -> {
+                val why = conversion?.reason?.takeIf { !it.startsWith("Could not read") }
+                "Saved to " + displayPath + ". " +
+                        FilenameParser.extensionOf(sourceName).uppercase() +
+                        " cannot hold tags inside it, so the details were written " +
+                        "alongside." + (why?.let { " " + it } ?: "")
+            }
         }
-        return Outcome(ok = true, path = displayPath, embedded = embedded, message = note)
+        return Outcome(
+            ok = true, path = displayPath, embedded = embedded,
+            converted = converting, message = message,
+        )
+    }
+
+    /**
+     * Repackages into MP4, then tags the result.
+     *
+     * Two steps rather than one because MediaMuxer writes the file it is given
+     * and the tagger rewrites a file it reads, so the conversion lands in a
+     * temporary document first. That temporary sits in the output folder rather
+     * than the cache: an episode can be several gigabytes and the cache is not
+     * the place for it.
+     *
+     * A side benefit of the second pass: MediaMuxer leaves `moov` at the end of
+     * the file, and the tagger moves it to the front, so what comes out is
+     * fast-start and begins playing without reading to the end first.
+     */
+    private fun convertThenTag(
+        context: Context,
+        source: Uri,
+        target: Uri,
+        outputTree: Uri,
+        parentId: String,
+        finalName: String,
+        tags: VideoTags,
+    ) {
+        val resolver = context.contentResolver
+        val temporary = Saf.createFile(
+            resolver, outputTree, parentId,
+            FilenameParser.stripExtension(finalName) + ".converting.tmp",
+            "video/mp4",
+        ) ?: throw java.io.IOException("could not create a temporary file to convert into")
+
+        try {
+            Remux.toMp4(context, source, temporary.uri)
+            writeTagged(context, temporary.uri, target, tags)
+        } finally {
+            Saf.delete(resolver, temporary.uri)
+        }
     }
 
     private fun writeTagged(context: Context, source: Uri, target: Uri, tags: VideoTags) {
