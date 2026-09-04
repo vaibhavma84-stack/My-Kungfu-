@@ -12,8 +12,12 @@ Built on [yt-dlp](https://github.com/yt-dlp/yt-dlp), which handles roughly
 There is no Play Store listing — Google does not allow downloader apps — so the
 APK is installed directly.
 
-1. Download `app-debug.apk` from the latest CI build.
-2. Tap it on the phone and allow installing from that source when Android asks.
+1. Open the repository's **Releases** page on the phone and tap `Grabber.apk`.
+2. Allow installing from that source when Android asks.
+
+The release is rebuilt and replaced on every push to `main`, so that address
+always holds the current build. Actions artifacts work too, but they arrive
+zipped and need a signed-in browser, which the GitHub mobile app cannot do.
 
 Every build is signed with the same key (`grabber-debug.keystore`), so a new APK
 installs over the old one as an upgrade and keeps your history. That key is a
