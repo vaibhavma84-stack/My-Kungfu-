@@ -295,7 +295,7 @@ private fun CollectionContent(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         for (group in groups) {
-            item(key = "header:" + group.label) {
+            item(key = "group:" + group.label) {
                 Text(
                     group.label + "  ·  " + group.entries.size,
                     Modifier.padding(top = 12.dp, bottom = 4.dp),
@@ -303,19 +303,34 @@ private fun CollectionContent(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            items(group.entries, key = { it.documentId }) { entry ->
-                CollectionRow(
-                    entry,
-                    onPlay = {
-                        outputTree?.let { tree ->
-                            onOpen(
-                                Saf.documentUri(tree, entry.documentId),
-                                Saf.mimeForName(entry.name),
-                            )
-                        }
-                    },
-                    onEdit = { viewModel.openCollectionEntry(entry) },
-                )
+            for (section in group.sections) {
+                section.label?.let { label ->
+                    item(key = "section:" + group.label + "/" + label) {
+                        Text(
+                            label,
+                            Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                items(section.entries, key = { it.documentId }) { entry ->
+                    CollectionRow(
+                        entry,
+                        subheading = entry.subheadingExcluding(
+                            listOf(group.label, section.label)
+                        ),
+                        onPlay = {
+                            outputTree?.let { tree ->
+                                onOpen(
+                                    Saf.documentUri(tree, entry.documentId),
+                                    Saf.mimeForName(entry.name),
+                                )
+                            }
+                        },
+                        onEdit = { viewModel.openCollectionEntry(entry) },
+                    )
+                }
             }
         }
     }
@@ -334,7 +349,12 @@ private fun plural(kind: MediaKind): String = when (kind) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CollectionRow(entry: Entry, onPlay: () -> Unit, onEdit: () -> Unit) {
+private fun CollectionRow(
+    entry: Entry,
+    subheading: String?,
+    onPlay: () -> Unit,
+    onEdit: () -> Unit,
+) {
     Card(onClick = onPlay, modifier = Modifier.fillMaxWidth()) {
         Row(
             Modifier.padding(10.dp),
@@ -349,7 +369,7 @@ private fun CollectionRow(entry: Entry, onPlay: () -> Unit, onEdit: () -> Unit) 
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                entry.subheading?.let {
+                subheading?.let {
                     Text(
                         it,
                         style = MaterialTheme.typography.bodySmall,

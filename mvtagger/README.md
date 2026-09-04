@@ -14,8 +14,10 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
 
 - **Two tabs.** *To do* is the folder you are working through. *Collection* is
   what you have finished: everything in the output folder, with its cover,
-  grouped the way you would look for it -- music videos by language, episodes
-  by series, films by year. It reads the tags inside each file rather than the
+  grouped the way you would look for it: songs by artist and then by album,
+  Hindi songs by film and then by singer -- because for a film song the film
+  is what you look for -- episodes by series, films by year. The language
+  chips filter what you are looking at. It reads the tags inside each file rather than the
   filenames, which is the point of having written them there. Tapping a row
   hands the file to whatever you play video with; the pencil beside it opens
   the file to be corrected.

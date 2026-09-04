@@ -62,6 +62,26 @@ data class Entry(
                 .takeIf { it.isNotBlank() }
         }
 
+    /**
+     * The same line, minus anything the headings above the row already say.
+     *
+     * A song sits under its artist and then its album, or under its film and
+     * then its singer, so repeating both on every row is noise -- but which of
+     * the two is above depends on the language and on whether the group
+     * collapsed to a single section, so the row cannot assume either. Passing
+     * the headings in lets it show whichever half is missing, and nothing when
+     * both are already there.
+     */
+    fun subheadingExcluding(shown: Collection<String?>): String? {
+        if (kind != MediaKind.MUSIC_VIDEO) return subheading
+        val already = shown.filterNotNull().map { it.trim().lowercase() }.toSet()
+        return listOfNotNull(artist, album)
+            .map { it.trim() }
+            .filter { it.isNotBlank() && it.lowercase() !in already }
+            .joinToString(" · ")
+            .takeIf { it.isNotBlank() }
+    }
+
     /** What the music-video list is grouped by. */
     val languageLabel: String
         get() = language?.let { Languages.displayName(it) } ?: "Not known"
@@ -298,12 +318,50 @@ object Catalogue {
 
     // --- grouping -------------------------------------------------------------
 
-    /** A heading and the files under it. */
-    data class Group(val label: String, val entries: List<Entry>)
+    /** A run of files under a heading of their own, inside a [Group]. */
+    data class Section(val label: String?, val entries: List<Entry>)
 
     /**
-     * The entries of one kind, grouped the way that kind is looked for:
-     * music videos by language, episodes by series, films by year.
+     * A heading and the files under it, in one or more sections.
+     *
+     * Most kinds want a flat list under each heading and get a single unlabelled
+     * section. Music videos want two levels -- artist, then the film or album
+     * within that artist -- which is what sections are for.
+     */
+    data class Group(val label: String, val sections: List<Section>) {
+        val entries: List<Entry> get() = sections.flatMap { it.entries }
+    }
+
+    /**
+     * A group with no second level.
+     *
+     * Not a secondary constructor: `List<Section>` and `List<Entry>` both erase
+     * to `List` on the JVM, so the two would collide.
+     */
+    private fun flat(label: String, entries: List<Entry>) =
+        Group(label, listOf(Section(null, entries)))
+
+    /** Shown when a song does not say what it is from. */
+    private const val NO_ALBUM = "Single"
+    private const val NO_ARTIST = "Artist not known"
+    private const val NO_FILM = "Film not known"
+
+    /**
+     * Languages whose popular music is film music.
+     *
+     * For these the album is the film, and the film is what someone looks for:
+     * the songs of one picture belong together, whoever sang each of them. So
+     * the two levels go the other way round -- film first, singers within it.
+     * Add a language code here to treat it the same way.
+     */
+    private val FILM_SONG_LANGUAGES = setOf("hi")
+
+    /**
+     * The entries of one kind, grouped the way that kind is looked for.
+     *
+     * Music videos have two levels. Normally that is the artist and then the
+     * album; for a film-song language it is the film and then the singers, per
+     * [FILM_SONG_LANGUAGES]. Episodes go by series, films by year.
      */
     fun group(entries: List<Entry>, kind: MediaKind, language: String? = null): List<Group> {
         val of = entries.filter { it.kind == kind }
@@ -311,20 +369,70 @@ object Catalogue {
             MediaKind.MUSIC_VIDEO -> {
                 val wanted = if (language == null) of
                 else of.filter { it.language == language }
-                wanted.groupBy { it.languageLabel }
-                    .toSortedMap(compareBy { it })
-                    .map { (label, items) -> Group(label, items.sortedBy { sortKey(it) }) }
+                // Kept as two runs rather than one alphabet: a film heading and
+                // an artist heading look alike, and interleaving them would
+                // leave no way to tell which a heading was.
+                val (filmSongs, rest) = wanted.partition { it.language in FILM_SONG_LANGUAGES }
+                filmGroups(filmSongs) + artistGroups(rest)
             }
             MediaKind.TV_EPISODE -> of.groupBy { it.showName ?: "Unknown series" }
                 .toSortedMap(compareBy { it.lowercase() })
                 .map { (show, items) ->
-                    Group(show, items.sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 })))
+                    flat(show, items.sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 })))
                 }
             MediaKind.MOVIE -> of.groupBy { it.year ?: "Year not known" }
                 .toSortedMap(compareByDescending { it })
-                .map { (year, items) -> Group(year, items.sortedBy { sortKey(it) }) }
+                .map { (year, items) -> flat(year, items.sortedBy { sortKey(it) }) }
         }
     }
+
+    /** Artist, then the album within them. */
+    private fun artistGroups(songs: List<Entry>): List<Group> =
+        songs.groupBy { it.artist.orBlank(NO_ARTIST) }
+            .toList()
+            .sortedBy { (artist, _) -> Transliterate.fold(artist) }
+            .map { (artist, theirs) ->
+                Group(artist, sectionsBy(theirs, NO_ALBUM) { it.album })
+            }
+
+    /** Film, then the singers within it. */
+    private fun filmGroups(songs: List<Entry>): List<Group> =
+        songs.groupBy { it.album.orBlank(NO_FILM) }
+            .toList()
+            .sortedBy { (film, _) -> Transliterate.fold(film) }
+            .map { (film, from) ->
+                Group(film, sectionsBy(from, NO_ARTIST) { it.artist })
+            }
+
+    /**
+     * The second level of a music-video group.
+     *
+     * Entries naming nothing are gathered into one section at the end rather
+     * than each becoming a section of one, and a group that ends up with a
+     * single section loses the sub-heading entirely -- one heading directly
+     * above another says nothing the rows do not already say.
+     */
+    private fun sectionsBy(
+        songs: List<Entry>,
+        noneLabel: String,
+        field: (Entry) -> String?,
+    ): List<Section> {
+        val by = songs.groupBy { field(it)?.trim()?.ifBlank { null } }
+        val named = by.filterKeys { it != null }
+            .toList()
+            .sortedBy { (label, _) -> Transliterate.fold(label!!) }
+            .map { (label, items) -> Section(label, items.sortedBy { sortKey(it) }) }
+        val loose = by[null]?.let {
+            listOf(Section(noneLabel, it.sortedBy { song -> sortKey(song) }))
+        } ?: emptyList()
+
+        val sections = named + loose
+        return if (sections.size == 1) listOf(Section(null, sections.first().entries))
+        else sections
+    }
+
+    private fun String?.orBlank(fallback: String): String =
+        this?.trim()?.ifBlank { null } ?: fallback
 
     /** Languages present among the music videos, most files first. */
     fun languagesPresent(entries: List<Entry>): List<Pair<String?, Int>> =
