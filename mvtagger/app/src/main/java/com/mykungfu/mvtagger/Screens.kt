@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,7 +24,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -79,8 +85,11 @@ import com.mykungfu.mvtagger.core.Artwork
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.mykungfu.mvtagger.core.Languages
+import com.mykungfu.mvtagger.core.FilenameParser
 import com.mykungfu.mvtagger.core.Matching
+import com.mykungfu.mvtagger.core.MediaClassifier
 import com.mykungfu.mvtagger.core.MediaKind
+import com.mykungfu.mvtagger.core.SearchReport
 import com.mykungfu.mvtagger.core.RenameTemplate
 import com.mykungfu.mvtagger.core.VideoTags
 
@@ -146,6 +155,20 @@ private fun MainScreen(
             TopAppBar(
                 title = { Text("MV Tagger") },
                 actions = {
+                    // Named rather than drawn: the core icon set has a list
+                    // icon and nothing that reads as a grid, and a wrong icon
+                    // is worse than a word.
+                    if (state.tab == MainTab.COLLECTION) {
+                        TextButton(onClick = {
+                            viewModel.applySettings(
+                                state.settings.copy(
+                                    collectionAsGrid = !state.settings.collectionAsGrid
+                                )
+                            )
+                        }) {
+                            Text(if (state.settings.collectionAsGrid) "List" else "Covers")
+                        }
+                    }
                     IconButton(onClick = {
                         if (state.tab == MainTab.TO_DO) viewModel.rescan()
                         else viewModel.scanCollection()
@@ -290,6 +313,87 @@ private fun CollectionContent(
         return
     }
 
+    if (state.settings.collectionAsGrid) {
+        CollectionGrid(groups, state.collectionKind, outputTree, viewModel, onOpen)
+    } else {
+        CollectionList(groups, outputTree, viewModel, onOpen)
+    }
+}
+
+/**
+ * The collection as a wall of covers.
+ *
+ * Browsing a music library by reading its filenames is the wrong way round --
+ * the cover is what you recognise, and it is already inside every file the app
+ * has written. Headings still divide the wall, spanning its full width.
+ */
+@Composable
+private fun CollectionGrid(
+    groups: List<Catalogue.Group>,
+    kind: MediaKind,
+    outputTree: Uri?,
+    viewModel: AppViewModel,
+    onOpen: (Uri, String) -> Unit,
+) {
+    // Album art is square and a film or series poster is tall. Only one kind is
+    // ever on screen, so the whole wall keeps a single shape.
+    val aspect = if (kind == MediaKind.MUSIC_VIDEO) 1f else 2f / 3f
+
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(112.dp),
+        contentPadding = PaddingValues(12.dp, 0.dp, 12.dp, 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        for (group in groups) {
+            item(key = "group:" + group.label, span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    group.label + "  ·  " + group.entries.size,
+                    Modifier.padding(top = 12.dp),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            for (section in group.sections) {
+                section.label?.let { label ->
+                    item(
+                        key = "section:" + group.label + "/" + label,
+                        span = { GridItemSpan(maxLineSpan) },
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                items(section.entries, key = { it.documentId }) { entry ->
+                    CollectionTile(
+                        entry,
+                        aspect = aspect,
+                        onPlay = {
+                            outputTree?.let { tree ->
+                                onOpen(
+                                    Saf.documentUri(tree, entry.documentId),
+                                    Saf.mimeForName(entry.name),
+                                )
+                            }
+                        },
+                        onEdit = { viewModel.openCollectionEntry(entry) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CollectionList(
+    groups: List<Catalogue.Group>,
+    outputTree: Uri?,
+    viewModel: AppViewModel,
+    onOpen: (Uri, String) -> Unit,
+) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 24.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -332,6 +436,62 @@ private fun CollectionContent(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * One cover on the wall, with what it is underneath.
+ *
+ * Tapping it plays it; the pencil in the corner opens it to be corrected. The
+ * pencil sits on a disc of its own because it has to stay legible over a cover
+ * that could be any colour.
+ */
+@Composable
+private fun CollectionTile(
+    entry: Entry,
+    aspect: Float,
+    onPlay: () -> Unit,
+    onEdit: () -> Unit,
+) {
+    Column(Modifier.clickable(onClick = onPlay)) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(aspect).clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            CoverImage(entry, Modifier.fillMaxSize(), MaterialTheme.typography.headlineSmall)
+            Box(
+                Modifier.align(Alignment.TopEnd).padding(4.dp).clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+            ) {
+                IconButton(onClick = onEdit, modifier = Modifier.size(30.dp)) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Correct the details",
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            entry.heading,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        // The artist under the cover, which is what someone scanning a wall of
+        // them is actually reading.
+        val under = if (entry.kind == MediaKind.MUSIC_VIDEO) entry.artist else entry.subheading
+        under?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -398,10 +558,14 @@ private fun CollectionRow(
  *
  * Decoding even a small image while the list is scrolling is enough to make it
  * stutter, so this reads the cached thumbnail on a background thread and shows
- * a placeholder until it arrives.
+ * the first letter until it arrives -- or for good, if the file has no cover.
  */
 @Composable
-private fun Thumbnail(entry: Entry) {
+private fun CoverImage(
+    entry: Entry,
+    modifier: Modifier = Modifier,
+    placeholderStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.titleMedium,
+) {
     val context = LocalContext.current
     val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
         initialValue = null,
@@ -412,26 +576,32 @@ private fun Thumbnail(entry: Entry) {
         }
     }
 
+    val bitmap = image
+    if (bitmap != null) {
+        Image(
+            bitmap,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = modifier,
+        )
+    } else {
+        Text(
+            entry.heading.take(1).uppercase(),
+            style = placeholderStyle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** The small square the list rows use. */
+@Composable
+private fun Thumbnail(entry: Entry) {
     Box(
         Modifier.size(52.dp).clip(RoundedCornerShape(6.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
-        val bitmap = image
-        if (bitmap != null) {
-            Image(
-                bitmap,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Text(
-                entry.heading.take(1).uppercase(),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        CoverImage(entry, Modifier.fillMaxSize())
     }
 }
 
@@ -628,8 +798,11 @@ private fun DetailScreen(
                         viewModel.choose(scored)
                     }
                 }
-                HorizontalDivider()
             }
+
+            if (detail.searched) SearchReportButton(detail, state.settings)
+
+            if (detail.candidates.isNotEmpty()) HorizontalDivider()
 
             Text("Details", style = MaterialTheme.typography.titleMedium)
             Field("Song / episode title", tags.title) { viewModel.editTags(tags.copy(title = it)) }
@@ -748,6 +921,68 @@ private fun DetailScreen(
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+/**
+ * Puts everything the search saw on the clipboard.
+ *
+ * A song that will not match has four possible causes -- the name was read
+ * wrongly, the source had nothing, the right answer scored too low, or it was
+ * held back by the threshold -- and they need completely different fixes. From
+ * outside the phone they are indistinguishable, and the searches cannot be run
+ * from where this app is written: iTunes and MusicBrainz are unreachable from
+ * there. So rather than guessing at the cause, this hands over what actually
+ * came back.
+ *
+ * It goes to the clipboard and nowhere else. Where it goes after that is the
+ * decision of the person who pressed the button.
+ */
+@Composable
+private fun SearchReportButton(detail: Detail, settings: Settings) {
+    val context = LocalContext.current
+    val report = remember(detail.candidates, detail.alternatives, detail.item.name) {
+        val kind = detail.tags.mediaKind
+        val readFrom = if (kind == MediaKind.MUSIC_VIDEO) {
+            SearchReport.readFrom(FilenameParser.parse(detail.item.name))
+        } else {
+            SearchReport.readFrom(MediaClassifier.classify(detail.item.name))
+        }
+        val queries = if (kind == MediaKind.MUSIC_VIDEO) {
+            FilenameParser.parse(detail.item.name).queries
+        } else {
+            listOf(MediaClassifier.classify(detail.item.name).query)
+        }
+        SearchReport.of(
+            fileName = detail.item.name,
+            kind = kind,
+            readFromName = readFrom,
+            queries = queries,
+            durationMs = detail.durationMs,
+            preferredLanguage = settings.preferredLanguage,
+            ranked = detail.candidates,
+            all = detail.alternatives,
+            threshold = settings.autoApplyThreshold,
+        )
+    }
+
+    OutlinedButton(
+        onClick = {
+            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                    as android.content.ClipboardManager
+            clipboard.setPrimaryClip(
+                android.content.ClipData.newPlainText("MV Tagger search report", report)
+            )
+            android.widget.Toast.makeText(
+                context, "Search report copied", android.widget.Toast.LENGTH_SHORT
+            ).show()
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            if (detail.candidates.isEmpty()) "Copy why nothing was found"
+            else "Copy the search report"
+        )
     }
 }
 

@@ -20,17 +20,25 @@ import java.io.File
  */
 object ArtCache {
 
-    /** Comfortably sharp for a list thumbnail without being a picture viewer. */
-    private const val THUMBNAIL_PX = 192
-    private const val QUALITY = 80
+    /**
+     * Big enough for a grid tile on a dense screen.
+     *
+     * The collection is browsed as a wall of covers, three or four across, so a
+     * tile is around 120dp -- 360 real pixels at 3x. Thumbnails cut for the old
+     * list were 192px and look soft blown up to that, which is why the cache
+     * directory carries the size in its name: raising this retires the old
+     * files instead of leaving them to be shown at the wrong size.
+     */
+    private const val THUMBNAIL_PX = 360
+    private const val QUALITY = 85
 
-    /** Enough for a screenful and a bit either side. */
-    private val memory = object : LruCache<String, Bitmap>(6 * 1024 * 1024) {
+    /** Enough for a screenful of tiles and a bit either side. */
+    private val memory = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
 
     private fun directory(context: Context): File =
-        File(context.cacheDir, "artwork").also { it.mkdirs() }
+        File(context.cacheDir, "artwork-" + THUMBNAIL_PX).also { it.mkdirs() }
 
     /** Document ids contain slashes and colons, so they are not filenames. */
     private fun fileFor(context: Context, documentId: String): File =

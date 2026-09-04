@@ -11,6 +11,7 @@ import com.mykungfu.mvtagger.core.CreditNames
 import com.mykungfu.mvtagger.core.FilmTitle
 import com.mykungfu.mvtagger.core.FilenameParser
 import com.mykungfu.mvtagger.core.Languages
+import com.mykungfu.mvtagger.core.LyricsLanguage
 import com.mykungfu.mvtagger.core.Matching
 import com.mykungfu.mvtagger.core.MediaClassifier
 import com.mykungfu.mvtagger.core.MediaKind
@@ -82,6 +83,14 @@ data class Detail(
      * letting go of the old.
      */
     val editingExisting: Boolean = false,
+    /**
+     * Whether a lookup has been run for this file.
+     *
+     * Not the same as having candidates: a search that came back with nothing
+     * is the most useful one to be able to report, and it leaves the list
+     * exactly as empty as a search never run.
+     */
+    val searched: Boolean = false,
 ) {
     /** True when saving will repackage this file into MP4 on the way out. */
     fun willConvert(settings: Settings): Boolean =
@@ -322,7 +331,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     album = base.album ?: p.album,
                     date = base.date ?: p.year,
                     trackNumber = base.trackNumber ?: p.trackNumber,
-                    language = base.language ?: p.language ?: settings.preferredLanguage,
+                    language = base.language
+                        ?: LyricsLanguage.detect(base.lyrics ?: base.syncedLyrics)
+                        ?: p.language ?: settings.preferredLanguage,
                 )
             }
         }
@@ -400,6 +411,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 candidates = result.first,
                 alternatives = result.second,
                 loading = null,
+                searched = true,
             ),
             message = if (result.first.isEmpty())
                 "Nothing found online. You can still type the details in by hand." else null,
@@ -446,7 +458,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun enrich(detail: Detail, candidate: Candidate): Detail {
         var tags = detail.tags.overlaidWith(candidate.toTags())
-        val language = tags.language
+
+        // Lyrics first, because they decide the language and the language
+        // decides the cover: for a Hindi song the right picture is the film's
+        // poster rather than a soundtrack sleeve.
+        if (settings.fetchLyrics && tags.mediaKind == MediaKind.MUSIC_VIDEO &&
+            tags.lyrics.isNullOrBlank()
+        ) {
+            Lookup.lyrics(tags, detail.durationMs)?.let {
+                tags = tags.copy(lyrics = it.plain ?: tags.lyrics, syncedLyrics = it.synced)
+            }
+        }
+
+        // Hundreds of words of the actual language beats a three-word title or
+        // the storefront a song happens to sell in, so the lyrics are asked
+        // first and the weaker signals only fill in where they say nothing.
+        val language = LyricsLanguage.detect(tags.lyrics ?: tags.syncedLyrics)
+            ?: tags.language
             ?: Languages.guess(title = tags.title, storefront = candidate.storefront)
             ?: settings.preferredLanguage
         tags = tags.copy(language = language)
@@ -459,14 +487,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 else -> Lookup.artworkForScreen(candidate, settings.tmdbApiKey)
             }
             if (art != null) tags = tags.copy(artwork = art)
-        }
-
-        if (settings.fetchLyrics && tags.mediaKind == MediaKind.MUSIC_VIDEO &&
-            tags.lyrics.isNullOrBlank()
-        ) {
-            Lookup.lyrics(tags, detail.durationMs)?.let {
-                tags = tags.copy(lyrics = it.plain ?: tags.lyrics, syncedLyrics = it.synced)
-            }
         }
 
         // The singer belongs in the artist field, not the music director and

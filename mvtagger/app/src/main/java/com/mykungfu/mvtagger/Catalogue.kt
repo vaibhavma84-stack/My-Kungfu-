@@ -5,6 +5,7 @@ import android.net.Uri
 import com.mykungfu.mvtagger.core.FilenameParser
 import com.mykungfu.mvtagger.core.Json
 import com.mykungfu.mvtagger.core.Languages
+import com.mykungfu.mvtagger.core.LyricsLanguage
 import com.mykungfu.mvtagger.core.MediaClassifier
 import com.mykungfu.mvtagger.core.MediaKind
 import com.mykungfu.mvtagger.core.Sidecar
@@ -138,7 +139,15 @@ object Catalogue {
                 if (!Saf.isVideo(child.name, child.mimeType)) continue
 
                 val key = child.documentId + "|" + child.size + "|" + child.lastModified
-                val known = cached[key]
+                // A remembered entry is only usable while its thumbnail is
+                // still there. The cache directory is Android's to clear, and
+                // raising the thumbnail size retires it deliberately; either
+                // way the cover has to be cut again, which means opening the
+                // file again. An entry that never had a cover is not reopened
+                // looking for one.
+                val known = cached[key]?.takeIf {
+                    !it.hasArtwork || ArtCache.has(context, it.documentId)
+                }
                 out += known?.copy(
                     folder = path,
                     parentDocumentId = docId,
@@ -182,6 +191,7 @@ object Catalogue {
         val title = tags?.title?.ifBlank { null }
             ?: if (kind == MediaKind.MUSIC_VIDEO) parsed.title else fromName.name
         val language = tags?.language?.ifBlank { null }
+            ?: LyricsLanguage.detect(tags?.lyrics ?: tags?.syncedLyrics)
             ?: guessLanguage(title, tags?.artist, path)
 
         // Shrunk and kept now, while the file is already open, rather than

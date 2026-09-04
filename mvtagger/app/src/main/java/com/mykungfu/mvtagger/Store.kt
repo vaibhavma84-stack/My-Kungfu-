@@ -62,6 +62,8 @@ data class Settings(
      * costs the video.
      */
     val deleteOriginalAfterSaving: Boolean = false,
+    /** Browse the collection as a wall of covers rather than a list. */
+    val collectionAsGrid: Boolean = true,
 ) {
     val subtitleLanguageList: List<String>
         get() = subtitleLanguages.split(',', ' ')
@@ -118,6 +120,7 @@ class Store(context: Context) {
         openSubtitlesPassword = prefs.getString(KEY_OS_PASS, "") ?: "",
         subtitleLanguages = prefs.getString(KEY_SUB_LANGS, null) ?: "en",
         deleteOriginalAfterSaving = prefs.getBoolean(KEY_DELETE_ORIGINAL, false),
+        collectionAsGrid = prefs.getBoolean(KEY_GRID, true),
     )
 
     fun save(settings: Settings) {
@@ -144,6 +147,7 @@ class Store(context: Context) {
             putString(KEY_OS_PASS, settings.openSubtitlesPassword)
             putString(KEY_SUB_LANGS, settings.subtitleLanguages)
             putBoolean(KEY_DELETE_ORIGINAL, settings.deleteOriginalAfterSaving)
+            putBoolean(KEY_GRID, settings.collectionAsGrid)
         }.apply()
     }
 
@@ -191,5 +195,6 @@ class Store(context: Context) {
         const val KEY_OS_PASS = "openSubtitlesPassword"
         const val KEY_SUB_LANGS = "subtitleLanguages"
         const val KEY_DELETE_ORIGINAL = "deleteOriginalAfterSaving"
+        const val KEY_GRID = "collectionAsGrid"
     }
 }
