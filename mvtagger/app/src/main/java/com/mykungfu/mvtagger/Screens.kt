@@ -1167,8 +1167,11 @@ private fun DetailScreen(
                     )
                 }
                 // Skipping is a to-do list idea. A file already in the
-                // collection is not waiting to be dealt with.
-                if (!detail.editingExisting) {
+                // collection is not waiting to be dealt with; what it may want
+                // instead is to be started again from nothing.
+                if (detail.editingExisting) {
+                    OutlinedButton(onClick = { viewModel.clearTags() }) { Text("Clear") }
+                } else {
                     OutlinedButton(onClick = { viewModel.skip(detail.item) }) { Text("Skip") }
                 }
             }

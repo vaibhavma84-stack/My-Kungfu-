@@ -77,6 +77,72 @@ object Matching {
         return minOf(shared, minOf(ta.size, tb.size)).toDouble() / minOf(ta.size, tb.size)
     }
 
+    /**
+     * Scores episodes, which are a different problem from songs.
+     *
+     * A season and episode number is an exact answer, so there is nothing to
+     * rank on the words -- every result is the right number of the show it came
+     * from, and the only question left is whether it is the right show.
+     *
+     * Length is what answers that, and it was being thrown away. A file of
+     * "House of the Dragon The House That Dragons Built S03E08" matched the
+     * aftershow of that name at 95%: same number, right show for the words in
+     * the name, and twenty-two minutes against the file's seventy. Confident
+     * enough to apply on its own, and wrong. An episode three times the length
+     * of what came back is not that episode, whatever it is called.
+     *
+     * Where a length is missing on either side the number stands on its own, as
+     * it did before -- an unknown is not evidence against.
+     */
+    fun rankEpisodes(found: List<Candidate>, durationMs: Int?): List<Scored> =
+        found.map { candidate ->
+            val reasons = ArrayList<String>()
+            reasons += "season and episode matched"
+            candidate.showName?.takeIf { it.isNotBlank() }?.let { reasons += it }
+
+            val theirs = candidate.durationMs
+            val score = if (theirs == null || theirs <= 0 || durationMs == null || durationMs <= 0) {
+                reasons += "length not known"
+                NUMBER_ONLY
+            } else {
+                val ratio = minOf(theirs, durationMs).toDouble() / maxOf(theirs, durationMs)
+                when {
+                    ratio >= CLOSE_ENOUGH -> {
+                        reasons += "length agrees"
+                        NUMBER_AND_LENGTH
+                    }
+                    ratio >= SOMEWHAT -> {
+                        reasons += "length differs: " + minutes(theirs) +
+                                " against this file's " + minutes(durationMs)
+                        NUMBER_ODD_LENGTH
+                    }
+                    else -> {
+                        reasons += "length is nothing like it: " + minutes(theirs) +
+                                " against this file's " + minutes(durationMs) +
+                                " -- probably a different series"
+                        NUMBER_WRONG_LENGTH
+                    }
+                }
+            }
+            Scored(candidate, score, reasons)
+        }.sortedByDescending { it.score }
+
+    /** Within this of each other, two lengths are the same episode. */
+    private const val CLOSE_ENOUGH = 0.85
+
+    /** Below this, they are not the same programme at all. */
+    private const val SOMEWHAT = 0.6
+
+    private const val NUMBER_AND_LENGTH = 0.95
+    private const val NUMBER_ONLY = 0.9
+    private const val NUMBER_ODD_LENGTH = 0.7
+    private const val NUMBER_WRONG_LENGTH = 0.3
+
+    private fun minutes(ms: Int): String {
+        val total = ms / 1000
+        return (total / 60).toString() + ":" + (total % 60).toString().padStart(2, '0')
+    }
+
     fun rank(
         candidates: List<Candidate>,
         parsed: ParsedName,

@@ -16,6 +16,7 @@ import com.mykungfu.mvtagger.core.Matching
 import com.mykungfu.mvtagger.core.MediaClassifier
 import com.mykungfu.mvtagger.core.MediaKind
 import com.mykungfu.mvtagger.core.Organiser
+import com.mykungfu.mvtagger.core.ParsedMedia
 import com.mykungfu.mvtagger.core.Sidecar
 import com.mykungfu.mvtagger.core.SubtitleTrack
 import com.mykungfu.mvtagger.core.VideoTags
@@ -493,6 +494,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    /**
+     * Empties every field, so a file can be started again from nothing.
+     *
+     * For a file whose details are a mixture -- half from one match, half from
+     * another -- where clearing is quicker than auditing each field.
+     *
+     * It is not a fix for a bad match on its own, and should not be reached for
+     * as one. The filename is left alone, and the filename is usually where a
+     * wrong answer came from; clearing and looking up again asks the same
+     * question and gets the same answer. Correcting the field and looking up is
+     * what changes the question.
+     *
+     * Nothing is written here. The file on disk is untouched until Save.
+     */
+    fun clearTags() {
+        val detail = _state.value.detail ?: return
+        _state.value = _state.value.copy(
+            detail = detail.copy(
+                tags = VideoTags(mediaKind = detail.tags.mediaKind),
+                candidates = emptyList(),
+                alternatives = emptyList(),
+                chosen = null,
+                artistChoices = emptyList(),
+                albumChoices = emptyList(),
+                artist = null,
+                album = null,
+                searched = false,
+            )
+        )
+    }
+
     fun closeDetail() {
         _state.value = _state.value.copy(detail = null)
     }
@@ -536,18 +568,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 Matching.rank(found, parsed, detail.durationMs) to found
             }
             MediaKind.TV_EPISODE -> {
-                val found = Lookup.episode(media, settings.tmdbApiKey)
-                // Each is already an exact season-and-episode answer, so
-                // ranking them against each other would invent a difference
-                // that is not there. What separates them is which series they
-                // belong to, so the row says the source and the series and the
-                // choice is left to be made.
-                found.map {
-                    Matching.Scored(
-                        it, 0.95,
-                        listOf("season and episode matched", it.showName ?: "series not named"),
-                    )
-                } to found
+                /*
+                   What the fields say, before what the filename said.
+
+                   The filename is where the series name came from in the first
+                   place, so searching it again returns the same wrong series
+                   and there is no way out: correcting "Series" to "House of the
+                   Dragon" and looking up again searched for "House of the
+                   Dragon The House That Dragons Built" exactly as before, found
+                   the aftershow exactly as before, and offered the one answer
+                   that was already there. Editing a field has to change what is
+                   asked, or it is not editing anything.
+                */
+                val asked = ParsedMedia(
+                    kind = MediaKind.TV_EPISODE,
+                    name = detail.tags.showName?.trim()?.ifBlank { null } ?: media.name,
+                    season = detail.tags.seasonNumber ?: media.season,
+                    episode = detail.tags.episodeNumber ?: media.episode,
+                    episodeTitle = detail.tags.title?.trim()?.ifBlank { null }
+                        ?: media.episodeTitle,
+                    year = detail.tags.year ?: media.year,
+                )
+                val found = Lookup.episode(asked, settings.tmdbApiKey)
+                // Scored on length, which is the one thing that separates the
+                // right series from another one with the same episode number.
+                Matching.rankEpisodes(found, detail.durationMs) to found
             }
         }
     }
