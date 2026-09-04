@@ -74,4 +74,11 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.ui:ui-tooling-preview")
+
+    // The player. Media3 reads MP4, MKV, WebM and AVI containers itself; what
+    // it can actually decode inside them is still the phone's own codecs, so a
+    // exotic stream can fail on one device and play on another. Handing the
+    // file to another app stays available for exactly that case.
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-ui:1.4.1")
 }

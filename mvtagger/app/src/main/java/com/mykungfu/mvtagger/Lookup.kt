@@ -114,16 +114,34 @@ object Lookup {
      * Episodes. TVmaze answers "season 2, episode 4 of this show" directly,
      * which is exactly the question an `S02E04` filename asks.
      */
-    fun episode(media: ParsedMedia): List<Candidate> {
+    fun episode(media: ParsedMedia, tmdbApiKey: String = ""): List<Candidate> {
         val season = media.season ?: return emptyList()
         val number = media.episode ?: return emptyList()
-        val shows = Net.getTextOrNull(TvMaze.searchShowsUrl(media.name))
-            ?.let { TvMaze.parseShows(it) } ?: return emptyList()
-
         val out = ArrayList<Candidate>()
-        for (show in shows.take(3)) {
-            Net.getTextOrNull(TvMaze.episodeUrl(show.id, season, number))
-                ?.let { body -> TvMaze.parseEpisode(body, show)?.let { out += it } }
+
+        // TVmaze first: open, no account, and it answers episode-by-number
+        // directly, which is the question an S01E02 filename asks.
+        Net.getTextOrNull(TvMaze.searchShowsUrl(media.name))
+            ?.let { TvMaze.parseShows(it) }
+            ?.take(3)
+            ?.forEach { show ->
+                Net.getTextOrNull(TvMaze.episodeUrl(show.id, season, number))
+                    ?.let { body -> TvMaze.parseEpisode(body, show)?.let { out += it } }
+            }
+
+        // TMDb second, when there is a key for it. One source that finds one
+        // show leaves a single answer and nothing to choose between, which is
+        // no good when that answer is the wrong series -- two sources that
+        // disagree at least let the right one be picked. TMDb also carries
+        // Indian and other non-English series that TVmaze is thin on.
+        if (tmdbApiKey.isNotBlank()) {
+            Net.getTextOrNull(Tmdb.searchTvUrl(tmdbApiKey, media.name))
+                ?.let { Tmdb.parseShows(it) }
+                ?.take(3)
+                ?.forEach { show ->
+                    Net.getTextOrNull(Tmdb.episodeUrl(tmdbApiKey, show.id, season, number))
+                        ?.let { body -> Tmdb.parseEpisode(body, show)?.let { out += it } }
+                }
         }
         return out
     }

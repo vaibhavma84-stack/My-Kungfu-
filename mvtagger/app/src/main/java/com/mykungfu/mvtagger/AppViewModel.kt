@@ -108,6 +108,9 @@ data class Detail(
 /** The two things the app is for: work to do, and what has been done. */
 enum class MainTab { TO_DO, COLLECTION }
 
+/** A file handed to the player, and enough to label it while it runs. */
+data class Playing(val uri: Uri, val title: String, val mimeType: String)
+
 data class UiState(
     val settings: Settings = Settings(),
     val items: List<Item> = emptyList(),
@@ -122,7 +125,25 @@ data class UiState(
     /** Null means every language; only applies to music videos. */
     val collectionLanguage: String? = null,
     val collectionScanned: Boolean = false,
-)
+    /**
+     * How far into the collection is opened.
+     *
+     * Everything on one screen is not how anyone looks for anything. You know
+     * the artist -- or, for a film song, the film -- and then the song; you
+     * know the series, then the season, then the number. So null is the shelf,
+     * a folder is what is inside it, and a season narrows a series further.
+     *
+     * Films are the exception and stay flat: a film is one thing, not a
+     * shelf of things, so there is nothing to open into.
+     */
+    val collectionFolder: String? = null,
+    val collectionSeason: Int? = null,
+    /** The file open in the player, if any. */
+    val playing: Playing? = null,
+) {
+    /** Something to come back out of, for the back button and the heading. */
+    val insideFolder: Boolean get() = collectionFolder != null
+}
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -171,7 +192,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setCollectionKind(kind: MediaKind) {
-        _state.value = _state.value.copy(collectionKind = kind, collectionLanguage = null)
+        _state.value = _state.value.copy(
+            collectionKind = kind,
+            collectionLanguage = null,
+            collectionFolder = null,
+            collectionSeason = null,
+        )
+    }
+
+    fun openFolder(name: String?) {
+        _state.value = _state.value.copy(collectionFolder = name, collectionSeason = null)
+    }
+
+    fun openSeason(number: Int?) {
+        _state.value = _state.value.copy(collectionSeason = number)
+    }
+
+    /** One step back out: episodes to seasons, seasons or songs to the shelf. */
+    fun play(uri: Uri, title: String, mimeType: String) {
+        _state.value = _state.value.copy(playing = Playing(uri, title, mimeType))
+    }
+
+    fun stopPlaying() {
+        _state.value = _state.value.copy(playing = null)
+    }
+
+    fun upFromFolder() {
+        val state = _state.value
+        _state.value = when {
+            state.collectionSeason != null -> state.copy(collectionSeason = null)
+            else -> state.copy(collectionFolder = null)
+        }
     }
 
     fun setCollectionLanguage(language: String?) {
@@ -433,10 +484,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 Matching.rank(found, parsed, detail.durationMs) to found
             }
             MediaKind.TV_EPISODE -> {
-                val found = Lookup.episode(media)
-                // Already an exact season-and-episode answer, so ranking would
-                // only obscure it; the order TVmaze gave is the right order.
-                found.map { Matching.Scored(it, 0.95, listOf("season and episode matched")) } to found
+                val found = Lookup.episode(media, settings.tmdbApiKey)
+                // Each is already an exact season-and-episode answer, so
+                // ranking them against each other would invent a difference
+                // that is not there. What separates them is which series they
+                // belong to, so the row says the source and the series and the
+                // choice is left to be made.
+                found.map {
+                    Matching.Scored(
+                        it, 0.95,
+                        listOf("season and episode matched", it.showName ?: "series not named"),
+                    )
+                } to found
             }
         }
     }

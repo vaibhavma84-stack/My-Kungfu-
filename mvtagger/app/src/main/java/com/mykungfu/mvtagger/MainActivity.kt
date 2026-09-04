@@ -148,6 +148,20 @@ class MainActivity : ComponentActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         if (intent.resolveActivity(packageManager) == null) return false
+
+        // The flag alone is not always enough. It travels with the intent the
+        // chooser finally sends, and several players open the file from a
+        // service or a second activity that never received it -- which is why
+        // handing a file over could end in "cannot play this video" while the
+        // same file played here. Granting to each app that could handle it,
+        // before the chooser is even shown, is what actually holds.
+        for (info in packageManager.queryIntentActivities(intent, 0)) {
+            runCatching {
+                grantUriPermission(
+                    info.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+        }
         return try {
             startActivity(Intent.createChooser(intent, "Play with"))
             true

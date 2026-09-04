@@ -79,14 +79,38 @@ object FilenameParser {
     private val YEAR = Regex("""(?<!\d)(19\d{2}|20\d{2})(?!\d)""")
     private val SEPARATORS = listOf(" - ", " – ", " — ", " -- ", " _ ")
 
+    /** Three or more underscores: a separator a download tool flattened. */
+    private val UNDERSCORE_RUN = Regex("_{3,}")
+
+    /** A trailing "song", with any of the words that usually come before it. */
+    private val TRAILING_SONG = Regex(
+        """\s+(full\s+)?(video\s+|audio\s+|lyrical\s+)?song\s*$""",
+        RegexOption.IGNORE_CASE,
+    )
+
     fun parse(fileName: String): ParsedName {
         val base = stripExtension(fileName)
         // Non-breaking spaces survive many download tools and break matching.
         var work = base.replace('\u00A0', ' ')
 
-        // yt-dlp writes underscores when a filesystem is fussy. Only undo that
-        // if the name has no real spaces, so "Tum Hi Ho_Aashiqui" is untouched.
-        if (!work.contains(' ') && work.contains('_')) work = work.replace('_', ' ')
+        // A run of underscores is a separator the download tool flattened. " | "
+        // is three characters and a fussy filesystem takes all three, so the
+        // pipes that carry the whole film convention arrive as "___":
+        //
+        //     Besharam Rang Song | Pathaan | Shah Rukh Khan, Deepika Padukone
+        //     Besharam_Rang_Song___Pathaan___Shah_Rukh_Khan,_Deepika_Padukone
+        //
+        // This has to be undone before the single underscores are, or the
+        // separator becomes an ordinary space, the name reads as one long
+        // title, and the search asks for the song, the film and the entire
+        // cast at once -- which no catalogue has anything filed under.
+        val hadSpaces = work.contains(' ')
+        work = work.replace(UNDERSCORE_RUN, " | ")
+
+        // yt-dlp writes underscores for spaces when a filesystem is fussy. Only
+        // undo that if the name had no real spaces, so "Tum Hi Ho_Aashiqui" is
+        // untouched.
+        if (!hadSpaces && work.contains('_')) work = work.replace('_', ' ')
 
         var trackNumber: Int? = null
         LEADING_TRACK.find(work)?.let {
@@ -169,7 +193,12 @@ object FilenameParser {
                 // The first field is the song, often with the film attached by a
                 // dash: "Kesariya - Brahmastra". Those have to come apart --
                 // searching for the two glued together finds nothing at all.
-                val head = parts[0]
+                // "Besharam Rang Song", "Kesariya Song" -- the word is on the
+                // end of most of these uploads and is part of no title. Only
+                // stripped here, inside the film convention, where it is a
+                // reliable habit rather than a guess: an English song really
+                // can be called "Song 2".
+                val head = TRAILING_SONG.replace(parts[0], "").trim()
                 var song = head
                 var film: String? = null
                 for (sep in SEPARATORS) {

@@ -568,6 +568,82 @@ object Tmdb {
         } ?: emptyList()
     }
 
+    // --- television ----------------------------------------------------------
+
+    fun searchTvUrl(apiKey: String, name: String, lang: String = "en-US"): String {
+        val sb = StringBuilder("https://api.themoviedb.org/3/search/tv?api_key=")
+        sb.append(urlEncode(apiKey)).append("&query=").append(urlEncode(name))
+        sb.append("&language=").append(lang)
+        return sb.toString()
+    }
+
+    fun episodeUrl(
+        apiKey: String,
+        showId: String,
+        season: Int,
+        episode: Int,
+        lang: String = "en-US",
+    ): String = "https://api.themoviedb.org/3/tv/" + urlEncode(showId) +
+            "/season/" + season + "/episode/" + episode +
+            "?api_key=" + urlEncode(apiKey) + "&language=" + lang
+
+    data class Show(
+        val id: String,
+        val name: String,
+        val firstAirDate: String?,
+        val overview: String?,
+        val posterPath: String?,
+    ) {
+        fun posterUrls(): List<String> = posterPath?.let {
+            listOf("w780", "w500", "original").map { size ->
+                "https://image.tmdb.org/t/p/" + size + it
+            }
+        } ?: emptyList()
+    }
+
+    fun parseShows(body: String): List<Show> =
+        Json.parseOrNull(body)["results"].array.mapNotNull { s ->
+            val name = s["name"].string ?: s["original_name"].string ?: return@mapNotNull null
+            Show(
+                id = s["id"].string ?: return@mapNotNull null,
+                name = name,
+                firstAirDate = s["first_air_date"].string?.ifBlank { null },
+                overview = s["overview"].string?.ifBlank { null },
+                posterPath = s["poster_path"].string?.ifBlank { null },
+            )
+        }
+
+    /**
+     * One episode, turned into a candidate.
+     *
+     * The artwork offered is the show's poster rather than the episode still.
+     * A still is a frame of that episode, which is the more specific picture
+     * and the less useful one: what a library wants against every episode of a
+     * series is the thing that identifies the series.
+     */
+    fun parseEpisode(body: String, show: Show): Candidate? {
+        val json = Json.parseOrNull(body)
+        val number = json["episode_number"].int ?: return null
+        val season = json["season_number"].int ?: return null
+        val title = json["name"].string?.ifBlank { null }
+            ?: ("Episode " + number)
+        return Candidate(
+            source = "TMDb",
+            id = "tmdb-tv-" + show.id + "-" + season + "-" + number,
+            title = title,
+            artist = show.name,
+            album = show.name,
+            date = json["air_date"].string?.ifBlank { null } ?: show.firstAirDate,
+            description = json["overview"].string?.ifBlank { null } ?: show.overview,
+            showName = show.name,
+            season = season,
+            episode = number,
+            mediaKind = MediaKind.TV_EPISODE,
+            artworkUrls = show.posterUrls(),
+            kind = "episode",
+        )
+    }
+
     fun parseMovies(body: String): List<Movie> =
         Json.parseOrNull(body)["results"].array.mapNotNull { m ->
             val title = m["title"].string ?: m["original_title"].string ?: return@mapNotNull null

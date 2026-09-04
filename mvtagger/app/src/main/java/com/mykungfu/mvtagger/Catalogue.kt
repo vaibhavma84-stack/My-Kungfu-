@@ -444,6 +444,40 @@ object Catalogue {
     private fun String?.orBlank(fallback: String): String =
         this?.trim()?.ifBlank { null } ?: fallback
 
+    /** Shown for an episode whose file never said what series it belongs to. */
+    const val NO_SERIES = "Series not named"
+
+    /**
+     * Stands in for "season not known" while drilling in.
+     *
+     * A null season already means "not opened into a season yet", so an
+     * episode that names no season needs a value of its own rather than
+     * sharing that one.
+     */
+    const val SEASON_UNKNOWN = Int.MIN_VALUE
+
+    /** The series on the shelf, with everything filed under each. */
+    fun series(entries: List<Entry>): List<Pair<String, List<Entry>>> =
+        entries.filter { it.kind == MediaKind.TV_EPISODE }
+            .groupBy { it.showName.orBlank(NO_SERIES) }
+            .toList()
+            .sortedBy { (name, _) -> Transliterate.fold(name) }
+
+    /** The seasons of one series, in order. */
+    fun seasons(entries: List<Entry>, name: String): List<Pair<Int?, List<Entry>>> =
+        (series(entries).firstOrNull { it.first == name }?.second ?: emptyList())
+            .groupBy { it.season }
+            .toList()
+            .sortedBy { (number, _) -> number ?: Int.MAX_VALUE }
+
+    /** The episodes of one season, in the order they were broadcast. */
+    fun episodes(entries: List<Entry>, name: String, season: Int): List<Entry> {
+        val wanted = if (season == SEASON_UNKNOWN) null else season
+        return (series(entries).firstOrNull { it.first == name }?.second ?: emptyList())
+            .filter { it.season == wanted }
+            .sortedWith(compareBy({ it.episode ?: Int.MAX_VALUE }, { sortKey(it) }))
+    }
+
     /** Languages present among the music videos, most files first. */
     fun languagesPresent(entries: List<Entry>): List<Pair<String?, Int>> =
         entries.filter { it.kind == MediaKind.MUSIC_VIDEO }

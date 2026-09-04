@@ -117,6 +117,72 @@ class FilenameParserTest {
         assertEquals("No extension here", FilenameParser.stripExtension("No extension here"))
         assertEquals("", FilenameParser.extensionOf("No extension here"))
     }
+
+    // --- names whose separators a download tool flattened --------------------
+
+    /**
+     * The real file that produced an empty search, reported from the phone.
+     *
+     * Its title was pipe-separated in the usual film way; the downloader took
+     * every `|` and every space to `_`, so each " | " arrived as "___". The
+     * parser undid the underscores first, the pipes became ordinary spaces, and
+     * it searched for the song, the film, both leads, both composers and both
+     * lyricists as one string. Nothing anywhere is filed under that.
+     */
+    @Test
+    fun `underscore runs are the pipes of the film convention`() {
+        val p = FilenameParser.parse(
+            "Besharam_Rang_Song___Pathaan___Shah_Rukh_Khan,_Deepika_Padukone" +
+                    "___Vishal___Sheykhar___Shilpa,_Kumaar(2160p).mp4"
+        )
+        assertEquals("Besharam Rang", p.title)
+        assertTrue("the film should be among the extras: " + p.extras, p.extras.contains("Pathaan"))
+        assertTrue(
+            "queries were " + p.queries,
+            p.queries.any { it.equals("Besharam Rang", ignoreCase = true) },
+        )
+        assertTrue(
+            "the film is worth trying with the song: " + p.queries,
+            p.queries.any { it.contains("Besharam Rang") && it.contains("Pathaan") },
+        )
+        // The whole raw name stays on the end as a last resort, and Lookup
+        // stops at the first query that lands, so what matters is that the
+        // ones tried first are clean.
+        assertTrue(
+            "the first query still carries the cast: " + p.queries.first(),
+            !p.queries.first().contains("Deepika"),
+        )
+    }
+
+    @Test
+    fun `a trailing Song is dropped only inside the film convention`() {
+        assertEquals(
+            "Kesariya",
+            FilenameParser.parse("Kesariya Full Video Song | Brahmastra | Pritam.mp4").title,
+        )
+        // No pipes, no convention, no stripping -- this really is the title.
+        assertEquals("Song 2", FilenameParser.parse("Blur - Song 2.mp4").title)
+    }
+
+    /**
+     * A single underscore is still just a space, and a name with no run of
+     * three is parsed exactly as it was before runs were given a meaning.
+     *
+     * Note what this pins down. "Tum Hi Ho - Aashiqui 2" is read as artist and
+     * title, so the film ends up in the title and the song in the artist --
+     * backwards, because for a Hindi name the song comes first and the film
+     * second, the opposite of "Adele - Hello". That is a real fault and it is
+     * asserted here as it stands rather than quietly changed: telling the two
+     * shapes apart needs a signal this has not got yet, and guessing at it
+     * blind is what produced the last three rounds of no improvement.
+     */
+    @Test
+    fun `ordinary underscore names are unchanged`() {
+        val p = FilenameParser.parse("Tum_Hi_Ho_-_Aashiqui_2.mp4")
+        assertEquals("Tum Hi Ho", p.artist)
+        assertEquals("Aashiqui 2", p.title)
+    }
+
 }
 
 class MediaClassifierTest {

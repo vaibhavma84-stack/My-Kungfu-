@@ -116,6 +116,12 @@ fun AppScreen(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? -> uri?.let(viewModel::setOutputFolder) }
 
+    val playing = state.playing
+    if (playing != null) {
+        PlayerScreen(playing, onClose = viewModel::stopPlaying, onOpenExternally = onOpenExternally)
+        return
+    }
+
     val detail = state.detail
     when {
         detail != null -> {
@@ -182,6 +188,11 @@ private fun MainScreen(
             )
         },
     ) { padding ->
+        // Inside a series or an artist, back means "up one level" before it
+        // means "leave the app".
+        if (state.tab == MainTab.COLLECTION && state.insideFolder) {
+            BackHandler { viewModel.upFromFolder() }
+        }
         Column(Modifier.padding(padding).fillMaxSize()) {
             TabRow(selectedTabIndex = if (state.tab == MainTab.TO_DO) 0 else 1) {
                 Tab(
@@ -299,25 +310,277 @@ private fun CollectionContent(
         }
     }
 
-    val groups = Catalogue.group(state.collection, state.collectionKind, state.collectionLanguage)
-
-    if (groups.isEmpty()) {
-        Text(
-            if (state.collectionScanned)
-                "Nothing here yet. Files appear once you have saved them."
-            else "Pull the refresh button to read the output folder.",
-            Modifier.padding(24.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    if (state.collectionKind == MediaKind.TV_EPISODE) {
+        SeriesBrowser(state, viewModel, outputTree, onOpen)
         return
     }
 
+    val groups = Catalogue.group(state.collection, state.collectionKind, state.collectionLanguage)
+
+    if (groups.isEmpty()) {
+        NothingHere(state)
+        return
+    }
+
+    // A film is one thing rather than a shelf of things, so films stay flat.
+    if (state.collectionKind == MediaKind.MOVIE) {
+        Shown(state, groups, outputTree, viewModel, onOpen)
+        return
+    }
+
+    val open = groups.firstOrNull { it.label == state.collectionFolder }
+    if (open == null) {
+        // The shelf. Each group is already exactly one artist, or one film for
+        // a film song, so the grouping doubles as the shelf without any second
+        // way of working out what belongs together.
+        Shelf(
+            state,
+            groups.map {
+                ShelfItem(
+                    key = it.label,
+                    label = it.label,
+                    subtitle = countOf(it.entries.size, "song"),
+                    cover = coverOf(it.entries),
+                )
+            },
+        ) { viewModel.openFolder(it) }
+        return
+    }
+
+    Crumb(open.label, null) { viewModel.upFromFolder() }
+    Shown(state, listOf(open), outputTree, viewModel, onOpen)
+}
+
+/** Whichever way round the collection is being browsed. */
+@Composable
+private fun Shown(
+    state: UiState,
+    groups: List<Catalogue.Group>,
+    outputTree: Uri?,
+    viewModel: AppViewModel,
+    onOpen: (Uri, String) -> Unit,
+) {
     if (state.settings.collectionAsGrid) {
         CollectionGrid(groups, state.collectionKind, outputTree, viewModel, onOpen)
     } else {
         CollectionList(groups, outputTree, viewModel, onOpen)
     }
+}
+
+/**
+ * Series, then season, then episode.
+ *
+ * Every episode of everything on one screen is not how anyone looks for an
+ * episode. You know the series, then the season, then the number, and this
+ * asks in that order.
+ */
+@Composable
+private fun SeriesBrowser(
+    state: UiState,
+    viewModel: AppViewModel,
+    outputTree: Uri?,
+    onOpen: (Uri, String) -> Unit,
+) {
+    val series = state.collectionFolder
+    val season = state.collectionSeason
+
+    if (series == null) {
+        val shelf = Catalogue.series(state.collection).map { (name, of) ->
+            ShelfItem(name, name, countOf(of.size, "episode"), coverOf(of))
+        }
+        if (shelf.isEmpty()) {
+            NothingHere(state)
+            return
+        }
+        Shelf(state, shelf) { viewModel.openFolder(it) }
+        return
+    }
+
+    if (season == null) {
+        Crumb(series, null) { viewModel.upFromFolder() }
+        val shelf = Catalogue.seasons(state.collection, series).map { (number, of) ->
+            ShelfItem(
+                key = (number ?: Catalogue.SEASON_UNKNOWN).toString(),
+                label = number?.let { "Season " + it } ?: "Season not known",
+                subtitle = countOf(of.size, "episode"),
+                cover = coverOf(of),
+            )
+        }
+        Shelf(state, shelf) { viewModel.openSeason(it.toIntOrNull()) }
+        return
+    }
+
+    Crumb(
+        series,
+        if (season == Catalogue.SEASON_UNKNOWN) "Season not known" else "Season " + season,
+    ) { viewModel.upFromFolder() }
+
+    val episodes = Catalogue.episodes(state.collection, series, season)
+    Shown(
+        state,
+        listOf(Catalogue.Group(series, listOf(Catalogue.Section(null, episodes)))),
+        outputTree, viewModel, onOpen,
+    )
+}
+
+/**
+ * Opens a file in the app's own player.
+ *
+ * Handing it to another app is still there, from inside the player and from the
+ * detail screen -- useful when a phone has no decoder for what is inside a
+ * particular file.
+ */
+private fun play(viewModel: AppViewModel, outputTree: Uri?, entry: Entry) {
+    outputTree?.let { tree ->
+        viewModel.play(
+            Saf.documentUri(tree, entry.documentId),
+            entry.heading,
+            Saf.mimeForName(entry.name),
+        )
+    }
+}
+
+/** One openable thing on a shelf: an artist, a film, a series, a season. */
+private data class ShelfItem(
+    val key: String,
+    val label: String,
+    val subtitle: String,
+    /** Something inside it to show a cover from; there is no cover of its own. */
+    val cover: Entry?,
+)
+
+/** The cover to stand for a group of files: the first one that has any. */
+private fun coverOf(entries: List<Entry>): Entry? =
+    entries.firstOrNull { it.hasArtwork } ?: entries.firstOrNull()
+
+private fun countOf(n: Int, noun: String): String =
+    n.toString() + " " + noun + if (n == 1) "" else "s"
+
+@Composable
+private fun Shelf(state: UiState, shelf: List<ShelfItem>, onOpen: (String) -> Unit) {
+    if (state.settings.collectionAsGrid) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(112.dp),
+            contentPadding = PaddingValues(12.dp, 0.dp, 12.dp, 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            items(shelf, key = { it.key }) { item -> ShelfTile(item) { onOpen(item.key) } }
+        }
+    } else {
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 24.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            items(shelf, key = { it.key }) { item -> ShelfRow(item) { onOpen(item.key) } }
+        }
+    }
+}
+
+@Composable
+private fun ShelfTile(item: ShelfItem, onOpen: () -> Unit) {
+    Column(Modifier.clickable(onClick = onOpen)) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            val cover = item.cover
+            if (cover != null) {
+                CoverImage(cover, Modifier.fillMaxSize(), MaterialTheme.typography.headlineSmall)
+            } else {
+                Text(
+                    item.label.take(1).uppercase(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            item.label,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            item.subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShelfRow(item: ShelfItem, onOpen: () -> Unit) {
+    Card(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(52.dp).clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                val cover = item.cover
+                if (cover != null) CoverImage(cover, Modifier.fillMaxSize())
+                else Text(item.label.take(1).uppercase(), style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    item.label,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    item.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/** Where you are, and the way back out. */
+@Composable
+private fun Crumb(title: String, under: String?, onBack: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(8.dp, 0.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+        }
+        Column {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            under?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NothingHere(state: UiState) {
+    Text(
+        if (state.collectionScanned)
+            "Nothing here yet. Files appear once you have saved them."
+        else "Pull the refresh button to read the output folder.",
+        Modifier.padding(24.dp),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /**
@@ -371,14 +634,7 @@ private fun CollectionGrid(
                     CollectionTile(
                         entry,
                         aspect = aspect,
-                        onPlay = {
-                            outputTree?.let { tree ->
-                                onOpen(
-                                    Saf.documentUri(tree, entry.documentId),
-                                    Saf.mimeForName(entry.name),
-                                )
-                            }
-                        },
+                        onPlay = { play(viewModel, outputTree, entry) },
                         onEdit = { viewModel.openCollectionEntry(entry) },
                     )
                 }
@@ -424,14 +680,7 @@ private fun CollectionList(
                         subheading = entry.subheadingExcluding(
                             listOf(group.label, section.label)
                         ),
-                        onPlay = {
-                            outputTree?.let { tree ->
-                                onOpen(
-                                    Saf.documentUri(tree, entry.documentId),
-                                    Saf.mimeForName(entry.name),
-                                )
-                            }
-                        },
+                        onPlay = { play(viewModel, outputTree, entry) },
                         onEdit = { viewModel.openCollectionEntry(entry) },
                     )
                 }
@@ -734,9 +983,13 @@ private fun DetailScreen(
                 title = { Text(detail.item.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
                     IconButton(onClick = {
-                        onOpenExternally(detail.item.uri, Saf.mimeForName(detail.item.name))
+                        viewModel.play(
+                            detail.item.uri,
+                            detail.item.name,
+                            Saf.mimeForName(detail.item.name),
+                        )
                     }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Play in another app")
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Play")
                     }
                 },
             )
