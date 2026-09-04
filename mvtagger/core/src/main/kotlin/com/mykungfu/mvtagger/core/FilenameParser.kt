@@ -124,9 +124,20 @@ object FilenameParser {
             extras.firstOrNull()?.let { listOfNotNull(title, it).joinToString(" ").trim() },
             title?.trim(),
             work.trim(),
-        ).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(4)
+        ).map { it.trim() }.filter { it.isNotBlank() }.distinct()
 
-        val query = queries.firstOrNull() ?: work.trim()
+        // A Devanagari title has to be searched for in Latin letters: the
+        // catalogues index the transliterated spelling and searching in the
+        // original script finds nothing at all. The Latin form goes first
+        // because it is the one that will actually hit.
+        val attempts = if (Transliterate.hasDevanagari(work)) {
+            (queries.map { Transliterate.devanagari(it) } + queries)
+                .map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        } else {
+            queries
+        }.take(4)
+
+        val query = attempts.firstOrNull() ?: work.trim()
 
         return ParsedName(
             artist = artist?.takeIf { it.isNotBlank() },
@@ -135,7 +146,7 @@ object FilenameParser {
             year = year,
             trackNumber = trackNumber,
             query = query,
-            queries = queries,
+            queries = attempts,
             extras = extras,
             language = Languages.fromScript(TextScript.dominant(work))
                 ?.takeIf { TextScript.hasNonLatin(work) },

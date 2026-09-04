@@ -28,7 +28,11 @@ object Matching {
      */
     fun normalise(text: String?): String {
         if (text.isNullOrBlank()) return ""
-        val decomposed = Normalizer.normalize(text, Normalizer.Form.NFKD)
+        // A Devanagari title and its Latin spelling share no characters at all,
+        // so without this step the right match scores exactly zero.
+        val latin =
+            if (Transliterate.hasDevanagari(text)) Transliterate.devanagari(text) else text
+        val decomposed = Normalizer.normalize(latin, Normalizer.Form.NFKD)
         val stripped = decomposed.filter { !it.isMark() }
         return stripped.lowercase()
             // Apostrophes are dropped rather than turned into a space, so
@@ -47,16 +51,30 @@ object Matching {
         else -> false
     }
 
+    /**
+     * Words, folded so that two spellings of the same Indian title come out the
+     * same. See [Transliterate] for why that is necessary at all.
+     */
     private fun tokens(text: String?): Set<String> =
-        normalise(text).split(' ').filter { it.isNotBlank() }.toSet()
+        normalise(text).split(' ')
+            .filter { it.isNotBlank() }
+            .map { Transliterate.latinFold(it) }
+            .filter { it.isNotBlank() }
+            .toSet()
 
-    /** Proportion of the shorter side's words that appear on both. */
+    /**
+     * Proportion of the shorter side's words that appear on both.
+     *
+     * Words are compared through [Transliterate.sameWord] rather than by
+     * equality, because a transliterated title has no single correct spelling
+     * and exact comparison scored the right answer at zero.
+     */
     fun tokenOverlap(a: String?, b: String?): Double {
         val ta = tokens(a)
         val tb = tokens(b)
         if (ta.isEmpty() || tb.isEmpty()) return 0.0
-        val shared = ta.count { it in tb }
-        return shared.toDouble() / minOf(ta.size, tb.size)
+        val shared = ta.count { word -> tb.any { Transliterate.sameWord(word, it) } }
+        return minOf(shared, minOf(ta.size, tb.size)).toDouble() / minOf(ta.size, tb.size)
     }
 
     fun rank(
@@ -124,14 +142,23 @@ object Matching {
         // running times do not. Within three seconds is the same recording.
         if (durationMs != null && c.durationMs != null && c.durationMs > 0) {
             val gapSec = Math.abs(durationMs - c.durationMs) / 1000.0
+            // A song entry's length is the audio track. The video of the same
+            // song routinely runs a minute longer -- an intro, dialogue, a fade
+            // -- so only a like-for-like entry may be punished for a gap.
+            // Penalising the rest was demoting correct matches.
+            val comparable = c.kind == "musicVideo"
             when {
                 gapSec <= 3 -> {
                     score += 0.15
                     reasons += "length matches within 3s"
                 }
                 gapSec <= 10 -> score += 0.05
-                gapSec > 45 -> {
+                comparable && gapSec > 45 -> {
                     score -= 0.20
+                    reasons += "length is off by " + gapSec.toInt() + "s"
+                }
+                !comparable && gapSec > 150 -> {
+                    score -= 0.15
                     reasons += "length is off by " + gapSec.toInt() + "s"
                 }
             }
