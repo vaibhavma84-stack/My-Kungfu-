@@ -25,7 +25,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Named explicitly rather than left to the default, which pulls the
+      # "tools" meta-package and with it the Android Emulator -- several
+      # hundred megabytes for a build that never runs one. Run 21 died on a
+      # corrupted emulator download ("Error on ZipFile unknown archive"), which
+      # is a failure this build had no business being able to have.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
       - uses: gradle/actions/setup-gradle@v4
 
