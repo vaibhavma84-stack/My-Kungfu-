@@ -159,7 +159,7 @@ private fun MainScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("MV Tagger") },
+                title = { Text("Media Centre") },
                 actions = {
                     // Named rather than drawn: the core icon set has a list
                     // icon and nothing that reads as a grid, and a wrong icon
@@ -1224,7 +1224,7 @@ private fun SearchReportButton(detail: Detail, settings: Settings) {
             val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                     as android.content.ClipboardManager
             clipboard.setPrimaryClip(
-                android.content.ClipData.newPlainText("MV Tagger search report", report)
+                android.content.ClipData.newPlainText("Media Centre search report", report)
             )
             android.widget.Toast.makeText(
                 context, "Search report copied", android.widget.Toast.LENGTH_SHORT

@@ -74,7 +74,7 @@ object Mp4Metadata {
     private const val MAX_MOOV = 128L * 1024 * 1024
 
     /** Written into `©too` so it is obvious which tool last touched the file. */
-    const val ENCODER_NAME = "MV Tagger"
+    const val ENCODER_NAME = "Media Centre"
 
     // ------------------------------------------------------------------ read
 

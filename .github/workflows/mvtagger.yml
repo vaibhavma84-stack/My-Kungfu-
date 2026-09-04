@@ -1,4 +1,4 @@
-name: Build MV Tagger APK
+name: Build Media Centre APK
 
 on:
   push:
@@ -93,7 +93,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: mvtagger-latest
-          TITLE: MV Tagger v${{ github.run_number }}
+          TITLE: Media Centre v${{ github.run_number }}
         run: |
           set -euo pipefail
           cp mvtagger/app/build/outputs/apk/debug/app-debug.apk MVTagger.apk

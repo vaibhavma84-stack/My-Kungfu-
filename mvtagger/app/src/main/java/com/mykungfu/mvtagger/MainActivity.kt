@@ -75,7 +75,7 @@ class MainActivity : ComponentActivity() {
         }
 
         column.addView(TextView(this).apply {
-            setText("MV Tagger could not start")
+            setText("Media Centre could not start")
             textSize = 20f
             setTextColor(foreground)
             setTypeface(null, Typeface.BOLD)
@@ -90,7 +90,7 @@ class MainActivity : ComponentActivity() {
             setText("Copy the error")
             setOnClickListener {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("MV Tagger crash", text))
+                clipboard.setPrimaryClip(ClipData.newPlainText("Media Centre crash", text))
                 Toast.makeText(this@MainActivity, "Copied", Toast.LENGTH_SHORT).show()
             }
         })

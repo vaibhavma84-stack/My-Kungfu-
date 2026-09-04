@@ -57,7 +57,7 @@ object SearchReport {
         threshold: Double,
     ): String {
         val out = StringBuilder()
-        out.append("MV Tagger search report\n\n")
+        out.append("Media Centre search report\n\n")
         out.append("File      ").append(fileName).append('\n')
         out.append("Treated as ").append(kind.label).append('\n')
         out.append("Runs      ").append(duration(durationMs)).append('\n')

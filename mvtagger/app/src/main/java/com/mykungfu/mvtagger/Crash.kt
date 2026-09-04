@@ -10,7 +10,7 @@ import java.io.StringWriter
  * Keeps the last crash so it can be read on the phone.
  *
  * A sideloaded app has no Play Console behind it. When it dies on launch, all
- * the owner sees is "MV Tagger keeps stopping", and the stack trace -- the one
+ * the owner sees is "Media Centre keeps stopping", and the stack trace -- the one
  * thing that would explain it -- is only reachable over adb from a computer.
  *
  * So the trace is written to a file here, and [MainActivity] shows it on the
@@ -44,7 +44,7 @@ object CrashLog {
             val text = StringWriter().also { writer ->
                 writer.append(VERSION_MARKER).append(versionCode(context).toString()).append('\n')
                 note?.let { writer.append(it).append("\n\n") }
-                writer.append("MV Tagger ").append(versionOf(context)).append('\n')
+                writer.append("Media Centre ").append(versionOf(context)).append('\n')
                 writer.append("Android ").append(android.os.Build.VERSION.RELEASE)
                     .append(" (API ").append(android.os.Build.VERSION.SDK_INT.toString()).append(")\n")
                 writer.append(android.os.Build.MANUFACTURER).append(' ')
