@@ -257,6 +257,49 @@ object Saf {
     fun delete(resolver: ContentResolver, uri: Uri): Boolean =
         runCatching { DocumentsContract.deleteDocument(resolver, uri) }.getOrDefault(false)
 
+    /**
+     * Appends to a file and patches a few bytes near its front.
+     *
+     * Needed for Matroska, where the cover goes on the end and the Segment's
+     * length near the start has to be corrected to match. "rw" rather than "w"
+     * because "w" truncates, which would throw away the file being added to.
+     *
+     * Returns false if the provider will not open the file this way, which some
+     * will not -- the caller keeps what it already wrote.
+     */
+    fun appendAndPatch(
+        resolver: ContentResolver,
+        uri: Uri,
+        append: ByteArray,
+        patchAt: Long,
+        patch: ByteArray,
+    ): Boolean = runCatching {
+        resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
+            java.io.FileOutputStream(pfd.fileDescriptor).use { stream ->
+                val channel = stream.channel
+                channel.position(channel.size())
+                channel.write(java.nio.ByteBuffer.wrap(append))
+                channel.write(java.nio.ByteBuffer.wrap(patch), patchAt)
+                channel.force(true)
+            }
+            true
+        } ?: false
+    }.getOrDefault(false)
+
+    /** The first bytes of a file, for reading a header without opening it twice. */
+    fun readHead(resolver: ContentResolver, uri: Uri, count: Int): ByteArray? = runCatching {
+        resolver.openInputStream(uri)?.use { stream ->
+            val buffer = ByteArray(count)
+            var filled = 0
+            while (filled < count) {
+                val read = stream.read(buffer, filled, count - filled)
+                if (read <= 0) break
+                filled += read
+            }
+            if (filled == count) buffer else buffer.copyOf(filled)
+        }
+    }.getOrNull()
+
     fun openOutput(resolver: ContentResolver, uri: Uri): OutputStream? =
         runCatching { resolver.openOutputStream(uri, "w") }.getOrNull()
 

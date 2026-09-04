@@ -5,6 +5,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.mykungfu.mvtagger.core.FilenameParser
 import com.mykungfu.mvtagger.core.LibraryFiles
+import com.mykungfu.mvtagger.core.Matroska
 import com.mykungfu.mvtagger.core.MediaKind
 import com.mykungfu.mvtagger.core.Mp4Metadata
 import com.mykungfu.mvtagger.core.Organiser
@@ -124,6 +125,14 @@ object TagJob {
             return Outcome(false, message = "Failed: " + (e.message ?: e.toString()))
         }
 
+        // A Matroska file can hold the cover after all, even when it could not
+        // be repackaged. The files beside it are still written -- they cost a
+        // few kilobytes and every player reads them, including any that ignores
+        // an attachment.
+        val attached = !embedded && runCatching {
+            writeMatroska(context, created.uri, created.name, tags)
+        }.getOrDefault(false)
+
         if (!embedded && settings.writeSidecars) {
             runCatching {
                 writeSidecars(context, outputTree, parentId, created.name, tags, settings)
@@ -171,6 +180,9 @@ object TagJob {
                 "Converted to MP4 and tagged, saved to " + displayPath +
                         ". Nothing was re-encoded, so the picture is unchanged."
             embedded -> "Tagged and saved to " + displayPath
+            attached ->
+                "Saved to " + displayPath + ". The cover and details were attached " +
+                        "inside it, the way Matroska carries them."
             else -> {
                 val why = conversion?.reason?.takeIf { !it.startsWith("Could not read") }
                 "Saved to " + displayPath + ". " +
@@ -431,6 +443,54 @@ object TagJob {
     }
 
     /**
+     * Puts the cover and the details inside a Matroska file after all.
+     *
+     * This container was the standing exception: no place for iTunes atoms, and
+     * a repackage into MP4 that Android's muxer refuses whenever the audio is
+     * AC3, E-AC3 or DTS -- which is what television comes in. So a series ended
+     * up copied unchanged with a .jpg beside it, and "the artwork is not
+     * getting embedded" was simply true.
+     *
+     * Matroska does have somewhere: an attachment named `cover.jpg`, which is
+     * the convention Infuse, Plex, Jellyfin, Kodi and VLC all read, and a Tags
+     * element for the rest. See [Matroska] for why appending to the end of the
+     * Segment is the safe way in.
+     *
+     * Returns whether anything was written. Everything about this is
+     * conditional -- the file has to parse, the length field has to have room,
+     * the provider has to allow writing at a position -- and any of those
+     * failing leaves the copy exactly as it was, which is a working video with
+     * its details beside it rather than a broken one.
+     */
+    private fun writeMatroska(
+        context: Context,
+        target: Uri,
+        fileName: String,
+        tags: VideoTags,
+    ): Boolean {
+        if (!Matroska.isMatroska(fileName)) return false
+        val additions = Matroska.additions(tags)
+        if (additions.isEmpty()) return false
+
+        val resolver = context.contentResolver
+        val head = Saf.readHead(resolver, target, Matroska.HEAD_BYTES) ?: return false
+        val segment = Matroska.segmentOf(head) ?: return false
+        val resized = Matroska.resized(segment, additions.size.toLong()) ?: return false
+
+        if (!Saf.appendAndPatch(
+                resolver, target, additions, segment.sizeAt.toLong(), resized
+            )
+        ) return false
+
+        // Read the front back and check the file still describes itself. A
+        // length that no longer matches what is there is worse than no cover.
+        val after = Saf.readHead(resolver, target, Matroska.HEAD_BYTES)
+            ?.let { Matroska.segmentOf(it) }
+        val size = Saf.querySize(resolver, target)
+        return after != null && size != null && after.dataAt + after.size == size
+    }
+
+    /**
      * For containers with nowhere to put tags. Written next to the video with
      * the names players already look for.
      */
@@ -628,6 +688,33 @@ object TagJob {
             retriever.setDataSource(context, uri)
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull()?.toInt()
+        } catch (e: Exception) {
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    /**
+     * How big the picture is, for saying whether a file is 1080p or 4K.
+     *
+     * Read from the file rather than believed from its name: "4K" in a filename
+     * is a claim by whoever uploaded it, and an upscaled 1080p carries it just
+     * as readily as the real thing.
+     */
+    fun videoSize(context: Context, uri: Uri): Pair<Int, Int>? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            val width = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
+            val height = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
+            if (width != null && height != null && width > 0 && height > 0) {
+                width to height
+            } else {
+                null
+            }
         } catch (e: Exception) {
             null
         } finally {

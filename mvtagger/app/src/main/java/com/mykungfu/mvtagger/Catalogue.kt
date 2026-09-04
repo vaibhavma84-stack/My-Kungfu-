@@ -8,6 +8,7 @@ import com.mykungfu.mvtagger.core.Languages
 import com.mykungfu.mvtagger.core.LyricsLanguage
 import com.mykungfu.mvtagger.core.MediaClassifier
 import com.mykungfu.mvtagger.core.MediaKind
+import com.mykungfu.mvtagger.core.Resolution
 import com.mykungfu.mvtagger.core.Sidecar
 import com.mykungfu.mvtagger.core.VideoTags
 import com.mykungfu.mvtagger.core.TextScript
@@ -41,6 +42,8 @@ data class Entry(
     val folder: List<String> = emptyList(),
     /** Whether a cover was found and a thumbnail kept for it. */
     val hasArtwork: Boolean = false,
+    /** 4K, 1080p and so on, read from the picture rather than from the name. */
+    val quality: String? = null,
 ) {
     /** The line shown in the list. */
     val heading: String
@@ -225,6 +228,8 @@ object Catalogue {
             year = tags?.year ?: fromName.year,
             folder = path,
             hasArtwork = hasArtwork,
+            quality = TagJob.videoSize(context, uri)
+                ?.let { (width, height) -> Resolution.label(width, height) },
         )
     }
 
@@ -319,6 +324,7 @@ object Catalogue {
                     year = entry["year"].string,
                     folder = entry["folder"].array.mapNotNull { it.string },
                     hasArtwork = entry["art"].string == "true",
+                    quality = entry["quality"].string,
                 )
             }
         }.getOrDefault(emptyList())
@@ -344,6 +350,7 @@ object Catalogue {
             e.episode?.let { json.append(',').append(quote("episode")).append(':').append(it) }
             e.year?.let { json.append(',').append(field("year", it)) }
             if (e.hasArtwork) json.append(',').append(field("art", "true"))
+            e.quality?.let { json.append(',').append(field("quality", it)) }
             if (e.folder.isNotEmpty()) {
                 json.append(',').append(quote("folder")).append(":[")
                 json.append(e.folder.joinToString(",") { quote(it) })

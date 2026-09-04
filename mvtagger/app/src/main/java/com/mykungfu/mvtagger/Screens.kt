@@ -416,9 +416,11 @@ private fun SeriesBrowser(
     ) { viewModel.upFromFolder() }
 
     val episodes = Catalogue.episodes(state.collection, series, season)
+    // No heading: the series and the season are already above, and printing
+    // the series name a second time under itself said nothing twice.
     Shown(
         state,
-        listOf(Catalogue.Group(series, listOf(Catalogue.Section(null, episodes)))),
+        listOf(Catalogue.Group("", listOf(Catalogue.Section(null, episodes)))),
         outputTree, viewModel, onOpen,
     )
 }
@@ -609,13 +611,15 @@ private fun CollectionGrid(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         for (group in groups) {
-            item(key = "group:" + group.label, span = { GridItemSpan(maxLineSpan) }) {
-                Text(
-                    group.label + "  ·  " + group.entries.size,
-                    Modifier.padding(top = 12.dp),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+            if (group.label.isNotBlank()) {
+                item(key = "group:" + group.label, span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        group.label + "  ·  " + group.entries.size,
+                        Modifier.padding(top = 12.dp),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             for (section in group.sections) {
                 section.label?.let { label ->
@@ -655,13 +659,15 @@ private fun CollectionList(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         for (group in groups) {
-            item(key = "group:" + group.label) {
-                Text(
-                    group.label + "  ·  " + group.entries.size,
-                    Modifier.padding(top = 12.dp, bottom = 4.dp),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+            if (group.label.isNotBlank()) {
+                item(key = "group:" + group.label) {
+                    Text(
+                        group.label + "  ·  " + group.entries.size,
+                        Modifier.padding(top = 12.dp, bottom = 4.dp),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             for (section in group.sections) {
                 section.label?.let { label ->
@@ -721,6 +727,21 @@ private fun CollectionTile(
                         modifier = Modifier.size(16.dp),
                     )
                 }
+            }
+            // The badge every media app puts in this corner, and the one thing
+            // about a file you cannot tell from a small picture of it.
+            entry.quality?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = androidx.compose.ui.graphics.Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.65f))
+                        .padding(5.dp, 1.dp),
+                )
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -786,6 +807,10 @@ private fun CollectionRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+                entry.quality?.let {
+                    Spacer(Modifier.height(3.dp))
+                    Label(it)
                 }
                 if (entry.kind == MediaKind.MUSIC_VIDEO) {
                     Text(
