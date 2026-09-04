@@ -151,6 +151,13 @@ data class UiState(
     /** The file open in the player, if any. */
     val playing: Playing? = null,
     val collectionView: CollectionView = CollectionView.BROWSE,
+    /**
+     * The files picked out to be dealt with together, by document id.
+     *
+     * Empty means nothing is being selected at all, which is also what turns
+     * the ordinary tap back into playing rather than choosing.
+     */
+    val selection: Set<String> = emptySet(),
 ) {
     /** Something to come back out of, for the back button and the heading. */
     val insideFolder: Boolean get() = collectionFolder != null
@@ -463,6 +470,177 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * every field work as they do for a new file; only saving differs, and that
      * is [Detail.editingExisting].
      */
+    /** A collection entry as the rest of the app handles a file. */
+    private fun itemFor(entry: Entry, tree: Uri) = Item(
+        id = "collection|" + entry.documentId,
+        treeUri = tree,
+        documentId = entry.documentId,
+        parentDocumentId = entry.parentDocumentId,
+        name = entry.name,
+        size = entry.size,
+        kind = entry.kind,
+        guess = entry.heading,
+        status = ItemStatus.SAVED,
+    )
+
+    /**
+     * What a finished file says about itself.
+     *
+     * Inside it first, then the .json beside it, which is the only record a
+     * container that cannot hold tags has.
+     */
+    private fun tagsOf(item: Item, tree: Uri, kind: MediaKind): VideoTags {
+        val app = getApplication<Application>()
+        return TagJob.readExisting(app, item.uri, item.name).takeIf { !it.isEmpty }
+            ?: Catalogue.sidecarTags(app, tree, item.parentDocumentId, item.name)
+            ?: VideoTags(mediaKind = kind)
+    }
+
+    // --- more than one at a time ---------------------------------------------
+
+    fun toggleSelected(documentId: String) {
+        val now = _state.value.selection
+        _state.value = _state.value.copy(
+            selection = if (documentId in now) now - documentId else now + documentId,
+        )
+    }
+
+    fun clearSelection() {
+        _state.value = _state.value.copy(selection = emptySet())
+    }
+
+    fun selectAll(entries: List<Entry>) {
+        _state.value = _state.value.copy(selection = entries.map { it.documentId }.toSet())
+    }
+
+    private fun selected(): List<Entry> {
+        val chosen = _state.value.selection
+        return _state.value.collection.filter { it.documentId in chosen }
+    }
+
+    /**
+     * The same change to every file picked out.
+     *
+     * Each one is a full rewrite -- the details live inside the file, so there
+     * is no smaller edit to make -- which is why this says how far it has got
+     * rather than appearing to hang for several minutes.
+     */
+    private fun applyToSelection(
+        what: String,
+        change: (Entry, VideoTags) -> VideoTags?,
+    ) = viewModelScope.launch {
+        val tree = settings.outputUri
+        val files = selected()
+        if (tree == null || files.isEmpty()) {
+            _state.value = _state.value.copy(message = "Nothing is selected.")
+            return@launch
+        }
+
+        var done = 0
+        var failed = 0
+        for ((index, entry) in files.withIndex()) {
+            _state.value = _state.value.copy(
+                busy = what + " " + (index + 1) + " of " + files.size + "…"
+            )
+            val ok = withContext(Dispatchers.IO) {
+                val item = itemFor(entry, tree)
+                val wanted = change(entry, tagsOf(item, tree, entry.kind))
+                    ?: return@withContext true
+                TagJob.retag(
+                    context = getApplication<Application>(),
+                    outputTree = tree,
+                    documentId = entry.documentId,
+                    parentDocumentId = entry.parentDocumentId,
+                    currentName = entry.name,
+                    tags = wanted,
+                    settings = settings,
+                ).ok
+            }
+            if (ok) done++ else failed++
+        }
+
+        _state.value = _state.value.copy(busy = null, selection = emptySet())
+        scanCollection()
+        _state.value = _state.value.copy(
+            message = done.toString() + " changed" +
+                    (if (failed > 0) ", " + failed + " could not be" else "") + "."
+        )
+    }
+
+    fun batchSetLanguage(code: String?) =
+        applyToSelection("Setting the language on") { _, tags -> tags.copy(language = code) }
+
+    fun batchSetArtist(name: String) =
+        applyToSelection("Setting the artist on") { _, tags ->
+            name.trim().ifBlank { null }?.let { tags.copy(artist = it) }
+        }
+
+    /**
+     * Looks up everything picked out, and applies only what it is sure of.
+     *
+     * Deliberately stricter than doing one by hand. Looking at a match and
+     * taking it is a decision; twenty of them unattended is a decision nobody
+     * made, so anything under the threshold is left exactly as it was and
+     * counted, rather than applied and discovered later.
+     */
+    fun batchLookup() = viewModelScope.launch {
+        val tree = settings.outputUri
+        val files = selected()
+        if (tree == null || files.isEmpty()) {
+            _state.value = _state.value.copy(message = "Nothing is selected.")
+            return@launch
+        }
+
+        var applied = 0
+        var unsure = 0
+        var failed = 0
+
+        for ((index, entry) in files.withIndex()) {
+            _state.value = _state.value.copy(
+                busy = "Looking up " + (index + 1) + " of " + files.size + "…"
+            )
+            val outcome = withContext(Dispatchers.IO) {
+                val app = getApplication<Application>()
+                val item = itemFor(entry, tree)
+                val detail = Detail(
+                    item,
+                    seedFromName(item, tagsOf(item, tree, entry.kind)),
+                    durationMs = TagJob.durationMs(app, item.uri),
+                    editingExisting = true,
+                )
+                val (ranked, alternatives) = search(detail)
+                val best = ranked.firstOrNull()
+                if (best == null || best.score < settings.autoApplyThreshold) {
+                    null
+                } else {
+                    val enriched = enrich(detail.copy(alternatives = alternatives), best.candidate)
+                    TagJob.retag(
+                        context = app,
+                        outputTree = tree,
+                        documentId = entry.documentId,
+                        parentDocumentId = entry.parentDocumentId,
+                        currentName = entry.name,
+                        tags = enriched.tags,
+                        settings = settings,
+                    )
+                }
+            }
+            when {
+                outcome == null -> unsure++
+                outcome.ok -> applied++
+                else -> failed++
+            }
+        }
+
+        _state.value = _state.value.copy(busy = null, selection = emptySet())
+        scanCollection()
+        _state.value = _state.value.copy(
+            message = applied.toString() + " updated, " + unsure +
+                    " not sure enough to change on their own" +
+                    (if (failed > 0) ", " + failed + " failed" else "") + "."
+        )
+    }
+
     fun openCollectionEntry(entry: Entry) = viewModelScope.launch {
         val tree = settings.outputUri
         if (tree == null) {
@@ -475,17 +653,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             )
             return@launch
         }
-        val item = Item(
-            id = "collection|" + entry.documentId,
-            treeUri = tree,
-            documentId = entry.documentId,
-            parentDocumentId = entry.parentDocumentId,
-            name = entry.name,
-            size = entry.size,
-            kind = entry.kind,
-            guess = entry.heading,
-            status = ItemStatus.SAVED,
-        )
+        val item = itemFor(entry, tree)
         _state.value = _state.value.copy(
             detail = Detail(
                 item, VideoTags(mediaKind = entry.kind),
@@ -493,15 +661,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             )
         )
         val loaded = withContext(Dispatchers.IO) {
-            val app = getApplication<Application>()
-            // Inside the file, then the .json beside it. Without the second,
-            // opening a corrected MKV a second time would start from the
-            // filename again and quietly undo the first correction.
-            val existing = TagJob.readExisting(app, item.uri, item.name)
-                .takeIf { !it.isEmpty }
-                ?: Catalogue.sidecarTags(app, tree, item.parentDocumentId, item.name)
-                ?: VideoTags(mediaKind = entry.kind)
-            existing to TagJob.durationMs(app, item.uri)
+            tagsOf(item, tree, entry.kind) to
+                    TagJob.durationMs(getApplication<Application>(), item.uri)
         }
         _state.value = _state.value.copy(
             detail = Detail(

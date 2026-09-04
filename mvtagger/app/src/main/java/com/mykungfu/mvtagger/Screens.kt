@@ -7,7 +7,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,6 +47,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -265,6 +269,10 @@ private fun CollectionContent(
 ) {
     val outputTree = state.settings.outputUri
 
+    if (state.selection.isNotEmpty()) {
+        SelectionBar(state, viewModel)
+    }
+
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(16.dp, 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -393,9 +401,9 @@ private fun Shown(
     onOpen: (Uri, String) -> Unit,
 ) {
     if (state.settings.collectionAsGrid) {
-        CollectionGrid(groups, state.collectionKind, outputTree, viewModel, onOpen)
+        CollectionGrid(state, groups, state.collectionKind, outputTree, viewModel, onOpen)
     } else {
-        CollectionList(groups, outputTree, viewModel, onOpen)
+        CollectionList(state, groups, outputTree, viewModel, onOpen)
     }
 }
 
@@ -629,6 +637,124 @@ private fun CopyRow(entry: Entry, best: Boolean, onPlay: () -> Unit, onEdit: () 
     }
 }
 
+/**
+ * What to do with the files that have been picked out.
+ *
+ * The whole point of choosing several is that the same answer applies to all
+ * of them: twenty songs that came out under the wrong language, one artist
+ * spelled two ways. Doing that one pencil at a time is the work this removes.
+ *
+ * "Auto-tag everything new" on the other tab is untouched and still does what
+ * it did. This is the same idea pointed at files that are already finished and
+ * chosen by hand rather than at everything waiting.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SelectionBar(state: UiState, viewModel: AppViewModel) {
+    var languageMenu by remember { mutableStateOf(false) }
+    var artistDialog by remember { mutableStateOf(false) }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(12.dp, 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                state.selection.size.toString() + " chosen",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { viewModel.clearSelection() }) { Text("Clear") }
+        }
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(
+                onClick = { viewModel.batchLookup() },
+                enabled = state.busy == null,
+            ) {
+                Icon(Icons.Default.Search, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Look up")
+            }
+
+            Box {
+                OutlinedButton(
+                    onClick = { languageMenu = true },
+                    enabled = state.busy == null,
+                ) { Text("Language") }
+                DropdownMenu(
+                    expanded = languageMenu,
+                    onDismissRequest = { languageMenu = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Not set") },
+                        onClick = {
+                            languageMenu = false
+                            viewModel.batchSetLanguage(null)
+                        },
+                    )
+                    for (language in Languages.ALL) {
+                        DropdownMenuItem(
+                            text = { Text(language.english + "  " + language.native) },
+                            onClick = {
+                                languageMenu = false
+                                viewModel.batchSetLanguage(language.code)
+                            },
+                        )
+                    }
+                }
+            }
+
+            OutlinedButton(
+                onClick = { artistDialog = true },
+                enabled = state.busy == null,
+            ) { Text("Artist") }
+        }
+
+        Text(
+            "Each one is rewritten, which takes about as long as copying it. " +
+                    "A lookup only applies what it is sure of and says how many it " +
+                    "left alone.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+
+    if (artistDialog) {
+        var typed by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { artistDialog = false },
+            title = { Text("Artist for " + state.selection.size + " files") },
+            text = {
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = { typed = it },
+                    label = { Text("Artist") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        artistDialog = false
+                        viewModel.batchSetArtist(typed)
+                    },
+                    enabled = typed.isNotBlank(),
+                ) { Text("Set it") }
+            },
+            dismissButton = {
+                TextButton(onClick = { artistDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
 /** One openable thing on a shelf: an artist, a film, a series, a season. */
 private data class ShelfItem(
     val key: String,
@@ -781,6 +907,7 @@ private fun NothingHere(state: UiState) {
  */
 @Composable
 private fun CollectionGrid(
+    state: UiState,
     groups: List<Catalogue.Group>,
     kind: MediaKind,
     outputTree: Uri?,
@@ -825,8 +952,11 @@ private fun CollectionGrid(
                     CollectionTile(
                         entry,
                         aspect = aspect,
+                        selected = entry.documentId in state.selection,
+                        selecting = state.selection.isNotEmpty(),
                         onPlay = { play(viewModel, outputTree, entry) },
                         onEdit = { viewModel.openCollectionEntry(entry) },
+                        onToggle = { viewModel.toggleSelected(entry.documentId) },
                     )
                 }
             }
@@ -836,6 +966,7 @@ private fun CollectionGrid(
 
 @Composable
 private fun CollectionList(
+    state: UiState,
     groups: List<Catalogue.Group>,
     outputTree: Uri?,
     viewModel: AppViewModel,
@@ -873,8 +1004,11 @@ private fun CollectionList(
                         subheading = entry.subheadingExcluding(
                             listOf(group.label, section.label)
                         ),
+                        selected = entry.documentId in state.selection,
+                        selecting = state.selection.isNotEmpty(),
                         onPlay = { play(viewModel, outputTree, entry) },
                         onEdit = { viewModel.openCollectionEntry(entry) },
+                        onToggle = { viewModel.toggleSelected(entry.documentId) },
                     )
                 }
             }
@@ -890,16 +1024,30 @@ private fun CollectionList(
  * that could be any colour.
  */
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun CollectionTile(
     entry: Entry,
     aspect: Float,
+    selected: Boolean,
+    selecting: Boolean,
     onPlay: () -> Unit,
     onEdit: () -> Unit,
+    onToggle: () -> Unit,
 ) {
-    Column(Modifier.clickable(onClick = onPlay)) {
+    Column(
+        Modifier.combinedClickable(
+            onClick = { if (selecting) onToggle() else onPlay() },
+            onLongClick = onToggle,
+        )
+    ) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(aspect).clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .then(
+                    if (selected) Modifier.border(
+                        3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp)
+                    ) else Modifier
+                ),
             contentAlignment = Alignment.Center,
         ) {
             CoverImage(entry, Modifier.fillMaxSize(), MaterialTheme.typography.headlineSmall)
@@ -964,15 +1112,33 @@ private fun plural(kind: MediaKind): String = when (kind) {
  * corrected. Two things one tap apart, because both are wanted often and
  * neither should need a menu.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun CollectionRow(
     entry: Entry,
     subheading: String?,
+    selected: Boolean,
+    selecting: Boolean,
     onPlay: () -> Unit,
     onEdit: () -> Unit,
+    onToggle: () -> Unit,
 ) {
-    Card(onClick = onPlay, modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (selected) Modifier.border(
+                    2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)
+                ) else Modifier
+            )
+            // Holding a row starts choosing; once choosing, a tap chooses too,
+            // because reaching for a long press twenty times is the thing this
+            // was meant to save.
+            .combinedClickable(
+                onClick = { if (selecting) onToggle() else onPlay() },
+                onLongClick = onToggle,
+            ),
+    ) {
         Row(
             Modifier.padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
