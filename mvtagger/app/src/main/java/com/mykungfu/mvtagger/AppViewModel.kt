@@ -109,6 +109,15 @@ data class Detail(
 /** The two things the app is for: work to do, and what has been done. */
 enum class MainTab { TO_DO, COLLECTION }
 
+/**
+ * Which way the finished library is being looked at.
+ *
+ * Browsing is the shelf. The other two are questions about the whole
+ * collection rather than a way through it, which is why they are a mode and
+ * not another folder.
+ */
+enum class CollectionView { BROWSE, DUPLICATES, IPAD }
+
 /** A file handed to the player, and enough to label it while it runs. */
 data class Playing(val uri: Uri, val title: String, val mimeType: String)
 
@@ -141,6 +150,7 @@ data class UiState(
     val collectionSeason: Int? = null,
     /** The file open in the player, if any. */
     val playing: Playing? = null,
+    val collectionView: CollectionView = CollectionView.BROWSE,
 ) {
     /** Something to come back out of, for the back button and the heading. */
     val insideFolder: Boolean get() = collectionFolder != null
@@ -196,6 +206,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(
             collectionKind = kind,
             collectionLanguage = null,
+            collectionFolder = null,
+            collectionSeason = null,
+            collectionView = CollectionView.BROWSE,
+        )
+    }
+
+    fun showCollectionView(view: CollectionView) {
+        _state.value = _state.value.copy(
+            collectionView = view,
             collectionFolder = null,
             collectionSeason = null,
         )

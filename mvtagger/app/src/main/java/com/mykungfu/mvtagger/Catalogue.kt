@@ -2,13 +2,13 @@ package com.mykungfu.mvtagger
 
 import android.content.Context
 import android.net.Uri
+import com.mykungfu.mvtagger.core.Duplicates
 import com.mykungfu.mvtagger.core.FilenameParser
 import com.mykungfu.mvtagger.core.Json
 import com.mykungfu.mvtagger.core.Languages
 import com.mykungfu.mvtagger.core.LyricsLanguage
 import com.mykungfu.mvtagger.core.MediaClassifier
 import com.mykungfu.mvtagger.core.MediaKind
-import com.mykungfu.mvtagger.core.Resolution
 import com.mykungfu.mvtagger.core.Sidecar
 import com.mykungfu.mvtagger.core.VideoTags
 import com.mykungfu.mvtagger.core.TextScript
@@ -44,6 +44,13 @@ data class Entry(
     val hasArtwork: Boolean = false,
     /** 4K, 1080p and so on, read from the picture rather than from the name. */
     val quality: String? = null,
+    /**
+     * The short reason this file will struggle on an iPad, or null when it
+     * will not. Read from its codecs, which is the only place the answer is.
+     */
+    val appleWarning: String? = null,
+    /** The long edge in pixels, for telling two copies of the same thing apart. */
+    val pixels: Int = 0,
 ) {
     /** The line shown in the list. */
     val heading: String
@@ -175,6 +182,9 @@ object Catalogue {
         path: List<String>,
     ): Entry {
         val uri = Saf.documentUri(tree, doc.documentId)
+        // One pass over the tracks answers both what size the picture is and
+        // whether an iPad can decode it, so the scan pays for it once.
+        val streams = Probe.of(context, uri)
         // Inside the file first. For a container that cannot hold tags at all,
         // the .json written beside it is the only record there is -- and until
         // this read it, a correction to an MKV episode was written and then
@@ -228,8 +238,9 @@ object Catalogue {
             year = tags?.year ?: fromName.year,
             folder = path,
             hasArtwork = hasArtwork,
-            quality = TagJob.videoSize(context, uri)
-                ?.let { (width, height) -> Resolution.label(width, height) },
+            quality = streams?.quality,
+            appleWarning = streams?.appleWarning,
+            pixels = streams?.longEdge ?: 0,
         )
     }
 
@@ -325,6 +336,8 @@ object Catalogue {
                     folder = entry["folder"].array.mapNotNull { it.string },
                     hasArtwork = entry["art"].string == "true",
                     quality = entry["quality"].string,
+                    appleWarning = entry["ipad"].string,
+                    pixels = entry["pixels"].int ?: 0,
                 )
             }
         }.getOrDefault(emptyList())
@@ -351,6 +364,10 @@ object Catalogue {
             e.year?.let { json.append(',').append(field("year", it)) }
             if (e.hasArtwork) json.append(',').append(field("art", "true"))
             e.quality?.let { json.append(',').append(field("quality", it)) }
+            e.appleWarning?.let { json.append(',').append(field("ipad", it)) }
+            if (e.pixels > 0) {
+                json.append(',').append(quote("pixels")).append(':').append(e.pixels)
+            }
             if (e.folder.isNotEmpty()) {
                 json.append(',').append(quote("folder")).append(":[")
                 json.append(e.folder.joinToString(",") { quote(it) })
@@ -536,6 +553,27 @@ object Catalogue {
             .filter { it.season == wanted }
             .sortedWith(compareBy({ it.episode ?: Int.MAX_VALUE }, { sortKey(it) }))
     }
+
+    /** The same thing more than once, and which copy is the better one. */
+    fun duplicates(entries: List<Entry>): List<Duplicates.Group<Entry>> =
+        Duplicates.find(entries) {
+            Duplicates.Item(
+                kind = it.kind,
+                title = it.title,
+                artist = it.artist,
+                album = it.album,
+                showName = it.showName,
+                season = it.season,
+                episode = it.episode,
+                year = it.year,
+                pixels = it.pixels,
+                bytes = it.size,
+            )
+        }
+
+    /** Everything that will struggle on an iPad, worst first. */
+    fun troubleOnIpad(entries: List<Entry>): List<Entry> =
+        entries.filter { it.appleWarning != null }.sortedByDescending { it.pixels }
 
     /** Languages present among the music videos, most files first. */
     fun languagesPresent(entries: List<Entry>): List<Pair<String?, Int>> =

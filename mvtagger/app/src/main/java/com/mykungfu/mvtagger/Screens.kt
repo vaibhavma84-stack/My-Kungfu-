@@ -272,9 +272,29 @@ private fun CollectionContent(
         for (kind in MediaKind.entries) {
             val count = Catalogue.count(state.collection, kind)
             FilterChip(
-                selected = state.collectionKind == kind,
+                selected = state.collectionView == CollectionView.BROWSE &&
+                        state.collectionKind == kind,
                 onClick = { viewModel.setCollectionKind(kind) },
                 label = { Text(plural(kind) + "  " + count) },
+            )
+        }
+
+        // Two questions about the whole collection rather than a way through
+        // it, which is why they sit beside the kinds rather than inside one.
+        val duplicates = remember(state.collection) { Catalogue.duplicates(state.collection) }
+        if (duplicates.isNotEmpty()) {
+            FilterChip(
+                selected = state.collectionView == CollectionView.DUPLICATES,
+                onClick = { viewModel.showCollectionView(CollectionView.DUPLICATES) },
+                label = { Text("Twice over  " + duplicates.size) },
+            )
+        }
+        val trouble = remember(state.collection) { Catalogue.troubleOnIpad(state.collection) }
+        if (trouble.isNotEmpty()) {
+            FilterChip(
+                selected = state.collectionView == CollectionView.IPAD,
+                onClick = { viewModel.showCollectionView(CollectionView.IPAD) },
+                label = { Text("iPad trouble  " + trouble.size) },
             )
         }
     }
@@ -308,6 +328,18 @@ private fun CollectionContent(
                 }
             }
         }
+    }
+
+    when (state.collectionView) {
+        CollectionView.DUPLICATES -> {
+            DuplicatesView(state, viewModel, outputTree)
+            return
+        }
+        CollectionView.IPAD -> {
+            IpadTroubleView(state, viewModel, outputTree)
+            return
+        }
+        CollectionView.BROWSE -> Unit
     }
 
     if (state.collectionKind == MediaKind.TV_EPISODE) {
@@ -439,6 +471,161 @@ private fun play(viewModel: AppViewModel, outputTree: Uri?, entry: Entry) {
             entry.heading,
             Saf.mimeForName(entry.name),
         )
+    }
+}
+
+/**
+ * The same thing, more than once.
+ *
+ * Two headings rather than one, because they are different decisions. Two
+ * copies of the same size are waste and one of them can go. A 4K beside a
+ * 1080p is an upgrade -- a choice already made, where what is wanted is
+ * usually to drop the smaller one, but not always, and not without being told
+ * which is which.
+ *
+ * Nothing is deleted from here. The copies are listed with their sizes and
+ * where they live, and what to do about them is left to the person who knows
+ * why there are two.
+ */
+@Composable
+private fun DuplicatesView(state: UiState, viewModel: AppViewModel, outputTree: Uri?) {
+    val groups = remember(state.collection) { Catalogue.duplicates(state.collection) }
+    if (groups.isEmpty()) {
+        Text(
+            "Nothing appears twice.",
+            Modifier.padding(24.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 24.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        for (group in groups) {
+            item(key = "dup:" + group.label) {
+                Column(Modifier.padding(top = 14.dp, bottom = 2.dp)) {
+                    Text(
+                        group.label,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        if (group.isUpgrade) {
+                            "A better copy of the same thing — the larger is first."
+                        } else {
+                            "The same thing twice, at the same size."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            items(group.copies, key = { it.documentId }) { entry ->
+                CopyRow(
+                    entry,
+                    best = entry.documentId == group.best.documentId && group.isUpgrade,
+                    onPlay = { play(viewModel, outputTree, entry) },
+                    onEdit = { viewModel.openCollectionEntry(entry) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Everything that will struggle on an iPad, and why.
+ *
+ * An iPad has silicon for H.264 and HEVC and nothing else, so a VP9 or AV1 or
+ * ten-bit H.264 file is decoded by the processor whatever app opens it. At 720p
+ * nobody notices; at 4K it stutters and empties the battery, which is what
+ * "Infuse does not read 4K files like VLC" actually is.
+ *
+ * Worth knowing before copying forty gigabytes across rather than after.
+ */
+@Composable
+private fun IpadTroubleView(state: UiState, viewModel: AppViewModel, outputTree: Uri?) {
+    val trouble = remember(state.collection) { Catalogue.troubleOnIpad(state.collection) }
+    if (trouble.isEmpty()) {
+        Text(
+            "Everything here decodes on an iPad without help.",
+            Modifier.padding(24.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 24.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        item(key = "ipad:why") {
+            Text(
+                "These are decoded by the processor rather than the chip, so on an " +
+                        "iPad they stutter and drain the battery. VLC and nPlayer manage " +
+                        "them; Infuse leans on the hardware and will not. Re-downloading " +
+                        "one as H.264 or H.265 is the fix — nothing here can re-encode a " +
+                        "video without ruining it.",
+                Modifier.padding(top = 8.dp, bottom = 6.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        items(trouble, key = { it.documentId }) { entry ->
+            CopyRow(
+                entry,
+                best = false,
+                onPlay = { play(viewModel, outputTree, entry) },
+                onEdit = { viewModel.openCollectionEntry(entry) },
+            )
+        }
+    }
+}
+
+/** A row that says where a file is and what it is, for the two lists above. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CopyRow(entry: Entry, best: Boolean, onPlay: () -> Unit, onEdit: () -> Unit) {
+    Card(onClick = onPlay, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Thumbnail(entry)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    entry.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    entry.folder.joinToString("/").ifBlank { "the output folder" },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    entry.quality?.let { Label(it) }
+                    if (entry.size > 0) Label(readableSize(entry.size))
+                    if (best) Label("keep this one")
+                }
+                entry.appleWarning?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        it + " — decoded in software on an iPad",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Default.Edit, contentDescription = "Correct the details")
+            }
+        }
     }
 }
 
