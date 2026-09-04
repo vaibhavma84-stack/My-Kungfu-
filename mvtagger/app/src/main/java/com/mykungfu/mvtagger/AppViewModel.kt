@@ -248,12 +248,57 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { Catalogue.scan(getApplication<Application>(), tree) }
                 .getOrDefault(emptyList())
         }
+        /*
+           Whatever was open may not be there any more.
+
+           Correcting an episode almost always changes the series name, the
+           season or the title, and all three move the file: the folder being
+           looked at empties out and keeps its old heading. That reads exactly
+           like a correction that did not save -- the screen is unchanged
+           because the thing that changed is somewhere else. So a folder that
+           has gone is stepped out of rather than stared at.
+        */
+        val before = _state.value
+        var folder = before.collectionFolder
+        var season = before.collectionSeason
+        var moved = false
+
+        val open = folder
+        if (open != null) {
+            val shelf = if (before.collectionKind == MediaKind.TV_EPISODE) {
+                Catalogue.series(found).map { it.first }
+            } else {
+                Catalogue.group(found, before.collectionKind, before.collectionLanguage)
+                    .map { it.label }
+            }
+            if (open !in shelf) {
+                folder = null
+                season = null
+                moved = true
+            } else if (season != null && before.collectionKind == MediaKind.TV_EPISODE) {
+                val seasons = Catalogue.seasons(found, open)
+                    .map { it.first ?: Catalogue.SEASON_UNKNOWN }
+                if (season !in seasons) {
+                    season = null
+                    moved = true
+                }
+            }
+        }
+
         _state.value = _state.value.copy(
             collection = found,
             collectionScanned = true,
+            collectionFolder = folder,
+            collectionSeason = season,
             busy = null,
-            message = if (found.isEmpty())
-                "Nothing in the output folder yet." else null,
+            message = when {
+                found.isEmpty() -> "Nothing in the output folder yet."
+                // Said out loud, because otherwise being bounced up a level
+                // looks like the app losing its place rather than following
+                // the file to where it now lives.
+                moved -> "That file has moved, so this is the list it is in now."
+                else -> null
+            },
         )
     }
 
