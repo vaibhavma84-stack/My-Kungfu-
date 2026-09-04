@@ -1,0 +1,10 @@
+<resources>
+    <!-- The app draws its own dark interface in Compose. Matching the window
+         background here stops a white flash between tapping the icon and the
+         first frame. -->
+    <style name="Theme.Grabber" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+    </style>
+</resources>
