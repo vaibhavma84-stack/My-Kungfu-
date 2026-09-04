@@ -53,6 +53,15 @@ data class Settings(
     val openSubtitlesPassword: String = "",
     /** Comma-separated language codes, best first. */
     val subtitleLanguages: String = "en",
+    /**
+     * Delete the original once the new file is confirmed good.
+     *
+     * Off by default and deliberately so: it is the only thing this app does
+     * that cannot be undone. Everything else writes a new file and leaves the
+     * source alone, so a bad match costs a delete; with this on, a bad match
+     * costs the video.
+     */
+    val deleteOriginalAfterSaving: Boolean = false,
 ) {
     val subtitleLanguageList: List<String>
         get() = subtitleLanguages.split(',', ' ')
@@ -108,6 +117,7 @@ class Store(context: Context) {
         openSubtitlesUsername = prefs.getString(KEY_OS_USER, "") ?: "",
         openSubtitlesPassword = prefs.getString(KEY_OS_PASS, "") ?: "",
         subtitleLanguages = prefs.getString(KEY_SUB_LANGS, null) ?: "en",
+        deleteOriginalAfterSaving = prefs.getBoolean(KEY_DELETE_ORIGINAL, false),
     )
 
     fun save(settings: Settings) {
@@ -133,6 +143,7 @@ class Store(context: Context) {
             putString(KEY_OS_USER, settings.openSubtitlesUsername)
             putString(KEY_OS_PASS, settings.openSubtitlesPassword)
             putString(KEY_SUB_LANGS, settings.subtitleLanguages)
+            putBoolean(KEY_DELETE_ORIGINAL, settings.deleteOriginalAfterSaving)
         }.apply()
     }
 
@@ -179,5 +190,6 @@ class Store(context: Context) {
         const val KEY_OS_USER = "openSubtitlesUsername"
         const val KEY_OS_PASS = "openSubtitlesPassword"
         const val KEY_SUB_LANGS = "subtitleLanguages"
+        const val KEY_DELETE_ORIGINAL = "deleteOriginalAfterSaving"
     }
 }

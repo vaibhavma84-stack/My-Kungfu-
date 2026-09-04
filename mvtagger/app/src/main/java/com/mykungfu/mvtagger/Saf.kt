@@ -200,6 +200,12 @@ object Saf {
         return Created(uri, actual)
     }
 
+    /** Size in bytes, or null if the provider will not say. */
+    fun querySize(resolver: ContentResolver, uri: Uri): Long? =
+        resolver.query(
+            uri, arrayOf(DocumentsContract.Document.COLUMN_SIZE), null, null, null
+        )?.use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null }
+
     fun queryName(resolver: ContentResolver, uri: Uri): String? =
         resolver.query(
             uri, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null

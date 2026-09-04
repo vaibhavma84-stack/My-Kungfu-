@@ -453,8 +453,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         store.recordOutcome(detail.item.id, status, outcome.message)
         _state.value = _state.value.copy(
             detail = if (outcome.ok) null else detail.copy(loading = null),
-            items = _state.value.items.map {
-                if (it.id == detail.item.id) it.copy(status = status, note = outcome.message) else it
+            // A deleted original is no longer there to open, so it leaves the
+            // list rather than sitting in it as a row that cannot be tapped.
+            items = if (outcome.deletedOriginal) {
+                _state.value.items.filterNot { it.id == detail.item.id }
+            } else {
+                _state.value.items.map {
+                    if (it.id == detail.item.id) {
+                        it.copy(status = status, note = outcome.message)
+                    } else it
+                }
             },
             message = outcome.message,
         )
@@ -519,8 +527,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val note = outcome?.message ?: "Not sure enough to do this one automatically."
             store.recordOutcome(item.id, status, note)
             _state.value = _state.value.copy(
-                items = _state.value.items.map {
-                    if (it.id == item.id) it.copy(status = status, note = note) else it
+                items = if (outcome?.deletedOriginal == true) {
+                    _state.value.items.filterNot { it.id == item.id }
+                } else {
+                    _state.value.items.map {
+                        if (it.id == item.id) it.copy(status = status, note = note) else it
+                    }
                 }
             )
         }

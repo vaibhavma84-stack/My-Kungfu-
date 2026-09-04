@@ -39,6 +39,8 @@ object TagJob {
         val embedded: Boolean = false,
         /** True when the file was repackaged into MP4 on the way. */
         val converted: Boolean = false,
+        /** True when the original was deleted afterwards. */
+        val deletedOriginal: Boolean = false,
         val message: String,
     )
 
@@ -135,6 +137,20 @@ object TagJob {
             }
         }
 
+        // Only now, with the new file written and checked, is it safe to
+        // consider removing the old one.
+        val deleted = settings.deleteOriginalAfterSaving &&
+                created.uri != sourceUri &&
+                verifyWritten(context, created.uri, sourceUri, embedded, tags) &&
+                Saf.delete(resolver, sourceUri)
+
+        val deleteNote = when {
+            deleted -> " The original was deleted."
+            settings.deleteOriginalAfterSaving ->
+                " The original was KEPT: the new file could not be verified."
+            else -> ""
+        }
+
         val subtitleNote = subtitles?.takeIf { !it.isEmpty }?.let {
             " Subtitles added (" + it.cues.size + " lines" +
                 (it.source?.let { where -> ", from " + where } ?: "") + ")."
@@ -152,11 +168,58 @@ object TagJob {
                         " cannot hold tags inside it, so the details were written " +
                         "alongside." + (why?.let { " " + it } ?: "")
             }
-        } + subtitleNote
+        } + subtitleNote + deleteNote
         return Outcome(
             ok = true, path = displayPath, embedded = embedded,
-            converted = converting, message = message,
+            converted = converting, deletedOriginal = deleted, message = message,
         )
+    }
+
+    /**
+     * Whether the new file is genuinely good enough to delete the old one for.
+     *
+     * "The save reported success" is not enough. A provider can report a write
+     * that did not land, and a truncated file looks like a file. Deleting the
+     * original is the one irreversible thing this app does, so it is gated on
+     * evidence rather than on the absence of an error:
+     *
+     * - the new file exists and the provider will state its size;
+     * - that size is in the right region -- not zero, and not a fraction of the
+     *   original, which is what a half-written copy looks like;
+     * - and where tags were written into it, the file is opened again and its
+     *   metadata read back, which only succeeds if the box structure survived.
+     *
+     * Anything short of all three keeps the original. A stray copy is a
+     * nuisance; a deleted video is gone.
+     */
+    private fun verifyWritten(
+        context: Context,
+        target: Uri,
+        source: Uri,
+        embedded: Boolean,
+        tags: VideoTags,
+    ): Boolean {
+        val resolver = context.contentResolver
+        val written = Saf.querySize(resolver, target) ?: return false
+        if (written <= 0) return false
+
+        val original = Saf.querySize(resolver, source)
+        if (original != null && original > 0) {
+            // Repackaging legitimately loses subtitle and attachment tracks, so
+            // some shrinkage is expected; half the size is not.
+            if (written < original / 2) return false
+        }
+
+        if (!embedded) return true
+
+        // Reading the tags back proves the box tree is walkable, which is the
+        // thing that would be broken if the write went wrong.
+        return runCatching {
+            Saf.UriSource(resolver, target).use { Mp4Metadata.read(it) }
+        }.map { back ->
+            val wanted = tags.title?.trim()
+            wanted.isNullOrEmpty() || back.title?.trim() == wanted
+        }.getOrDefault(false)
     }
 
     /**

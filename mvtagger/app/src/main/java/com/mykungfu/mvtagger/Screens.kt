@@ -796,6 +796,29 @@ private fun SettingsScreen(
             }
 
             HorizontalDivider()
+            Text("After saving", style = MaterialTheme.typography.titleMedium)
+            Toggle(
+                "Delete the original once the new file is saved",
+                settings.deleteOriginalAfterSaving,
+            ) { viewModel.applySettings(settings.copy(deleteOriginalAfterSaving = it)) }
+            Text(
+                if (settings.deleteOriginalAfterSaving)
+                    "ON. This is the one thing here that cannot be undone. The " +
+                            "original is deleted only after the new file is checked: it " +
+                            "must exist, be a sensible size, and -- where tags went " +
+                            "inside it -- open and read back correctly. If any of that " +
+                            "fails the original is kept and the app says so."
+                else
+                    "Off. Your originals are left exactly as they are, and every " +
+                            "result is a new file in the output folder. Turn this on " +
+                            "only once you are happy with how the files are coming out.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (settings.deleteOriginalAfterSaving)
+                    MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            HorizontalDivider()
             OutlinedButton(onClick = { viewModel.forgetProgress() }) {
                 Text("Forget what has been done")
             }

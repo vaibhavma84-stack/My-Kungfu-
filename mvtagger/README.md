@@ -36,9 +36,18 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
 - **Renames and organises.** You choose the pattern; the tidied copy goes into
   the output folder under `Music Videos/Artist/`, `Movies/Title (Year)/` or
   `TV Shows/Series/Season 01/`.
+- **Optionally clears up after itself.** A setting deletes each original once
+  its replacement has been verified. Off by default; see below.
 
-**Your originals are never modified or moved.** Every result is a new file in
-the output folder, so a wrong match costs you a delete and nothing else.
+**Your originals are never modified.** Every result is a new file in the output
+folder, so a wrong match costs you a delete and nothing else.
+
+They are not deleted either, unless you ask. **Delete the original once the new
+file is saved** in Settings is off by default and is the only thing here that
+cannot be undone. With it on, the original is removed only after the new file
+has been checked -- it must exist, be a sensible size, and, where tags went
+inside it, open again and read back correctly. If any of those fail the
+original is kept and the app tells you so.
 
 ## Which files it can work with
 
