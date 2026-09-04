@@ -85,6 +85,9 @@ data class Detail(
     )
 }
 
+/** The two things the app is for: work to do, and what has been done. */
+enum class MainTab { TO_DO, COLLECTION }
+
 data class UiState(
     val settings: Settings = Settings(),
     val items: List<Item> = emptyList(),
@@ -92,6 +95,13 @@ data class UiState(
     val message: String? = null,
     val detail: Detail? = null,
     val showSettings: Boolean = false,
+    val tab: MainTab = MainTab.TO_DO,
+    /** Everything in the output folder, read from the tags inside the files. */
+    val collection: List<Entry> = emptyList(),
+    val collectionKind: MediaKind = MediaKind.MUSIC_VIDEO,
+    /** Null means every language; only applies to music videos. */
+    val collectionLanguage: String? = null,
+    val collectionScanned: Boolean = false,
 )
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -104,6 +114,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         if (settings.sourceTrees.isNotEmpty()) rescan()
+        // The remembered index shows immediately; a fresh scan happens when the
+        // tab is first opened, so startup is not spent reading the whole output
+        // folder that may not even be looked at.
+        _state.value = _state.value.copy(collection = Catalogue.load(app))
     }
 
     // --- settings ------------------------------------------------------------
@@ -131,6 +145,47 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun applySettings(settings: Settings) = update(settings)
 
+    fun showTab(tab: MainTab) {
+        _state.value = _state.value.copy(tab = tab)
+        if (tab == MainTab.COLLECTION && !_state.value.collectionScanned) scanCollection()
+    }
+
+    fun setCollectionKind(kind: MediaKind) {
+        _state.value = _state.value.copy(collectionKind = kind, collectionLanguage = null)
+    }
+
+    fun setCollectionLanguage(language: String?) {
+        _state.value = _state.value.copy(collectionLanguage = language)
+    }
+
+    /**
+     * Reads the output folder and what each file says about itself.
+     *
+     * Opening every file is quick each but slow over hundreds, so the result is
+     * remembered and only files whose size or date changed are read again.
+     */
+    fun scanCollection() = viewModelScope.launch {
+        val tree = settings.outputUri
+        if (tree == null) {
+            _state.value = _state.value.copy(
+                message = "Choose an output folder in Settings first.",
+            )
+            return@launch
+        }
+        _state.value = _state.value.copy(busy = "Reading your collection…")
+        val found = withContext(Dispatchers.IO) {
+            runCatching { Catalogue.scan(getApplication<Application>(), tree) }
+                .getOrDefault(emptyList())
+        }
+        _state.value = _state.value.copy(
+            collection = found,
+            collectionScanned = true,
+            busy = null,
+            message = if (found.isEmpty())
+                "Nothing in the output folder yet." else null,
+        )
+    }
+
     fun showSettings(show: Boolean) {
         _state.value = _state.value.copy(showSettings = show)
     }
@@ -141,6 +196,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun forgetProgress() {
         store.forgetOutcomes()
+        Catalogue.forget(getApplication<Application>())
         rescan()
     }
 
@@ -465,6 +521,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             },
             message = outcome.message,
+            collectionScanned = false,
         )
     }
 

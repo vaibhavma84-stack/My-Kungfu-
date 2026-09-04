@@ -12,6 +12,11 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
 
 ## What it does
 
+- **Two tabs.** *To do* is the folder you are working through. *Collection* is
+  what you have finished: everything in the output folder, with its cover,
+  grouped the way you would look for it -- music videos by language, episodes
+  by series, films by year. It reads the tags inside each file rather than the
+  filenames, which is the point of having written them there.
 - **Library.** Point it at one or more folders. It scans them, including
   subfolders, and lists every video it finds.
 - **Recognises three kinds of file** from the name: music videos, films, and

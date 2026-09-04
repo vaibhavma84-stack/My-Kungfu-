@@ -53,6 +53,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -60,17 +62,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mykungfu.mvtagger.core.Artwork
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.mykungfu.mvtagger.core.Languages
 import com.mykungfu.mvtagger.core.Matching
 import com.mykungfu.mvtagger.core.MediaKind
@@ -81,7 +87,7 @@ import com.mykungfu.mvtagger.core.VideoTags
 fun AppScreen(
     state: UiState,
     viewModel: AppViewModel,
-    onOpenExternally: (Item) -> Unit,
+    onOpenExternally: (Uri) -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
 
@@ -112,10 +118,11 @@ fun AppScreen(
                 pickOutput.launch(null)
             }
         }
-        else -> LibraryScreen(
+        else -> MainScreen(
             state, viewModel, snackbar,
             onAddSource = { pickSource.launch(null) },
             onPickOutput = { pickOutput.launch(null) },
+            onOpenExternally = onOpenExternally,
         )
     }
 }
@@ -124,31 +131,24 @@ fun AppScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LibraryScreen(
+private fun MainScreen(
     state: UiState,
     viewModel: AppViewModel,
     snackbar: SnackbarHostState,
     onAddSource: () -> Unit,
     onPickOutput: () -> Unit,
+    onOpenExternally: (Uri) -> Unit,
 ) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = {
-                    Column {
-                        Text("Library")
-                        if (state.items.isNotEmpty()) {
-                            val done = state.items.count { it.status == ItemStatus.SAVED }
-                            Text(
-                                "" + state.items.size + " videos · " + done + " done",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                },
+                title = { Text("MV Tagger") },
                 actions = {
-                    IconButton(onClick = { viewModel.rescan() }) {
+                    IconButton(onClick = {
+                        if (state.tab == MainTab.TO_DO) viewModel.rescan()
+                        else viewModel.scanCollection()
+                    }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Rescan")
                     }
                     IconButton(onClick = { viewModel.showSettings(true) }) {
@@ -159,6 +159,19 @@ private fun LibraryScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            TabRow(selectedTabIndex = if (state.tab == MainTab.TO_DO) 0 else 1) {
+                Tab(
+                    selected = state.tab == MainTab.TO_DO,
+                    onClick = { viewModel.showTab(MainTab.TO_DO) },
+                    text = { Text("To do (" + state.items.count { it.status == ItemStatus.NEW } + ")") },
+                )
+                Tab(
+                    selected = state.tab == MainTab.COLLECTION,
+                    onClick = { viewModel.showTab(MainTab.COLLECTION) },
+                    text = { Text("Collection (" + state.collection.size + ")") },
+                )
+            }
+
             state.busy?.let {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
                 Text(it, Modifier.padding(16.dp, 8.dp), style = MaterialTheme.typography.bodyMedium)
@@ -169,29 +182,212 @@ private fun LibraryScreen(
                 return@Column
             }
 
-            Row(
-                Modifier.fillMaxWidth().padding(16.dp, 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = { viewModel.runBatch() },
-                    enabled = state.busy == null,
-                ) { Text("Auto-tag everything new") }
-                OutlinedButton(onClick = onAddSource) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Folder")
-                }
+            when (state.tab) {
+                MainTab.TO_DO -> ToDoContent(state, viewModel, onAddSource)
+                MainTab.COLLECTION -> CollectionContent(state, viewModel, onOpenExternally)
             }
+        }
+    }
+}
 
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 24.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+@Composable
+private fun ToDoContent(state: UiState, viewModel: AppViewModel, onAddSource: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(16.dp, 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Button(
+            onClick = { viewModel.runBatch() },
+            enabled = state.busy == null,
+        ) { Text("Auto-tag everything new") }
+        OutlinedButton(onClick = onAddSource) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text("Folder")
+        }
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 24.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(state.items, key = { it.id }) { item ->
+            ItemRow(item) { viewModel.open(item) }
+        }
+    }
+}
+
+/**
+ * The finished library, grouped the way someone looks for something rather than
+ * the way it is stored: music videos by language, episodes by series, films by
+ * year.
+ */
+@Composable
+private fun CollectionContent(
+    state: UiState,
+    viewModel: AppViewModel,
+    onOpen: (Uri) -> Unit,
+) {
+    val outputTree = state.settings.outputUri
+
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(16.dp, 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (kind in MediaKind.entries) {
+            val count = Catalogue.count(state.collection, kind)
+            FilterChip(
+                selected = state.collectionKind == kind,
+                onClick = { viewModel.setCollectionKind(kind) },
+                label = { Text(plural(kind) + "  " + count) },
+            )
+        }
+    }
+
+    // Music videos get a second row: the languages actually present, so a
+    // library of mostly Hindi does not offer thirty empty choices.
+    if (state.collectionKind == MediaKind.MUSIC_VIDEO) {
+        val languages = Catalogue.languagesPresent(state.collection)
+        if (languages.size > 1) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(16.dp, 0.dp, 16.dp, 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items(state.items, key = { it.id }) { item ->
-                    ItemRow(item) { viewModel.open(item) }
+                FilterChip(
+                    selected = state.collectionLanguage == null,
+                    onClick = { viewModel.setCollectionLanguage(null) },
+                    label = { Text("All") },
+                )
+                for ((code, count) in languages) {
+                    FilterChip(
+                        selected = state.collectionLanguage == code && code != null,
+                        onClick = { viewModel.setCollectionLanguage(code) },
+                        label = {
+                            Text(
+                                (code?.let { Languages.displayName(it) } ?: "Not known") +
+                                        "  " + count
+                            )
+                        },
+                    )
                 }
             }
+        }
+    }
+
+    val groups = Catalogue.group(state.collection, state.collectionKind, state.collectionLanguage)
+
+    if (groups.isEmpty()) {
+        Text(
+            if (state.collectionScanned)
+                "Nothing here yet. Files appear once you have saved them."
+            else "Pull the refresh button to read the output folder.",
+            Modifier.padding(24.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 24.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        for (group in groups) {
+            item(key = "header:" + group.label) {
+                Text(
+                    group.label + "  ·  " + group.entries.size,
+                    Modifier.padding(top = 12.dp, bottom = 4.dp),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            items(group.entries, key = { it.documentId }) { entry ->
+                CollectionRow(entry) {
+                    outputTree?.let { tree ->
+                        onOpen(Saf.documentUri(tree, entry.documentId))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun plural(kind: MediaKind): String = when (kind) {
+    MediaKind.MUSIC_VIDEO -> "Music videos"
+    MediaKind.MOVIE -> "Movies"
+    MediaKind.TV_EPISODE -> "Series"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CollectionRow(entry: Entry, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Thumbnail(entry)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    entry.heading,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                entry.subheading?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The cover, loaded off the main thread.
+ *
+ * Decoding even a small image while the list is scrolling is enough to make it
+ * stutter, so this reads the cached thumbnail on a background thread and shows
+ * a placeholder until it arrives.
+ */
+@Composable
+private fun Thumbnail(entry: Entry) {
+    val context = LocalContext.current
+    val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+        initialValue = null,
+        key1 = entry.documentId,
+    ) {
+        value = if (!entry.hasArtwork) null else withContext(Dispatchers.IO) {
+            ArtCache.load(context, entry.documentId)?.asImageBitmap()
+        }
+    }
+
+    Box(
+        Modifier.size(52.dp).clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        val bitmap = image
+        if (bitmap != null) {
+            Image(
+                bitmap,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(
+                entry.heading.take(1).uppercase(),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -309,7 +505,7 @@ private fun DetailScreen(
     state: UiState,
     detail: Detail,
     viewModel: AppViewModel,
-    onOpenExternally: (Item) -> Unit,
+    onOpenExternally: (Uri) -> Unit,
     snackbar: SnackbarHostState,
 ) {
     val tags = detail.tags
@@ -324,7 +520,7 @@ private fun DetailScreen(
                 },
                 title = { Text(detail.item.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
-                    IconButton(onClick = { onOpenExternally(detail.item) }) {
+                    IconButton(onClick = { onOpenExternally(detail.item.uri) }) {
                         Icon(Icons.Default.PlayArrow, contentDescription = "Play in another app")
                     }
                 },

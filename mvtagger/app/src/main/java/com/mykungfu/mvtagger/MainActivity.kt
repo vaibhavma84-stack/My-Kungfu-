@@ -121,9 +121,9 @@ class MainActivity : ComponentActivity() {
      * deliberately has no player of its own -- there are good ones installed
      * already, and one more would be the least interesting part of this.
      */
-    private fun openInAnotherApp(item: Item) {
+    private fun openInAnotherApp(uri: android.net.Uri) {
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(item.uri, "video/*")
+            setDataAndType(uri, "video/*")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         runCatching { startActivity(Intent.createChooser(intent, "Play with")) }
