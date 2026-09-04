@@ -59,8 +59,8 @@ object Saf {
      *
      * Used both when creating a file and when handing one to another app: a
      * player that filters on `video/x-matroska` will not offer itself for a
-     * bare `video/*`, so the specific type is what makes the right apps appear
-     * in the chooser.
+     * bare wildcard video type, so being specific is what makes the right
+     * apps appear in the chooser.
      */
     fun mimeForName(fileName: String): String =
         when (fileName.substringAfterLast('.', "").lowercase()) {

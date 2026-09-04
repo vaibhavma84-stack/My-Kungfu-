@@ -36,6 +36,14 @@ jobs:
       - name: Check the regexes against Android's engine
         run: python3 check-regexes.py core/src/main app/src/main
 
+      # Kotlin block comments nest, so a `/*` inside a doc comment -- a wildcard
+      # MIME type written out, most easily -- swallows the rest of the file. The
+      # compiler only notices at the last line, and reports every declaration in
+      # the file as unresolved from everywhere else, which reads as anything but
+      # a comment. This says which comment, on which line.
+      - name: Check no comment swallows its file
+        run: python3 check-comments.py core/src/main app/src/main
+
       # The tagging, filename parsing and matching all live in :core, which is a
       # plain JVM module. Running its tests first means a broken MP4 writer is
       # caught here rather than on a phone, with a video that no longer plays.

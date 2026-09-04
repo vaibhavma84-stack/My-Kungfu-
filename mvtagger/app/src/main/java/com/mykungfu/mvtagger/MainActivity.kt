@@ -122,11 +122,11 @@ class MainActivity : ComponentActivity() {
      * already, and one more would be the least interesting part of this.
      *
      * [mimeType] is the specific type for the file rather than a bare
-     * `video/*`: a player that declares only `video/x-matroska` will not offer
-     * itself for the vague one, so being specific is what makes the right apps
-     * appear in the chooser. If nothing answers the specific type -- some
-     * players list only `video/*` -- it is worth asking again the vague way
-     * before telling the user there is nothing to open it with.
+     * wildcard: a player that declares only `video/x-matroska` will not offer
+     * itself for a vague request, so being specific is what makes the right
+     * apps appear in the chooser. If nothing answers the specific type -- some
+     * players declare the wildcard and nothing else -- it is worth asking again
+     * the vague way before telling the user there is nothing to open it with.
      *
      * The read grant rides along on the intent, so the player can open a file
      * in a folder it was never given access to itself.
