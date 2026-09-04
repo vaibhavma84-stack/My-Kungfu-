@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.mykungfu.mvtagger.core.AlbumInfo
 import com.mykungfu.mvtagger.core.ArtistInfo
 import com.mykungfu.mvtagger.core.Candidate
+import com.mykungfu.mvtagger.core.CreditNames
+import com.mykungfu.mvtagger.core.FilmTitle
 import com.mykungfu.mvtagger.core.FilenameParser
 import com.mykungfu.mvtagger.core.Languages
 import com.mykungfu.mvtagger.core.Matching
@@ -52,6 +54,18 @@ data class Detail(
     val chosen: Candidate? = null,
     /** Whether this file's streams can move into an MP4, and why not if they cannot. */
     val conversion: Remux.Verdict? = null,
+    /**
+     * Names the artist could be, for one-tap correction.
+     *
+     * Offered because the credit for a Hindi song is one string holding the
+     * music director, the singer and the lyricist with nothing to say which is
+     * which. Where MusicBrainz knows the roles the right one is filled in
+     * already; where it does not, guessing would be worse than letting the
+     * person who can see the song pick in one tap.
+     */
+    val artistChoices: List<String> = emptyList(),
+    /** Films this could belong to, same idea. */
+    val albumChoices: List<String> = emptyList(),
 ) {
     /** True when saving will repackage this file into MP4 on the way out. */
     fun willConvert(settings: Settings): Boolean =
@@ -331,6 +345,40 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
+        // The singer belongs in the artist field, not the music director and
+        // not all three run together. Only applied when MusicBrainz actually
+        // says who sang; otherwise the credit is left as the source gave it.
+        var artistChoices = emptyList<String>()
+        var albumChoices = emptyList<String>()
+        if (tags.mediaKind == MediaKind.MUSIC_VIDEO) {
+            val credits = Lookup.credits(candidate, detail.alternatives)
+            if (!credits.isEmpty) {
+                tags = tags.copy(
+                    artist = credits.singerLine ?: tags.artist,
+                    composer = credits.composerLine ?: tags.composer,
+                    lyricist = credits.lyricistLine ?: tags.lyricist,
+                    // A film soundtrack is "music by" its director, which is
+                    // what the album artist means for this kind of release.
+                    albumArtist = credits.composerLine ?: tags.albumArtist,
+                )
+            }
+
+            val parsed = FilenameParser.parse(detail.item.name)
+            artistChoices = (
+                credits.singers +
+                    CreditNames.split(candidate.artist) +
+                    parsed.extras
+                ).map { it.trim() }
+                .filter { it.length >= 2 }
+                .distinct()
+                .take(8)
+            albumChoices = listOfNotNull(
+                candidate.film,
+                FilmTitle.cleanAlbum(candidate.album).ifBlank { null },
+                parsed.album,
+            ).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(4)
+        }
+
         var artist: ArtistInfo? = null
         var album: AlbumInfo? = null
         if (settings.fetchBackground) {
@@ -342,7 +390,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             album?.summary?.let { tags = tags.copy(albumInfo = it) }
         }
 
-        return detail.copy(tags = tags, artist = artist, album = album, chosen = candidate)
+        return detail.copy(
+            tags = tags, artist = artist, album = album, chosen = candidate,
+            artistChoices = artistChoices, albumChoices = albumChoices,
+        )
     }
 
     /** Writes the open file into the output folder. */

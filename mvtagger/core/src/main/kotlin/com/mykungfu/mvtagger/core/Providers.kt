@@ -51,12 +51,22 @@ data class Candidate(
 ) {
     val year: String? get() = date?.take(4)?.takeIf { it.length == 4 && it.all(Char::isDigit) }
 
+    /** The film this belongs to, if the title or album says so. */
+    val film: String?
+        get() = FilmTitle.fromTrackTitle(title)
+            ?: FilmTitle.cleanAlbum(album).takeIf { it.isNotBlank() && it != album }
+
     fun toTags(): VideoTags = VideoTags(
         mediaKind = mediaKind,
-        title = title,
+        // "Kesariya (From \"Brahmastra\")" is the song plus the film. The song
+        // belongs in the title and the film in the album; repeating the film in
+        // both is how a library ends up unreadable.
+        title = if (mediaKind == MediaKind.MUSIC_VIDEO) FilmTitle.songTitle(title) else title,
         artist = artist,
         albumArtist = albumArtist ?: artist,
-        album = album,
+        album = FilmTitle.fromTrackTitle(title)
+            ?: FilmTitle.cleanAlbum(album).ifBlank { null }
+            ?: album,
         date = date,
         genre = genre,
         composer = composer,
@@ -280,6 +290,56 @@ object MusicBrainz {
                 releaseGroupId = rgId,
             )
         }
+    }
+
+    /**
+     * A recording with the relationships that say who did what.
+     *
+     * This is the only source here that records *roles* rather than a run
+     * together credit string. iTunes gives "Pritam, Arijit Singh & Amitabh
+     * Bhattacharya" with nothing to distinguish the music director from the
+     * singer from the lyricist; MusicBrainz says which is which, so the singer
+     * can go in the artist field where it belongs.
+     *
+     * `work-level-rels` is what pulls in the composer and lyricist, which hang
+     * off the work rather than the recording.
+     */
+    fun recordingCreditsUrl(mbid: String) =
+        BASE + "/recording/" + mbid + "?fmt=json&inc=artist-rels+work-rels+work-level-rels"
+
+    /** Singers, composers and lyricists from a recording's relationships. */
+    fun parseRecordingCredits(body: String): Credits {
+        val root = Json.parseOrNull(body)
+        val singers = ArrayList<String>()
+        val composers = ArrayList<String>()
+        val lyricists = ArrayList<String>()
+
+        fun collectFrom(relations: List<Json>) {
+            for (relation in relations) {
+                val name = relation["artist"]["name"].string
+                when (relation["type"].string?.lowercase()) {
+                    // "vocal" is the singer. Plain "performer" covers entries
+                    // that did not say which kind of performance it was.
+                    "vocal", "performer", "performing orchestra" ->
+                        name?.let { if (it !in singers) singers += it }
+                    "composer" -> name?.let { if (it !in composers) composers += it }
+                    "lyricist", "librettist", "writer" ->
+                        name?.let { if (it !in lyricists) lyricists += it }
+                }
+            }
+        }
+
+        val top = root["relations"].array
+        collectFrom(top)
+        // The composer and lyricist are credited against the work, which is
+        // reached through the recording's performance relationship.
+        for (relation in top) {
+            if (relation["type"].string?.lowercase() == "performance") {
+                collectFrom(relation["work"]["relations"].array)
+            }
+        }
+
+        return Credits(singers = singers, composers = composers, lyricists = lyricists)
     }
 
     fun artistSearchUrl(name: String, limit: Int = 5) =

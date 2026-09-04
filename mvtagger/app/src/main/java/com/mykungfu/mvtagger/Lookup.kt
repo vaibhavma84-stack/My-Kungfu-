@@ -5,6 +5,7 @@ import com.mykungfu.mvtagger.core.ArtistInfo
 import com.mykungfu.mvtagger.core.Artwork
 import com.mykungfu.mvtagger.core.ArtworkPlan
 import com.mykungfu.mvtagger.core.Candidate
+import com.mykungfu.mvtagger.core.Credits
 import com.mykungfu.mvtagger.core.ITunes
 import com.mykungfu.mvtagger.core.Languages
 import com.mykungfu.mvtagger.core.LrcLib
@@ -122,6 +123,33 @@ object Lookup {
                 ?.let { body -> TvMaze.parseEpisode(body, show)?.let { out += it } }
         }
         return out
+    }
+
+    /**
+     * Who sang it, who wrote it, who composed it.
+     *
+     * MusicBrainz is the only source here that records roles rather than a
+     * run-together credit string, so this is the one way to put the singer --
+     * and not the music director -- in the artist field. It needs the recording
+     * to be in MusicBrainz at all, which for Indian film music is far from
+     * certain; when it is not, nothing is returned and the caller leaves the
+     * credit alone rather than guessing which name is the singer.
+     */
+    fun credits(chosen: Candidate, alternatives: List<Candidate>): Credits {
+        val mbid = if (chosen.source == "MusicBrainz") {
+            chosen.id
+        } else {
+            // The chosen match came from iTunes, but the same recording may
+            // also have turned up from MusicBrainz in the same search.
+            alternatives.firstOrNull {
+                it.source == "MusicBrainz" &&
+                        Matching.tokenOverlap(it.title, chosen.title) >= 0.8
+            }?.id
+        } ?: return Credits()
+
+        return Net.getTextOrNull(MusicBrainz.recordingCreditsUrl(mbid))
+            ?.let { MusicBrainz.parseRecordingCredits(it) }
+            ?: Credits()
     }
 
     /** Lyrics: the exact endpoint first, then a plain search. */

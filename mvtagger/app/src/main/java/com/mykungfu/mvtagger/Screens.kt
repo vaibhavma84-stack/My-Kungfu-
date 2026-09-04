@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -392,10 +393,16 @@ private fun DetailScreen(
             Text("Details", style = MaterialTheme.typography.titleMedium)
             Field("Song / episode title", tags.title) { viewModel.editTags(tags.copy(title = it)) }
             Field("Artist", tags.artist) { viewModel.editTags(tags.copy(artist = it)) }
+            Choices(detail.artistChoices, tags.artist) {
+                viewModel.editTags(tags.copy(artist = it))
+            }
             Field(
                 if (tags.mediaKind == MediaKind.MUSIC_VIDEO) "Album / film" else "Album",
                 tags.album,
             ) { viewModel.editTags(tags.copy(album = it)) }
+            Choices(detail.albumChoices, tags.album) {
+                viewModel.editTags(tags.copy(album = it))
+            }
             Field("Release date or year", tags.date) { viewModel.editTags(tags.copy(date = it)) }
             Field("Genre", tags.genre) { viewModel.editTags(tags.copy(genre = it)) }
 
@@ -543,6 +550,31 @@ private fun Field(
         minLines = if (singleLine) 1 else 4,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * The names this field could hold, one tap each.
+ *
+ * A Hindi credit is one string holding the music director, the singer and the
+ * lyricist, and nothing in it says which is which. Where the roles are known
+ * the field is already right; where they are not, this is better than guessing
+ * -- the person looking at the song knows who sang it.
+ */
+@Composable
+private fun Choices(options: List<String>, current: String?, onPick: (String) -> Unit) {
+    if (options.isEmpty()) return
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        for (option in options) {
+            FilterChip(
+                selected = option.equals(current, ignoreCase = true),
+                onClick = { onPick(option) },
+                label = { Text(option) },
+            )
+        }
+    }
 }
 
 @Composable
