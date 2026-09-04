@@ -201,7 +201,12 @@ object Mp4Metadata {
      *
      * The media data is copied byte for byte; only `moov` is rebuilt.
      */
-    fun write(src: Mp4.ByteSource, tags: VideoTags, out: OutputStream) {
+    fun write(
+        src: Mp4.ByteSource,
+        tags: VideoTags,
+        out: OutputStream,
+        subtitles: SubtitleTrack? = null,
+    ) {
         val top = Mp4.topLevelBoxes(src)
         if (top.isEmpty()) throw UnsupportedContainer("no boxes found: not an MP4-family file")
         if (top.any { it.type == "moof" }) throw UnsupportedContainer(
@@ -212,7 +217,25 @@ object Mp4Metadata {
         if (moovRef.size > MAX_MOOV) throw UnsupportedContainer("moov box implausibly large")
 
         val moov = src.readFully(moovRef.start, moovRef.size.toInt())
-        val newMoov = rebuildMoov(moov, tags)
+
+        // A subtitle track is a whole new track: its own trak in moov and its
+        // own samples in the file. The samples go in an mdat of their own after
+        // everything else, so nothing that already exists has to move.
+        val movie = readMovieHeader(moov)
+        val picture = videoSize(moov)
+        val text = subtitles?.cues?.takeIf { it.isNotEmpty() }?.let {
+            Mp4TextTrack.build(
+                cues = it,
+                trackId = movie.nextTrackId,
+                movieTimescale = movie.timescale,
+                language = subtitles.language,
+                width = picture.first,
+                height = picture.second,
+            )
+        }
+
+        val rebuilt = rebuildMoov(moov, tags, text?.trak)
+        val newMoov = rebuilt.bytes
 
         // Everything except the old moov keeps its bytes. free/skip are dropped:
         // they exist to be reclaimed, and the offset map handles the shift.
@@ -234,7 +257,9 @@ object Mp4Metadata {
             cursor += b.size
         }
 
-        patchChunkOffsets(newMoov) { old ->
+        // The new track is skipped: its offset is not an old one to be moved but
+        // a new one, filled in below once the layout is settled.
+        patchChunkOffsets(newMoov, skipTrakAt = rebuilt.addedTrakAt) { old ->
             val holder = top.firstOrNull { old >= it.start && old < it.end }
                 ?: throw UnsupportedContainer("chunk offset $old lies outside the file")
             val moved = newStart[holder.start] ?: throw UnsupportedContainer(
@@ -243,9 +268,18 @@ object Mp4Metadata {
             moved + (old - holder.start)
         }
 
+        val subtitleMdat = text?.let { box("mdat", it.samples) }
+        if (text != null && subtitleMdat != null) {
+            // The samples sit right after the header of the mdat that follows
+            // everything else.
+            val at = rebuilt.addedTrakAt + text.chunkOffsetAt
+            Mp4.putBe64(newMoov, at, cursor + 8)
+        }
+
         if (ftyp != null) copyBox(src, ftyp, out)
         out.write(newMoov)
         for (b in rest) copyBox(src, b, out)
+        subtitleMdat?.let { out.write(it) }
         out.flush()
     }
 
@@ -266,8 +300,21 @@ object Mp4Metadata {
     private fun headerSizeOf(buf: ByteArray, at: Int): Int =
         if (Mp4.be32(buf, at) == 1) 16 else 8
 
-    /** `moov` with its `udta` replaced by one carrying [tags]. */
-    private fun rebuildMoov(moov: ByteArray, tags: VideoTags): ByteArray {
+    private class RebuiltMoov(val bytes: ByteArray, val addedTrakAt: Int)
+
+    /**
+     * `moov` with its `udta` replaced by one carrying [tags], and optionally an
+     * extra track appended.
+     *
+     * Reports where the added track landed, because its chunk offset has to be
+     * filled in later and finding it again by searching would be guesswork on a
+     * file that may already contain subtitle tracks of its own.
+     */
+    private fun rebuildMoov(
+        moov: ByteArray,
+        tags: VideoTags,
+        extraTrak: ByteArray? = null,
+    ): RebuiltMoov {
         val header = headerSizeOf(moov, 0)
         val kids = Mp4.children(moov, header, moov.size)
         val oldUdta = kids.firstOrNull { it.type == "udta" }
@@ -276,8 +323,77 @@ object Mp4Metadata {
         for (k in kids) if (k.type != "udta") {
             body.write(moov, k.start.toInt(), k.size.toInt())
         }
+
+        // Inside the finished moov, everything is shifted by its 8-byte header.
+        var addedAt = -1
+        if (extraTrak != null) {
+            addedAt = body.size() + 8
+            body.write(extraTrak)
+        }
         body.write(buildUdta(moov, oldUdta, tags))
-        return box("moov", body.toByteArray())
+
+        val bytes = box("moov", body.toByteArray())
+        if (extraTrak != null) bumpNextTrackId(bytes)
+        return RebuiltMoov(bytes, addedAt)
+    }
+
+    private class MovieHeader(val timescale: Int, val nextTrackId: Int)
+
+    /**
+     * The movie timescale and the next free track number, from `mvhd`.
+     *
+     * A track header states its duration in the movie's units rather than its
+     * own, and a new track needs a number nothing else is using.
+     */
+    private fun readMovieHeader(moov: ByteArray): MovieHeader {
+        val header = headerSizeOf(moov, 0)
+        val mvhd = Mp4.child(moov, header, moov.size, "mvhd")
+            ?: return MovieHeader(1000, 2)
+        val p = mvhd.payloadStart.toInt()
+        val version = moov[p].toInt() and 0xFF
+        return if (version == 1) {
+            MovieHeader(
+                timescale = Mp4.be32(moov, p + 20),
+                nextTrackId = Mp4.be32(moov, p + 108),
+            )
+        } else {
+            MovieHeader(
+                timescale = Mp4.be32(moov, p + 12),
+                nextTrackId = Mp4.be32(moov, p + 96),
+            )
+        }
+    }
+
+    /** Claims the track number just handed out, so the file stays consistent. */
+    private fun bumpNextTrackId(moov: ByteArray) {
+        val header = headerSizeOf(moov, 0)
+        val mvhd = Mp4.child(moov, header, moov.size, "mvhd") ?: return
+        val p = mvhd.payloadStart.toInt()
+        val version = moov[p].toInt() and 0xFF
+        val at = if (version == 1) p + 108 else p + 96
+        if (at + 4 > moov.size) return
+        val current = Mp4.be32(moov, at)
+        if (current in 1..0x7FFFFFFE) Mp4.putBe32(moov, at, current + 1)
+    }
+
+    /**
+     * The picture size, so the subtitle box covers the frame instead of sitting
+     * in a corner. Falls back to a sane default when the header is unusual.
+     */
+    private fun videoSize(moov: ByteArray): Pair<Int, Int> {
+        val header = headerSizeOf(moov, 0)
+        for (trak in Mp4.children(moov, header, moov.size).filter { it.type == "trak" }) {
+            val tkhd = Mp4.child(moov, trak.payloadStart.toInt(), trak.end.toInt(), "tkhd")
+                ?: continue
+            val p = tkhd.payloadStart.toInt()
+            val version = moov[p].toInt() and 0xFF
+            val widthAt = if (version == 1) p + 88 else p + 76
+            if (widthAt + 8 > tkhd.end.toInt()) continue
+            val width = Mp4.be32(moov, widthAt) ushr 16
+            val height = Mp4.be32(moov, widthAt + 4) ushr 16
+            if (width in 1..16384 && height in 1..16384) return width to height
+        }
+        return 1280 to 720
     }
 
     /**
@@ -424,9 +540,14 @@ object Mp4Metadata {
      * -- rather than every box, so a stray four bytes that happen to spell
      * `stco` inside some other payload cannot be mistaken for a real one.
      */
-    private fun patchChunkOffsets(moov: ByteArray, remap: (Long) -> Long) {
+    private fun patchChunkOffsets(
+        moov: ByteArray,
+        skipTrakAt: Int = -1,
+        remap: (Long) -> Long,
+    ) {
         val header = headerSizeOf(moov, 0)
         for (trak in Mp4.children(moov, header, moov.size).filter { it.type == "trak" }) {
+            if (trak.start.toInt() == skipTrakAt) continue
             val mdia = Mp4.child(moov, trak.payloadStart.toInt(), trak.end.toInt(), "mdia")
                 ?: continue
             val minf = Mp4.child(moov, mdia.payloadStart.toInt(), mdia.end.toInt(), "minf")

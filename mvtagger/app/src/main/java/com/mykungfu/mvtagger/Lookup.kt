@@ -13,6 +13,9 @@ import com.mykungfu.mvtagger.core.Lyrics
 import com.mykungfu.mvtagger.core.Matching
 import com.mykungfu.mvtagger.core.MediaKind
 import com.mykungfu.mvtagger.core.MusicBrainz
+import com.mykungfu.mvtagger.core.OpenSubtitles
+import com.mykungfu.mvtagger.core.SubtitleTrack
+import com.mykungfu.mvtagger.core.Subtitles
 import com.mykungfu.mvtagger.core.ParsedMedia
 import com.mykungfu.mvtagger.core.ParsedName
 import com.mykungfu.mvtagger.core.Tmdb
@@ -237,6 +240,79 @@ object Lookup {
             }
         }
         return null
+    }
+
+    /**
+     * Subtitles from OpenSubtitles.
+     *
+     * Three calls: search, then a login for a download token, then the link the
+     * download endpoint hands back. The token is kept for the session because
+     * logging in per file would burn the account's quota for nothing.
+     *
+     * Returns null the moment anything is missing -- no key, no account, no
+     * match -- because a file with no subtitles is a normal outcome and not
+     * worth failing a save over.
+     */
+    fun subtitles(
+        apiKey: String,
+        username: String,
+        password: String,
+        query: String,
+        kind: MediaKind,
+        season: Int? = null,
+        episode: Int? = null,
+        year: String? = null,
+        languages: List<String> = listOf("en"),
+    ): SubtitleTrack? {
+        if (apiKey.isBlank() || query.isBlank()) return null
+
+        val found = Net.getTextOrNull(
+            OpenSubtitles.searchUrl(
+                query = query,
+                languages = languages.joinToString(","),
+                kind = kind,
+                season = season,
+                episode = episode,
+                year = year,
+            ),
+            OpenSubtitles.headers(apiKey),
+        ) ?: return null
+
+        val best = OpenSubtitles.rank(OpenSubtitles.parseSearch(found), languages)
+            .firstOrNull() ?: return null
+
+        val token = downloadToken(apiKey, username, password) ?: return null
+        val link = Net.postJsonOrNull(
+            OpenSubtitles.downloadUrl(),
+            OpenSubtitles.downloadBody(best.fileId),
+            OpenSubtitles.headers(apiKey, token),
+        )?.let { OpenSubtitles.parseDownloadLink(it) } ?: return null
+
+        val text = Net.getTextOrNull(link) ?: return null
+        val cues = Subtitles.parse(text)
+        if (cues.isEmpty()) return null
+
+        return SubtitleTrack(
+            cues = cues,
+            language = best.language ?: languages.firstOrNull(),
+            source = "OpenSubtitles",
+        )
+    }
+
+    /** Kept for the session: their downloads are rationed per account. */
+    private var cachedToken: String? = null
+
+    @Synchronized
+    private fun downloadToken(apiKey: String, username: String, password: String): String? {
+        cachedToken?.let { return it }
+        if (username.isBlank() || password.isBlank()) return null
+        val token = Net.postJsonOrNull(
+            OpenSubtitles.loginUrl(),
+            OpenSubtitles.loginBody(username, password),
+            OpenSubtitles.headers(apiKey),
+        )?.let { OpenSubtitles.parseLoginToken(it) }
+        cachedToken = token
+        return token
     }
 
     /** Film posters, only when a TMDb key has been entered in Settings. */

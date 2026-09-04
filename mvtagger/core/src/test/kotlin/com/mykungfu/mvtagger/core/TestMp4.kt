@@ -83,17 +83,37 @@ object TestMp4 {
             box("stsz", ByteArray(12)),
             stco,
         )
+        // A real tkhd, because the subtitle track copies the picture size out
+        // of it and a field of zeroes would silently produce a zero-sized
+        // subtitle box.
+        val tkhd = ByteArray(84)
+        Mp4.putBe32(tkhd, 12, 1)          // track_id
+        Mp4.putBe32(tkhd, 20, 10_000)     // duration
+        Mp4.putBe32(tkhd, 76, 1920 shl 16)
+        Mp4.putBe32(tkhd, 80, 1080 shl 16)
+
+        // A video handler, so videoSize() finds this track.
+        val hdlr = ByteArray(25)
+        System.arraycopy("vide".toByteArray(Charsets.ISO_8859_1), 0, hdlr, 8, 4)
+
         val trak = box(
             "trak",
-            box("tkhd", filler(84)),
-            box("mdia", box("mdhd", filler(24)), box("hdlr", filler(25)), box("minf", stbl)),
+            box("tkhd", tkhd),
+            box("mdia", box("mdhd", filler(24)), box("hdlr", hdlr), box("minf", stbl)),
         )
         val udta = if (tagged) {
             box("udta", box("meta", ByteArray(4), box("hdlr", filler(25)),
                 box("ilst", box("©nam", box("data", ByteArray(8) + "Old title".toByteArray())))))
         } else ByteArray(0)
 
-        val moov = box("moov", box("mvhd", filler(100)), trak, udta)
+        // A real mvhd: the timescale converts the subtitle duration into movie
+        // units, and next_track_id is the number a new track is given.
+        val mvhd = ByteArray(100)
+        Mp4.putBe32(mvhd, 12, 1000)       // timescale
+        Mp4.putBe32(mvhd, 16, 10_000)     // duration
+        Mp4.putBe32(mvhd, 96, 2)          // next_track_id
+
+        val moov = box("moov", box("mvhd", mvhd), trak, udta)
 
         // Where the stco table sits inside moov, so the offsets can be filled in
         // once the layout is known.
@@ -144,6 +164,38 @@ object TestMp4 {
     }
 
     fun source(bytes: ByteArray) = ArraySource(bytes)
+
+    /** The trak carrying a given handler, e.g. "vide" or "sbtl". */
+    fun trakWithHandler(bytes: ByteArray, handler: String): Mp4.BoxRef? {
+        val src = ArraySource(bytes)
+        val moovRef = Mp4.topLevelBoxes(src).first { it.type == "moov" }
+        val moov = src.readFully(moovRef.start, moovRef.size.toInt())
+        for (trak in Mp4.children(moov, 8, moov.size).filter { it.type == "trak" }) {
+            val mdia = Mp4.child(moov, trak.payloadStart.toInt(), trak.end.toInt(), "mdia")
+                ?: continue
+            val h = Mp4.child(moov, mdia.payloadStart.toInt(), mdia.end.toInt(), "hdlr") ?: continue
+            val type = Mp4.latin1(moov, h.payloadStart.toInt() + 8, 4)
+            if (type == handler) return trak
+        }
+        return null
+    }
+
+    /** The whole moov of a finished file, for poking at its boxes. */
+    fun moovOf(bytes: ByteArray): ByteArray {
+        val src = ArraySource(bytes)
+        val moovRef = Mp4.topLevelBoxes(src).first { it.type == "moov" }
+        return src.readFully(moovRef.start, moovRef.size.toInt())
+    }
+
+    fun writeWithSubtitles(
+        input: ByteArray,
+        tags: VideoTags,
+        track: SubtitleTrack,
+    ): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        source(input).use { Mp4Metadata.write(it, tags, out, track) }
+        return out.toByteArray()
+    }
 
     /**
      * Reads the chunk offsets out of a finished file and returns the first byte

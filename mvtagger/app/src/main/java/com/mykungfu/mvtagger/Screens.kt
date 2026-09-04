@@ -444,6 +444,17 @@ private fun DetailScreen(
 
             // Only ever shown for a container that cannot hold tags, which is
             // exactly when the user needs to know what is about to happen.
+            detail.subtitles?.takeIf { !it.isEmpty }?.let { subs ->
+                Text(
+                    "Subtitles: " + subs.cues.size + " lines" +
+                            (subs.language?.let { " in " + Languages.displayName(it) } ?: "") +
+                            (subs.source?.let { ", from " + it } ?: "") +
+                            ". These will be written into the file and to an .srt beside it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             detail.conversion?.let { verdict ->
                 val converting = detail.willConvert(state.settings)
                 Text(
@@ -741,6 +752,34 @@ private fun SettingsScreen(
                         },
                         label = { Text("" + (threshold * 100).toInt() + "%") },
                     )
+                }
+            }
+
+            HorizontalDivider()
+            Text("Subtitles", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Subtitles already in the file, or in an .srt next to it, are always " +
+                        "kept and written into the MP4. Fetching the ones a file does " +
+                        "not have needs an OpenSubtitles account, because they ration " +
+                        "downloads per user. Your password is stored on this phone only.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Toggle("Fetch missing subtitles", settings.fetchSubtitles) {
+                viewModel.applySettings(settings.copy(fetchSubtitles = it))
+            }
+            Field("Subtitle languages (e.g. en, hi)", settings.subtitleLanguages) {
+                viewModel.applySettings(settings.copy(subtitleLanguages = it ?: "en"))
+            }
+            if (settings.fetchSubtitles) {
+                Field("OpenSubtitles API key", settings.openSubtitlesApiKey) {
+                    viewModel.applySettings(settings.copy(openSubtitlesApiKey = it ?: ""))
+                }
+                Field("OpenSubtitles username", settings.openSubtitlesUsername) {
+                    viewModel.applySettings(settings.copy(openSubtitlesUsername = it ?: ""))
+                }
+                Field("OpenSubtitles password", settings.openSubtitlesPassword) {
+                    viewModel.applySettings(settings.copy(openSubtitlesPassword = it ?: ""))
                 }
             }
 

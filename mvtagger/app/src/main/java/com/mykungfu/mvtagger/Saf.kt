@@ -26,6 +26,8 @@ object Saf {
         val mimeType: String,
         val size: Long,
         val lastModified: Long,
+        /** The folder it was found in, so its siblings can be looked at. */
+        val parentDocumentId: String = "",
     ) {
         val isDirectory: Boolean
             get() = mimeType == DocumentsContract.Document.MIME_TYPE_DIR
@@ -38,6 +40,12 @@ object Saf {
         DocumentsContract.Document.COLUMN_SIZE,
         DocumentsContract.Document.COLUMN_LAST_MODIFIED,
     )
+
+    /** Subtitle files that may be sitting beside a video. */
+    val SUBTITLE_EXTENSIONS = setOf("srt", "vtt", "ass", "ssa", "sub")
+
+    fun isSubtitle(name: String): Boolean =
+        name.substringAfterLast('.', "").lowercase() in SUBTITLE_EXTENSIONS
 
     /** Extensions treated as video, for folders that report a vague MIME type. */
     private val VIDEO_EXTENSIONS = setOf(
@@ -85,6 +93,7 @@ object Saf {
                     mimeType = c.getString(2) ?: "",
                     size = if (c.isNull(3)) 0L else c.getLong(3),
                     lastModified = if (c.isNull(4)) 0L else c.getLong(4),
+                    parentDocumentId = parentDocumentId,
                 )
             }
         }
@@ -231,6 +240,19 @@ object Saf {
             runCatching { pfd.close() }
         }
     }
+
+    /** A whole text file, for reading a subtitle sitting next to a video. */
+    fun readText(resolver: ContentResolver, uri: Uri, limit: Int = 8 * 1024 * 1024): String? =
+        runCatching {
+            resolver.openInputStream(uri)?.use { stream ->
+                val bytes = stream.readBytes()
+                if (bytes.size > limit) return@use null
+                // Subtitles are often Windows-1252 rather than UTF-8; a broken
+                // decode is better than refusing the file, and the text is only
+                // used for its words and timings.
+                String(bytes, Charsets.UTF_8)
+            }
+        }.getOrNull()
 
     fun copy(input: java.io.InputStream, output: OutputStream): Long {
         val buffer = ByteArray(256 * 1024)

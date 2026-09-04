@@ -16,6 +16,7 @@ import com.mykungfu.mvtagger.core.MediaClassifier
 import com.mykungfu.mvtagger.core.MediaKind
 import com.mykungfu.mvtagger.core.Organiser
 import com.mykungfu.mvtagger.core.Sidecar
+import com.mykungfu.mvtagger.core.SubtitleTrack
 import com.mykungfu.mvtagger.core.VideoTags
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +30,8 @@ data class Item(
     val id: String,
     val treeUri: Uri,
     val documentId: String,
+    /** The folder it sits in, so a subtitle file beside it can be found. */
+    val parentDocumentId: String,
     val name: String,
     val size: Long,
     val kind: MediaKind,
@@ -66,6 +69,8 @@ data class Detail(
     val artistChoices: List<String> = emptyList(),
     /** Films this could belong to, same idea. */
     val albumChoices: List<String> = emptyList(),
+    /** Subtitles found or fetched for this file, ready to go into it. */
+    val subtitles: SubtitleTrack? = null,
 ) {
     /** True when saving will repackage this file into MP4 on the way out. */
     fun willConvert(settings: Settings): Boolean =
@@ -157,6 +162,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         id = id,
                         treeUri = treeUri,
                         documentId = doc.documentId,
+                        parentDocumentId = doc.parentDocumentId,
                         name = doc.name,
                         size = doc.size,
                         kind = media.kind,
@@ -379,6 +385,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             ).map { it.trim() }.filter { it.isNotBlank() }.distinct().take(4)
         }
 
+        // Subtitles, for the kinds of file that have them. Existing ones are
+        // preferred over anything downloaded: a file sitting next to the video
+        // has exact timings, and a track inside it at least matches this cut of
+        // the film, which a subtitle from the internet may not.
+        var subtitles = detail.subtitles
+        if (tags.mediaKind != MediaKind.MUSIC_VIDEO && subtitles == null) {
+            val app = getApplication<Application>()
+            val wanted = settings.subtitleLanguageList
+            subtitles = SubtitleFinder.beside(app, detail.item)
+                ?: SubtitleFinder.embedded(app, detail.item.uri, wanted.firstOrNull())
+                ?: if (settings.fetchSubtitles) {
+                    Lookup.subtitles(
+                        apiKey = settings.openSubtitlesApiKey,
+                        username = settings.openSubtitlesUsername,
+                        password = settings.openSubtitlesPassword,
+                        query = tags.showName ?: tags.title.orEmpty(),
+                        kind = tags.mediaKind,
+                        season = tags.seasonNumber,
+                        episode = tags.episodeNumber,
+                        year = tags.year,
+                        languages = wanted,
+                    )
+                } else null
+        }
+
         var artist: ArtistInfo? = null
         var album: AlbumInfo? = null
         if (settings.fetchBackground) {
@@ -393,6 +424,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return detail.copy(
             tags = tags, artist = artist, album = album, chosen = candidate,
             artistChoices = artistChoices, albumChoices = albumChoices,
+            subtitles = subtitles,
         )
     }
 
@@ -413,6 +445,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 sourceName = detail.item.name,
                 tags = detail.tags,
                 settings = settings,
+                subtitles = detail.subtitles,
             )
         }
 
@@ -473,6 +506,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         sourceName = item.name,
                         tags = enriched.tags,
                         settings = settings,
+                        subtitles = enriched.subtitles,
                     )
                 }
             }

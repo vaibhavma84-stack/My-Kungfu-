@@ -41,7 +41,25 @@ data class Settings(
      * re-encoded; see [Remux].
      */
     val convertToMp4: Boolean = true,
+    /**
+     * Subtitles for films and episodes. Existing ones are always kept; this
+     * governs whether missing ones are fetched, which needs an OpenSubtitles
+     * account because their downloads are rationed per user.
+     */
+    val fetchSubtitles: Boolean = false,
+    val openSubtitlesApiKey: String = "",
+    val openSubtitlesUsername: String = "",
+    /** Stored on this phone only, in the app's private settings. */
+    val openSubtitlesPassword: String = "",
+    /** Comma-separated language codes, best first. */
+    val subtitleLanguages: String = "en",
 ) {
+    val subtitleLanguageList: List<String>
+        get() = subtitleLanguages.split(',', ' ')
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .ifEmpty { listOf("en") }
+
     fun nameTemplateFor(kind: MediaKind): String = when (kind) {
         MediaKind.MUSIC_VIDEO -> musicNameTemplate
         MediaKind.MOVIE -> movieNameTemplate
@@ -85,6 +103,11 @@ class Store(context: Context) {
         autoApplyThreshold = prefs.getFloat(KEY_THRESHOLD, 0.80f).toDouble(),
         writeSidecars = prefs.getBoolean(KEY_SIDECARS, true),
         convertToMp4 = prefs.getBoolean(KEY_CONVERT, true),
+        fetchSubtitles = prefs.getBoolean(KEY_FETCH_SUBS, false),
+        openSubtitlesApiKey = prefs.getString(KEY_OS_KEY, "") ?: "",
+        openSubtitlesUsername = prefs.getString(KEY_OS_USER, "") ?: "",
+        openSubtitlesPassword = prefs.getString(KEY_OS_PASS, "") ?: "",
+        subtitleLanguages = prefs.getString(KEY_SUB_LANGS, null) ?: "en",
     )
 
     fun save(settings: Settings) {
@@ -105,6 +128,11 @@ class Store(context: Context) {
             putFloat(KEY_THRESHOLD, settings.autoApplyThreshold.toFloat())
             putBoolean(KEY_SIDECARS, settings.writeSidecars)
             putBoolean(KEY_CONVERT, settings.convertToMp4)
+            putBoolean(KEY_FETCH_SUBS, settings.fetchSubtitles)
+            putString(KEY_OS_KEY, settings.openSubtitlesApiKey)
+            putString(KEY_OS_USER, settings.openSubtitlesUsername)
+            putString(KEY_OS_PASS, settings.openSubtitlesPassword)
+            putString(KEY_SUB_LANGS, settings.subtitleLanguages)
         }.apply()
     }
 
@@ -146,5 +174,10 @@ class Store(context: Context) {
         const val KEY_THRESHOLD = "autoApplyThreshold"
         const val KEY_SIDECARS = "writeSidecars"
         const val KEY_CONVERT = "convertToMp4"
+        const val KEY_FETCH_SUBS = "fetchSubtitles"
+        const val KEY_OS_KEY = "openSubtitlesApiKey"
+        const val KEY_OS_USER = "openSubtitlesUsername"
+        const val KEY_OS_PASS = "openSubtitlesPassword"
+        const val KEY_SUB_LANGS = "subtitleLanguages"
     }
 }

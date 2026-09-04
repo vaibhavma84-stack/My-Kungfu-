@@ -8,6 +8,8 @@ import com.mykungfu.mvtagger.core.Mp4Metadata
 import com.mykungfu.mvtagger.core.Organiser
 import com.mykungfu.mvtagger.core.RenameTemplate
 import com.mykungfu.mvtagger.core.Sidecar
+import com.mykungfu.mvtagger.core.SubtitleTrack
+import com.mykungfu.mvtagger.core.Subtitles
 import com.mykungfu.mvtagger.core.VideoTags
 
 /**
@@ -47,6 +49,7 @@ object TagJob {
         sourceName: String,
         tags: VideoTags,
         settings: Settings,
+        subtitles: SubtitleTrack? = null,
     ): Outcome {
         val resolver = context.contentResolver
         val outputTree = settings.outputUri
@@ -80,11 +83,14 @@ object TagJob {
         val embedded = try {
             when {
                 embedsDirectly -> {
-                    writeTagged(context, sourceUri, created.uri, tags)
+                    writeTagged(context, sourceUri, created.uri, tags, subtitles)
                     true
                 }
                 converting -> {
-                    convertThenTag(context, sourceUri, created.uri, outputTree, parentId, created.name, tags)
+                    convertThenTag(
+                        context, sourceUri, created.uri, outputTree, parentId,
+                        created.name, tags, subtitles,
+                    )
                     true
                 }
                 else -> {
@@ -120,6 +126,20 @@ object TagJob {
             }
         }
 
+        // A .srt beside the video as well as inside it. Costs a few kilobytes,
+        // and every player reads it -- including the ones that ignore a text
+        // track inside an MP4.
+        if (subtitles != null && !subtitles.isEmpty) {
+            runCatching {
+                writeSubtitleSidecar(context, outputTree, parentId, created.name, subtitles)
+            }
+        }
+
+        val subtitleNote = subtitles?.takeIf { !it.isEmpty }?.let {
+            " Subtitles added (" + it.cues.size + " lines" +
+                (it.source?.let { where -> ", from " + where } ?: "") + ")."
+        } ?: ""
+
         val message = when {
             converting ->
                 "Converted to MP4 and tagged, saved to " + displayPath +
@@ -132,7 +152,7 @@ object TagJob {
                         " cannot hold tags inside it, so the details were written " +
                         "alongside." + (why?.let { " " + it } ?: "")
             }
-        }
+        } + subtitleNote
         return Outcome(
             ok = true, path = displayPath, embedded = embedded,
             converted = converting, message = message,
@@ -160,6 +180,7 @@ object TagJob {
         parentId: String,
         finalName: String,
         tags: VideoTags,
+        subtitles: SubtitleTrack?,
     ) {
         val resolver = context.contentResolver
         val temporary = Saf.createFile(
@@ -170,17 +191,23 @@ object TagJob {
 
         try {
             Remux.toMp4(context, source, temporary.uri)
-            writeTagged(context, temporary.uri, target, tags)
+            writeTagged(context, temporary.uri, target, tags, subtitles)
         } finally {
             Saf.delete(resolver, temporary.uri)
         }
     }
 
-    private fun writeTagged(context: Context, source: Uri, target: Uri, tags: VideoTags) {
+    private fun writeTagged(
+        context: Context,
+        source: Uri,
+        target: Uri,
+        tags: VideoTags,
+        subtitles: SubtitleTrack? = null,
+    ) {
         Saf.UriSource(context.contentResolver, source).use { input ->
             val output = Saf.openOutput(context.contentResolver, target)
                 ?: throw java.io.IOException("could not open the new file for writing")
-            output.use { Mp4Metadata.write(input, tags, it) }
+            output.use { Mp4Metadata.write(input, tags, it, subtitles) }
         }
     }
 
@@ -229,6 +256,23 @@ object TagJob {
                     it.bytes,
                 )
             }
+        }
+    }
+
+    private fun writeSubtitleSidecar(
+        context: Context,
+        outputTree: Uri,
+        parentId: String,
+        fileName: String,
+        subtitles: SubtitleTrack,
+    ) {
+        val base = FilenameParser.stripExtension(fileName)
+        val name = Subtitles.sidecarName(base, subtitles.language)
+        val doc = Saf.createFile(
+            context.contentResolver, outputTree, parentId, name, "application/x-subrip"
+        ) ?: return
+        Saf.openOutput(context.contentResolver, doc.uri)?.use {
+            it.write(Subtitles.toSrt(Subtitles.tidy(subtitles.cues)).toByteArray(Charsets.UTF_8))
         }
     }
 

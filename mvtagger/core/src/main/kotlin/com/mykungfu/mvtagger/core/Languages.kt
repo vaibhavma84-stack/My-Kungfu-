@@ -125,6 +125,20 @@ object Languages {
         "zho" to "zh", "chi" to "zh",
     )
 
+    private val TWO_TO_THREE = THREE_LETTER.entries
+        .groupBy { it.value }
+        .mapValues { (_, entries) -> entries.first().key }
+
+    /**
+     * The three-letter code an MP4 track header stores, e.g. `hin` for Hindi.
+     * Anything unrecognised becomes `und`, which is what players expect when
+     * the language is genuinely not known.
+     */
+    fun iso639_2(code: String?): String {
+        val normalised = normalise(code) ?: return "und"
+        return TWO_TO_THREE[normalised] ?: "und"
+    }
+
     fun byCode(code: String?): Language? = code?.let { byCode[it] }
 
     fun displayName(code: String?): String =

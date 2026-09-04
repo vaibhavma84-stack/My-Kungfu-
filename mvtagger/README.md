@@ -24,6 +24,12 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
 - **Fetches lyrics** from LRCLIB, plain and timestamped.
 - **Fetches background** on the artist and on the album or film, and embeds
   that too.
+- **Subtitles for films and episodes.** Ones already in the file, or in an
+  `.srt` beside it, are kept and written *into* the MP4 as a `tx3g` text track
+  -- the format Apple's own players read. Missing ones can be fetched from
+  OpenSubtitles, which needs a free account of theirs. An `.srt` is written
+  beside the video as well, because some players ignore a text track inside an
+  MP4.
 - **Handles Hindi, English and thirty-odd other languages,** including titles
   written in Devanagari, Tamil, Telugu, Bengali, Gurmukhi and more. Filenames
   keep their own script rather than being transliterated.
@@ -115,6 +121,11 @@ failure deletes the partial rather than leaving something that looks finished.
   MP4 without it, and doing it on a phone would take far longer than
   re-downloading the file and would look worse. The only route to it is bundling
   FFmpeg, which is tens of megabytes and a project of its own.
+- **Subtitles are not styled.** A `tx3g` track carries the words and their
+  timings, not fonts, colours or positioning, so anything fancy in an ASS
+  subtitle is flattened to plain text. The `.srt` written alongside has the same
+  limitation. Styling would mean a different format that Apple devices do not
+  read, which defeats the point.
 - **No upscaling.** This one is not a matter of effort. A 1080p file does not
   contain 4K detail; nothing can recover what was never recorded. Scaling it up
   produces a file four times the size that looks the same at best. Televisions

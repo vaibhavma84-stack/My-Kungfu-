@@ -45,10 +45,48 @@ object Net {
         }
     }
 
-    fun getText(url: String): String {
+    fun getText(url: String, headers: Map<String, String> = emptyMap()): String {
         if (url.contains("musicbrainz.org")) MusicBrainzPace.await()
-        return String(get(url, MAX_TEXT_BYTES, "application/json"), Charsets.UTF_8)
+        return String(get(url, MAX_TEXT_BYTES, "application/json", headers), Charsets.UTF_8)
     }
+
+    fun getTextOrNull(url: String, headers: Map<String, String>): String? =
+        runCatching { getText(url, headers) }.getOrNull()
+
+    /**
+     * A JSON POST, which OpenSubtitles needs for logging in and for asking for
+     * a download link. Nothing else here posts anything.
+     */
+    fun postJson(url: String, body: String, headers: Map<String, String> = emptyMap()): String {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = CONNECT_TIMEOUT_MS
+            readTimeout = READ_TIMEOUT_MS
+            doOutput = true
+            setRequestProperty("User-Agent", USER_AGENT)
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Content-Type", "application/json")
+            for ((name, value) in headers) setRequestProperty(name, value)
+        }
+        try {
+            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                val detail = runCatching {
+                    connection.errorStream?.readBytes()?.toString(Charsets.UTF_8)
+                }.getOrNull().orEmpty().take(300)
+                throw HttpError(code, "HTTP " + code + " from " + url + " " + detail)
+            }
+            return connection.inputStream.use {
+                String(readCapped(it, MAX_TEXT_BYTES), Charsets.UTF_8)
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    fun postJsonOrNull(url: String, body: String, headers: Map<String, String>): String? =
+        runCatching { postJson(url, body, headers) }.getOrNull()
 
     /** Returns null rather than throwing: a missing lookup is not an error. */
     fun getTextOrNull(url: String): String? = runCatching { getText(url) }.getOrNull()
@@ -57,7 +95,12 @@ object Net {
 
     fun getBytesOrNull(url: String): ByteArray? = runCatching { getBytes(url) }.getOrNull()
 
-    private fun get(url: String, limit: Int, accept: String): ByteArray {
+    private fun get(
+        url: String,
+        limit: Int,
+        accept: String,
+        headers: Map<String, String> = emptyMap(),
+    ): ByteArray {
         var current = url
         // Cover Art Archive answers with a redirect to wherever the image
         // actually lives, and HttpURLConnection will not follow one that
@@ -71,6 +114,7 @@ object Net {
                 setRequestProperty("User-Agent", USER_AGENT)
                 setRequestProperty("Accept", accept)
                 setRequestProperty("Accept-Encoding", "gzip")
+                for ((name, value) in headers) setRequestProperty(name, value)
             }
             try {
                 val code = connection.responseCode
