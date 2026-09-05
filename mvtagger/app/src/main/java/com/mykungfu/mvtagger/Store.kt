@@ -1,0 +1,242 @@
+package com.mykungfu.mvtagger
+
+import android.content.Context
+import android.net.Uri
+import com.mykungfu.mvtagger.core.MediaKind
+import com.mykungfu.mvtagger.core.Organiser
+import com.mykungfu.mvtagger.core.RenameTemplate
+
+/**
+ * What the user chose, and where the library stands.
+ *
+ * Everything lives in one SharedPreferences file. The library itself is not
+ * persisted -- it is rescanned from the source folders, which takes a second or
+ * two and can never disagree with what is actually on disk. Only the outcome of
+ * each file is remembered, so a folder already dealt with does not look
+ * untouched after a restart.
+ */
+data class Settings(
+    val sourceTrees: List<String> = emptyList(),
+    val outputTree: String? = null,
+    val musicNameTemplate: String = RenameTemplate.defaultFor(MediaKind.MUSIC_VIDEO),
+    val movieNameTemplate: String = RenameTemplate.defaultFor(MediaKind.MOVIE),
+    val episodeNameTemplate: String = RenameTemplate.defaultFor(MediaKind.TV_EPISODE),
+    val musicFolderTemplate: String = Organiser.MUSIC_VIDEOS,
+    val movieFolderTemplate: String = Organiser.MOVIES,
+    val episodeFolderTemplate: String = Organiser.TV_EPISODES,
+
+    /** Blank unless the user wants film posters from TMDb. */
+    val tmdbApiKey: String = "",
+    /** Nudges the ranking and is written to the file when nothing better is known. */
+    val preferredLanguage: String? = null,
+    val fetchLyrics: Boolean = true,
+    val fetchArtwork: Boolean = true,
+    val fetchBackground: Boolean = true,
+    /** Score at or above which a batch run applies a match without asking. */
+    val autoApplyThreshold: Double = 0.80,
+    /** Also write .json/.lrc/poster files for containers that cannot be tagged. */
+    val writeSidecars: Boolean = true,
+    /**
+     * Repackage into MP4 when the container cannot hold tags, so the artwork
+     * and details end up inside the file instead of beside it. Nothing is
+     * re-encoded; see [Remux].
+     */
+    val convertToMp4: Boolean = true,
+    /**
+     * Subtitles for films and episodes. Existing ones are always kept; this
+     * governs whether missing ones are fetched, which needs an OpenSubtitles
+     * account because their downloads are rationed per user.
+     */
+    val fetchSubtitles: Boolean = false,
+    val openSubtitlesApiKey: String = "",
+    val openSubtitlesUsername: String = "",
+    /** Stored on this phone only, in the app's private settings. */
+    val openSubtitlesPassword: String = "",
+    /** Comma-separated language codes, best first. */
+    val subtitleLanguages: String = "en",
+    /**
+     * Delete the original once the new file is confirmed good.
+     *
+     * Off by default and deliberately so: it is the only thing this app does
+     * that cannot be undone. Everything else writes a new file and leaves the
+     * source alone, so a bad match costs a delete; with this on, a bad match
+     * costs the video.
+     */
+    val deleteOriginalAfterSaving: Boolean = false,
+    /** Browse the collection as a wall of covers rather than a list. */
+    val collectionAsGrid: Boolean = true,
+    /**
+     * Keep the sound going when the app is put away or the screen goes off.
+     *
+     * Off, which is what anybody watching a film expects: putting the phone in
+     * a pocket should not leave it talking. On, a music video keeps playing as
+     * though it were a song, which is the one case where the picture is not
+     * the point.
+     */
+    val keepPlayingInBackground: Boolean = false,
+    /**
+     * Show the words over the video while it plays, where the file has any.
+     *
+     * Remembered rather than asked each time: somebody who wants the words for
+     * one song wants them for the next one, and somebody who does not never
+     * wants to see them again.
+     */
+    val showLyrics: Boolean = false,
+    /**
+     * Write the poster.jpg and .nfo files Infuse, Plex and Jellyfin look for.
+     *
+     * Costs a few kilobytes per file and saves those apps from guessing the
+     * library from filenames, which they do badly on Indian film music.
+     */
+    val writeLibraryFiles: Boolean = true,
+) {
+    val subtitleLanguageList: List<String>
+        get() = subtitleLanguages.split(',', ' ')
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .ifEmpty { listOf("en") }
+
+    fun nameTemplateFor(kind: MediaKind): String = when (kind) {
+        MediaKind.MUSIC_VIDEO -> musicNameTemplate
+        MediaKind.MOVIE -> movieNameTemplate
+        MediaKind.TV_EPISODE -> episodeNameTemplate
+        /*
+           Podcasts, workouts and lessons keep their default naming and are
+           not offered in Settings beside the others. Nobody is going to
+           hand-tune the filenames of their yoga videos, and a settings screen
+           with twelve template boxes is one nobody reads.
+        */
+        else -> RenameTemplate.defaultFor(kind)
+    }
+
+    fun folderTemplateFor(kind: MediaKind): String = when (kind) {
+        MediaKind.MUSIC_VIDEO -> musicFolderTemplate
+        MediaKind.MOVIE -> movieFolderTemplate
+        MediaKind.TV_EPISODE -> episodeFolderTemplate
+        else -> Organiser.defaultFor(kind)
+    }
+
+    val outputUri: Uri? get() = outputTree?.let(Uri::parse)
+    val isReady: Boolean get() = sourceTrees.isNotEmpty() && outputTree != null
+}
+
+/** How far a file has got. */
+enum class ItemStatus { NEW, MATCHED, SAVED, SKIPPED, FAILED }
+
+class Store(context: Context) {
+
+    private val prefs = context.getSharedPreferences("mvtagger", Context.MODE_PRIVATE)
+
+    fun load(): Settings = Settings(
+        sourceTrees = prefs.getStringSet(KEY_SOURCES, emptySet())!!.toList().sorted(),
+        outputTree = prefs.getString(KEY_OUTPUT, null),
+        musicNameTemplate = prefs.getString(KEY_MUSIC_NAME, null)
+            ?: RenameTemplate.defaultFor(MediaKind.MUSIC_VIDEO),
+        movieNameTemplate = prefs.getString(KEY_MOVIE_NAME, null)
+            ?: RenameTemplate.defaultFor(MediaKind.MOVIE),
+        episodeNameTemplate = prefs.getString(KEY_EPISODE_NAME, null)
+            ?: RenameTemplate.defaultFor(MediaKind.TV_EPISODE),
+        musicFolderTemplate = prefs.getString(KEY_MUSIC_FOLDER, null) ?: Organiser.MUSIC_VIDEOS,
+        movieFolderTemplate = prefs.getString(KEY_MOVIE_FOLDER, null) ?: Organiser.MOVIES,
+        episodeFolderTemplate = prefs.getString(KEY_EPISODE_FOLDER, null) ?: Organiser.TV_EPISODES,
+        tmdbApiKey = prefs.getString(KEY_TMDB, "") ?: "",
+        preferredLanguage = prefs.getString(KEY_LANGUAGE, null),
+        fetchLyrics = prefs.getBoolean(KEY_LYRICS, true),
+        fetchArtwork = prefs.getBoolean(KEY_ARTWORK, true),
+        fetchBackground = prefs.getBoolean(KEY_BACKGROUND, true),
+        autoApplyThreshold = prefs.getFloat(KEY_THRESHOLD, 0.80f).toDouble(),
+        writeSidecars = prefs.getBoolean(KEY_SIDECARS, true),
+        convertToMp4 = prefs.getBoolean(KEY_CONVERT, true),
+        fetchSubtitles = prefs.getBoolean(KEY_FETCH_SUBS, false),
+        openSubtitlesApiKey = prefs.getString(KEY_OS_KEY, "") ?: "",
+        openSubtitlesUsername = prefs.getString(KEY_OS_USER, "") ?: "",
+        openSubtitlesPassword = prefs.getString(KEY_OS_PASS, "") ?: "",
+        subtitleLanguages = prefs.getString(KEY_SUB_LANGS, null) ?: "en",
+        deleteOriginalAfterSaving = prefs.getBoolean(KEY_DELETE_ORIGINAL, false),
+        collectionAsGrid = prefs.getBoolean(KEY_GRID, true),
+        keepPlayingInBackground = prefs.getBoolean(KEY_BACKGROUND_PLAY, false),
+        showLyrics = prefs.getBoolean(KEY_SHOW_LYRICS, false),
+        writeLibraryFiles = prefs.getBoolean(KEY_LIBRARY_FILES, true),
+    )
+
+    fun save(settings: Settings) {
+        prefs.edit().apply {
+            putStringSet(KEY_SOURCES, settings.sourceTrees.toSet())
+            putString(KEY_OUTPUT, settings.outputTree)
+            putString(KEY_MUSIC_NAME, settings.musicNameTemplate)
+            putString(KEY_MOVIE_NAME, settings.movieNameTemplate)
+            putString(KEY_EPISODE_NAME, settings.episodeNameTemplate)
+            putString(KEY_MUSIC_FOLDER, settings.musicFolderTemplate)
+            putString(KEY_MOVIE_FOLDER, settings.movieFolderTemplate)
+            putString(KEY_EPISODE_FOLDER, settings.episodeFolderTemplate)
+            putString(KEY_TMDB, settings.tmdbApiKey)
+            putString(KEY_LANGUAGE, settings.preferredLanguage)
+            putBoolean(KEY_LYRICS, settings.fetchLyrics)
+            putBoolean(KEY_ARTWORK, settings.fetchArtwork)
+            putBoolean(KEY_BACKGROUND, settings.fetchBackground)
+            putFloat(KEY_THRESHOLD, settings.autoApplyThreshold.toFloat())
+            putBoolean(KEY_SIDECARS, settings.writeSidecars)
+            putBoolean(KEY_CONVERT, settings.convertToMp4)
+            putBoolean(KEY_FETCH_SUBS, settings.fetchSubtitles)
+            putString(KEY_OS_KEY, settings.openSubtitlesApiKey)
+            putString(KEY_OS_USER, settings.openSubtitlesUsername)
+            putString(KEY_OS_PASS, settings.openSubtitlesPassword)
+            putString(KEY_SUB_LANGS, settings.subtitleLanguages)
+            putBoolean(KEY_DELETE_ORIGINAL, settings.deleteOriginalAfterSaving)
+            putBoolean(KEY_GRID, settings.collectionAsGrid)
+            putBoolean(KEY_BACKGROUND_PLAY, settings.keepPlayingInBackground)
+            putBoolean(KEY_SHOW_LYRICS, settings.showLyrics)
+            putBoolean(KEY_LIBRARY_FILES, settings.writeLibraryFiles)
+        }.apply()
+    }
+
+    // --- per-file outcomes ---------------------------------------------------
+
+    private fun outcomeKey(id: String) = "outcome:" + id
+
+    fun outcome(id: String): Pair<ItemStatus, String?>? {
+        val raw = prefs.getString(outcomeKey(id), null) ?: return null
+        val status = runCatching { ItemStatus.valueOf(raw.substringBefore('|')) }.getOrNull()
+            ?: return null
+        return status to raw.substringAfter('|', "").ifBlank { null }
+    }
+
+    fun recordOutcome(id: String, status: ItemStatus, note: String?) {
+        prefs.edit().putString(outcomeKey(id), status.name + "|" + (note ?: "")).apply()
+    }
+
+    fun forgetOutcomes() {
+        val editor = prefs.edit()
+        for (key in prefs.all.keys) if (key.startsWith("outcome:")) editor.remove(key)
+        editor.apply()
+    }
+
+    private companion object {
+        const val KEY_SOURCES = "sourceTrees"
+        const val KEY_OUTPUT = "outputTree"
+        const val KEY_MUSIC_NAME = "musicNameTemplate"
+        const val KEY_MOVIE_NAME = "movieNameTemplate"
+        const val KEY_EPISODE_NAME = "episodeNameTemplate"
+        const val KEY_MUSIC_FOLDER = "musicFolderTemplate"
+        const val KEY_MOVIE_FOLDER = "movieFolderTemplate"
+        const val KEY_EPISODE_FOLDER = "episodeFolderTemplate"
+        const val KEY_TMDB = "tmdbApiKey"
+        const val KEY_LANGUAGE = "preferredLanguage"
+        const val KEY_LYRICS = "fetchLyrics"
+        const val KEY_ARTWORK = "fetchArtwork"
+        const val KEY_BACKGROUND = "fetchBackground"
+        const val KEY_THRESHOLD = "autoApplyThreshold"
+        const val KEY_SIDECARS = "writeSidecars"
+        const val KEY_CONVERT = "convertToMp4"
+        const val KEY_FETCH_SUBS = "fetchSubtitles"
+        const val KEY_OS_KEY = "openSubtitlesApiKey"
+        const val KEY_OS_USER = "openSubtitlesUsername"
+        const val KEY_OS_PASS = "openSubtitlesPassword"
+        const val KEY_SUB_LANGS = "subtitleLanguages"
+        const val KEY_DELETE_ORIGINAL = "deleteOriginalAfterSaving"
+        const val KEY_GRID = "collectionAsGrid"
+        const val KEY_BACKGROUND_PLAY = "keepPlayingInBackground"
+        const val KEY_SHOW_LYRICS = "showLyrics"
+        const val KEY_LIBRARY_FILES = "writeLibraryFiles"
+    }
+}
