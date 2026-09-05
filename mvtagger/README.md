@@ -106,8 +106,10 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
   is the closest honest thing it has to an industry; a British film is not
   really Hollywood, and that is the price of the shorthand.
 - **Browses YouTube, inside the app.** **Get** on the To-do tab opens YouTube
-  in a window of its own: find something, press Download, and it lands in your
-  first to-do folder ready to be tagged like anything else — without leaving
+  in a window of its own: find something, press the round download button floating over
+  the page — or long-press any video in a list to take that one without
+  opening it — and it lands in your first to-do folder ready to be tagged
+  like anything else — without leaving
   for another app and coming back with a link in the clipboard. The window is
   locked to YouTube and refuses every other address, including a page asking
   to be handed to the YouTube app. It is signed in to nothing, reads nothing

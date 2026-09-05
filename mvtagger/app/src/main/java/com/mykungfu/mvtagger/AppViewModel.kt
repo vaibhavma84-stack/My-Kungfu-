@@ -394,8 +394,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Look up whatever the browser is showing, without leaving it. */
-    fun lookUpCurrent() {
-        setLink(_state.value.browserUrl)
+    fun lookUpCurrent() = lookUpLink(_state.value.browserUrl)
+
+    /**
+     * Look up one particular link -- the video under a finger, rather than the
+     * page on screen. Long-pressing a video in a list is how a whole row of
+     * them gets downloaded without opening each one.
+     */
+    fun lookUpLink(url: String) {
+        setLink(url)
         lookUp()
     }
 

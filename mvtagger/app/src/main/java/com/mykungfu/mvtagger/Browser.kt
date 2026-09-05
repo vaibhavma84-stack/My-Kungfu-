@@ -1,5 +1,7 @@
 package com.mykungfu.mvtagger
 
+import android.os.Handler
+import android.os.Looper
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -15,7 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -24,12 +28,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -62,11 +68,23 @@ fun BrowserScreen(state: UiState, viewModel: AppViewModel) {
     /** The last address the lock turned away, shown once and then forgotten. */
     var blocked by remember { mutableStateOf<String?>(null) }
 
+    /**
+     * The video the panel is about: the page on screen, or one long-pressed in
+     * a list. Null means the panel is closed and the button is all there is.
+     */
+    var asked by remember { mutableStateOf<String?>(null) }
+
     // Back walks the pages first and leaves only when there is nowhere back to
     // go, which is what a back button means inside a browser.
     BackHandler {
         val view = web
         if (view != null && view.canGoBack()) view.goBack() else viewModel.openBrowser(false)
+    }
+
+    // Leaving the video closes the panel with it: a download button offering
+    // the video you were on two pages ago is worse than no button.
+    LaunchedEffect(state.browserUrl) {
+        if (state.get.progress == null) asked = null
     }
 
     DisposableEffect(Unit) {
@@ -170,12 +188,75 @@ fun BrowserScreen(state: UiState, viewModel: AppViewModel) {
                                 url?.let(viewModel::browsedTo)
                             }
                         }
+                        /*
+                           Long-press a video in a list and it offers to
+                           download that one, rather than the page you are on.
+
+                           This is the per-item download button, arrived at
+                           from the other side. Drawing a button next to every
+                           row would mean injecting elements into YouTube's own
+                           page and re-doing it every time they change their
+                           markup. Android already knows what is under a
+                           finger, and asking it costs nothing and cannot go
+                           stale.
+
+                           requestFocusNodeHref rather than the hit result's
+                           own extra: on a thumbnail the extra is the image,
+                           and the address wanted is the link wrapped around
+                           it.
+                        */
+                        made.setOnLongClickListener {
+                            val kind = made.hitTestResult.type
+                            if (kind != WebView.HitTestResult.SRC_ANCHOR_TYPE &&
+                                kind != WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+                            ) return@setOnLongClickListener false
+
+                            val note = Handler(Looper.getMainLooper()).obtainMessage()
+                            made.requestFocusNodeHref(note)
+                            val href = note.data?.getString("url")
+                            if (!YouTube.isWatchable(href)) return@setOnLongClickListener false
+
+                            asked = href
+                            viewModel.lookUpLink(href!!)
+                            true
+                        }
                         made.loadUrl(YouTube.HOME)
                         web = made
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
             )
+
+            /*
+               The download button, floating over the page.
+
+               It is the whole interface for this: no menu, no address to
+               copy. It appears on a video and goes away on a list, because a
+               download button on a page of search results can only
+               disappoint -- and long-pressing any video in that list offers
+               the same thing for that one.
+
+               The arrow is the send icon turned a quarter turn, which is
+               exactly what it looks like: the same gesture, pointing the
+               other way.
+            */
+            if (YouTube.isWatchable(state.browserUrl) && asked == null &&
+                state.get.progress == null
+            ) {
+                FloatingActionButton(
+                    onClick = {
+                        asked = state.browserUrl
+                        viewModel.lookUpCurrent()
+                    },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Send,
+                        contentDescription = "Download this video",
+                        modifier = Modifier.graphicsLayer { rotationZ = 90f },
+                    )
+                }
+            }
         }
 
         blocked?.let {
@@ -196,23 +277,21 @@ fun BrowserScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
 
-        DownloadBar(state, viewModel)
+        if (asked != null || state.get.progress != null) {
+            DownloadBar(state, viewModel) { asked = null }
+        }
     }
 }
 
 /**
- * The strip along the bottom: what would be fetched, and the two ways to fetch
- * it.
+ * What the button opened: the video it found, and the two ways to keep it.
  *
- * It stays out of the way until there is a video on screen, because a download
- * button on a search results page is a button that can only disappoint.
+ * Only ever on screen because something was pressed, which is why it has a
+ * close button and no rules of its own about when to appear.
  */
 @Composable
-private fun DownloadBar(state: UiState, viewModel: AppViewModel) {
+private fun DownloadBar(state: UiState, viewModel: AppViewModel, onClose: () -> Unit) {
     val get = state.get
-    val watchable = YouTube.isWatchable(state.browserUrl)
-
-    if (!watchable && get.progress == null && get.note == null) return
 
     Column(
         Modifier
@@ -221,9 +300,17 @@ private fun DownloadBar(state: UiState, viewModel: AppViewModel) {
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        get.title?.let {
-            Text(it, style = MaterialTheme.typography.titleSmall, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                get.title ?: if (get.looking) "Asking YouTube…" else "This video",
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            IconButton(onClick = onClose, enabled = get.progress == null) {
+                Icon(Icons.Default.Close, contentDescription = "Close")
+            }
         }
 
         get.progress?.let {
@@ -242,10 +329,9 @@ private fun DownloadBar(state: UiState, viewModel: AppViewModel) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val picture = get.video?.video
             if (picture == null) {
-                Button(
-                    onClick = { viewModel.lookUpCurrent() },
-                    enabled = watchable && !get.looking && get.progress == null,
-                ) { Text(if (get.looking) "Looking…" else "Download this") }
+                if (!get.looking && get.progress == null) {
+                    Button(onClick = { viewModel.lookUpCurrent() }) { Text("Try again") }
+                }
             } else {
                 Button(
                     onClick = { viewModel.fetch(audioOnly = false) },
