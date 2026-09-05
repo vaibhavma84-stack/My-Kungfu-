@@ -286,6 +286,29 @@ object Saf {
         } ?: false
     }.getOrDefault(false)
 
+    /**
+     * The last bytes of a file.
+     *
+     * A Matroska cover written by this app sits at the very end, and a
+     * television episode is several gigabytes -- so the end is read directly
+     * rather than the file scanned to reach it.
+     */
+    fun readTail(resolver: ContentResolver, uri: Uri, count: Int): ByteArray? = runCatching {
+        UriSource(resolver, uri).use { source ->
+            val length = source.length
+            if (length <= 0L) return@use null
+            val want = minOf(count.toLong(), length).toInt()
+            val buffer = ByteArray(want)
+            var filled = 0
+            while (filled < want) {
+                val read = source.readAt(length - want + filled, buffer, filled, want - filled)
+                if (read <= 0) break
+                filled += read
+            }
+            if (filled == want) buffer else buffer.copyOf(filled)
+        }
+    }.getOrNull()
+
     /** The first bytes of a file, for reading a header without opening it twice. */
     fun readHead(resolver: ContentResolver, uri: Uri, count: Int): ByteArray? = runCatching {
         resolver.openInputStream(uri)?.use { stream ->

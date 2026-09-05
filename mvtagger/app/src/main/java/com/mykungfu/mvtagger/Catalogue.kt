@@ -8,6 +8,7 @@ import com.mykungfu.mvtagger.core.Json
 import com.mykungfu.mvtagger.core.Languages
 import com.mykungfu.mvtagger.core.LyricsLanguage
 import com.mykungfu.mvtagger.core.MediaClassifier
+import com.mykungfu.mvtagger.core.Matroska
 import com.mykungfu.mvtagger.core.MediaKind
 import com.mykungfu.mvtagger.core.Sidecar
 import com.mykungfu.mvtagger.core.VideoTags
@@ -115,6 +116,15 @@ object Catalogue {
     // older build is rescanned rather than loaded with the field missing.
     private const val KEY_INDEX = "entries2"
 
+    /**
+     * How far back to look for an attached cover.
+     *
+     * This app appends one at the very end, and a cover is a few hundred
+     * kilobytes, so two megabytes is generous. Reading more of every file in a
+     * library to find a picture would cost more than the picture is worth.
+     */
+    private const val COVER_TAIL_BYTES = 2 * 1024 * 1024
+
     /** Folder names the app itself creates, used when a file has no tags. */
     private val KIND_BY_FOLDER = mapOf(
         "music videos" to MediaKind.MUSIC_VIDEO,
@@ -217,6 +227,7 @@ object Catalogue {
         // decoding a full-size cover later for a list row.
         val embedded = tags?.artwork?.let { ArtCache.store(context, doc.documentId, it.bytes) }
         val hasArtwork = embedded
+            ?: readMatroskaCover(context, uri, doc)
             ?: readArtworkSidecar(context, tree, doc)
             ?: false
 
@@ -265,6 +276,25 @@ object Catalogue {
             context.contentResolver, Saf.documentUri(tree, found.documentId)
         ) ?: return null
         return runCatching { Sidecar.parse(text) }.getOrNull()
+    }
+
+    /**
+     * The cover attached inside a Matroska file.
+     *
+     * Writing one was only half the job: nothing read an attachment back, so a
+     * cover written into an MKV was invisible to the app that wrote it and the
+     * tile stayed blank. From where anyone was standing, "no artwork" was
+     * simply true.
+     *
+     * Only the tail is read, which is where this app puts one, and only for
+     * Matroska. Reading several gigabytes of episode to look for a picture
+     * would cost more than the picture is worth.
+     */
+    private fun readMatroskaCover(context: Context, uri: Uri, doc: Saf.Doc): Boolean? {
+        if (!Matroska.isMatroska(doc.name)) return null
+        val tail = Saf.readTail(context.contentResolver, uri, COVER_TAIL_BYTES) ?: return null
+        val cover = runCatching { Matroska.coverIn(tail) }.getOrNull() ?: return null
+        return ArtCache.store(context, doc.documentId, cover.bytes)
     }
 
     /**

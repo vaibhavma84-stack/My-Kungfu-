@@ -155,4 +155,41 @@ class MatroskaTest {
         assertTrue(!Matroska.isMatroska("Film.mp4"))
         assertTrue(!Matroska.isMatroska("Clip.avi"))
     }
+
+    /**
+     * Writing a cover was only half of it. Nothing could read one back, so a
+     * cover written into an MKV stayed invisible to the app that wrote it.
+     */
+    @Test
+    fun `a cover written in can be read back out`() {
+        val added = Matroska.additions(tags)
+        val back = Matroska.coverIn(added)
+        assertNotNull("the cover could not be found again", back)
+        assertTrue(back!!.bytes.contentEquals(art.bytes))
+        assertEquals("image/jpeg", back.mime)
+    }
+
+    /** It is found in the tail of a file, which is where this app puts it. */
+    @Test
+    fun `a cover is found among everything else in the tail`() {
+        val noise = ByteArray(5000) { (it % 97).toByte() }
+        val tail = noise + Matroska.additions(tags) + ByteArray(0)
+        assertNotNull(Matroska.coverIn(tail))
+        assertTrue(Matroska.hasAttachments(tail))
+    }
+
+    @Test
+    fun `a file with no attachment says so rather than inventing one`() {
+        assertNull(Matroska.coverIn(ByteArray(4096)))
+        assertTrue(!Matroska.hasAttachments(ByteArray(4096)))
+        // Details but no picture: there is a Tags element and no cover.
+        val tagsOnly = Matroska.additions(tags.copy(artwork = null))
+        assertNull(Matroska.coverIn(tagsOnly))
+    }
+
+    @Test
+    fun `a png cover keeps its type on the way back`() {
+        val png = Matroska.additions(tags.copy(artwork = Artwork(ByteArray(64) { 7 }, "image/png")))
+        assertEquals("image/png", Matroska.coverIn(png)!!.mime)
+    }
 }

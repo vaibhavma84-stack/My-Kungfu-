@@ -34,6 +34,9 @@ import com.mykungfu.mvtagger.core.VideoTags
  */
 object TagJob {
 
+    /** How far back to look for a cover already attached. See [Catalogue]. */
+    private const val COVER_TAIL_BYTES = 2 * 1024 * 1024
+
     data class Outcome(
         val ok: Boolean,
         /** Where it went, relative to the output folder. */
@@ -244,6 +247,21 @@ object TagJob {
                 )
             }
             return try {
+                /*
+                   Matroska can hold the cover after all, and correcting a file
+                   should put it in -- not only saving one for the first time,
+                   which is where this was wired and nowhere else. So a
+                   correction on an MKV wrote the files beside it and left the
+                   inside untouched, which is exactly what was reported as the
+                   artwork still not being embedded.
+
+                   Once, though. The attachment goes on the end and there is no
+                   way to replace one in place without rewriting the whole file
+                   and moving every position recorded in it, so a file that
+                   already carries one is left as it is and says so.
+                */
+                val attachedNow = writeMatroskaOnce(context, outputTree, documentId, currentName, tags)
+
                 replaceSidecars(
                     context, outputTree, parentDocumentId, currentName, tags, settings
                 )
@@ -259,10 +277,14 @@ object TagJob {
                     }
                 }
                 Outcome(
-                    ok = true, path = currentName, embedded = false,
-                    message = "Updated the details beside " + currentName + ". " +
-                            extension.uppercase() + " cannot hold them inside it, so the " +
-                            "video itself was left where it is.",
+                    ok = true, path = currentName, embedded = attachedNow,
+                    message = if (attachedNow) {
+                        "Updated, and the cover was attached inside " + currentName + "."
+                    } else {
+                        "Updated the details beside " + currentName + ". " +
+                                extension.uppercase() + " keeps them there rather than " +
+                                "inside it, and the video was left where it is."
+                    },
                 )
             } catch (e: Exception) {
                 Outcome(false, message = "Failed: " + (e.message ?: e.toString()))
@@ -574,6 +596,31 @@ object TagJob {
                 )
             }
         }
+    }
+
+    /**
+     * Attaches the cover to a Matroska file that has not got one.
+     *
+     * The attachment is appended, and appending twice would leave two covers
+     * and two sets of details in the file. Replacing the first would mean
+     * rewriting the whole thing and correcting every position recorded inside
+     * it, which is the work that appending exists to avoid. So this writes once
+     * and then leaves well alone.
+     */
+    private fun writeMatroskaOnce(
+        context: Context,
+        outputTree: Uri,
+        documentId: String,
+        fileName: String,
+        tags: VideoTags,
+    ): Boolean {
+        if (!Matroska.isMatroska(fileName)) return false
+        val uri = Saf.documentUri(outputTree, documentId)
+        val already = Saf.readTail(context.contentResolver, uri, COVER_TAIL_BYTES)
+            ?.let { runCatching { Matroska.hasAttachments(it) }.getOrDefault(false) }
+            ?: false
+        if (already) return false
+        return runCatching { writeMatroska(context, uri, fileName, tags) }.getOrDefault(false)
     }
 
     /**

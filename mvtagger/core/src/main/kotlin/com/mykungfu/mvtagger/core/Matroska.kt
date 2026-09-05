@@ -179,6 +179,86 @@ object Matroska {
     }
 
     /**
+     * The cover inside a Matroska file, read back out.
+     *
+     * Writing one was only half of it. Nothing could read an attachment, so a
+     * cover written into an MKV was invisible to the app that wrote it -- the
+     * library went on showing a blank tile and "no artwork" was true from where
+     * anyone was standing, whatever the file contained.
+     *
+     * Given the tail of a file rather than all of it, because that is where
+     * this app puts one and a television episode is several gigabytes. A cover
+     * some other tool wrote at the front will be missed, which is a smaller
+     * fault than reading a whole library into memory to find it.
+     */
+    fun coverIn(data: ByteArray): Artwork? {
+        var from = 0
+        while (from < data.size) {
+            val at = indexOf(data, ATTACHMENTS, from) ?: return null
+            val size = readSize(data, at + ATTACHMENTS.size)
+            if (size != null && size.value > 0) {
+                val start = at + ATTACHMENTS.size + size.width
+                val end = start + size.value
+                if (end <= data.size) {
+                    coverAmong(data, start, end.toInt())?.let { return it }
+                }
+            }
+            from = at + 1
+        }
+        return null
+    }
+
+    /** Whether there is an attachment here at all, without decoding one. */
+    fun hasAttachments(data: ByteArray): Boolean = indexOf(data, ATTACHMENTS, 0) != null
+
+    private fun coverAmong(data: ByteArray, start: Int, end: Int): Artwork? {
+        var at = start
+        while (at < end) {
+            val idWidth = idWidthAt(data, at) ?: return null
+            val size = readSize(data, at + idWidth) ?: return null
+            val payloadAt = at + idWidth + size.width
+            val payloadEnd = payloadAt + size.value
+            if (size.value < 0 || payloadEnd > end) return null
+
+            if (startsWith(data, at, ATTACHED_FILE)) {
+                var mime: String? = null
+                var bytes: ByteArray? = null
+                var child = payloadAt
+                while (child < payloadEnd) {
+                    val childId = idWidthAt(data, child) ?: break
+                    val childSize = readSize(data, child + childId) ?: break
+                    val valueAt = child + childId + childSize.width
+                    val valueEnd = valueAt + childSize.value
+                    if (childSize.value < 0 || valueEnd > payloadEnd) break
+                    when {
+                        startsWith(data, child, FILE_MIME) ->
+                            mime = String(data, valueAt, (valueEnd - valueAt).toInt(), Charsets.UTF_8)
+                        startsWith(data, child, FILE_DATA) ->
+                            bytes = data.copyOfRange(valueAt, valueEnd.toInt())
+                    }
+                    child = valueEnd.toInt()
+                }
+                val found = bytes
+                if (found != null && found.isNotEmpty()) {
+                    return Artwork(found, mime?.trim()?.ifBlank { null } ?: "image/jpeg")
+                }
+            }
+            at = payloadEnd.toInt()
+        }
+        return null
+    }
+
+    private fun indexOf(data: ByteArray, pattern: ByteArray, from: Int): Int? {
+        var at = from.coerceAtLeast(0)
+        val last = data.size - pattern.size
+        while (at <= last) {
+            if (startsWith(data, at, pattern)) return at
+            at++
+        }
+        return null
+    }
+
+    /**
      * Walks the top-level elements of the Segment, for checking the result.
      *
      * A file whose elements do not run exactly to its end has been written
