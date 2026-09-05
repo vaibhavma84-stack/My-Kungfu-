@@ -318,6 +318,17 @@ private fun DownloadBar(state: UiState, viewModel: AppViewModel, onClose: () -> 
             Text(it, style = MaterialTheme.typography.bodySmall)
         }
 
+        // Why the button says 1080p on a video somebody knows is in 4K.
+        get.video?.cappedFrom?.takeIf { it > 0 }?.let { tallest ->
+            Text(
+                "YouTube also has this in " + tallest + "p, but only as VP9 or AV1 " +
+                        "with Opus sound — which cannot be tagged inside the file " +
+                        "and needs an iPad to decode it in software.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         get.note?.let {
             Text(
                 it,

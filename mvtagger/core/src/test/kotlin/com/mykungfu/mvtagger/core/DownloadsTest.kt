@@ -88,6 +88,52 @@ class DownloadsTest {
     }
 
     @Test
+    fun `a small video is taken at the size it is, without complaint`() {
+        // The whole of what a 360p upload offers. Nothing here is a problem to
+        // be reported: it is simply what the video is.
+        val choice = Downloads.bestVideo(listOf(video("360p", 360, withSound = true)))!!
+        assertEquals("360p", choice.video?.label)
+        assertNull(choice.warning)
+        assertEquals(0, choice.cappedFrom)
+    }
+
+    @Test
+    fun `a 720p upload gets 720p, joined when that is the only way to it`() {
+        val whole = Downloads.bestVideo(
+            listOf(video("360p", 360, withSound = true), video("720p", 720, withSound = true))
+        )!!
+        assertEquals("720p", whole.video?.label)
+        assertFalse(whole.needsJoining)
+        assertEquals(0, whole.cappedFrom)
+
+        // The commoner shape now: complete files stop at 360p and 720p exists
+        // only as picture and sound apart.
+        val joined = Downloads.bestVideo(
+            listOf(
+                video("360p", 360, withSound = true),
+                video("720p", 720),
+                sound("m4a", Downloads.Container.M4A, 128),
+            )
+        )!!
+        assertEquals("720p", joined.video?.label)
+        assertTrue(joined.needsJoining)
+        assertEquals(0, joined.cappedFrom)
+    }
+
+    @Test
+    fun `passing over a bigger size is said out loud`() {
+        val choice = Downloads.bestVideo(
+            listOf(
+                video("1080p", 1080, withSound = true),
+                video("2160p", 2160, Downloads.Container.WEBM),
+                sound("opus", Downloads.Container.WEBM, 160),
+            )
+        )!!
+        assertEquals("1080p", choice.video?.label)
+        assertEquals(2160, choice.cappedFrom)
+    }
+
+    @Test
     fun `nothing offered is nothing chosen`() {
         assertNull(Downloads.bestVideo(emptyList()))
     }

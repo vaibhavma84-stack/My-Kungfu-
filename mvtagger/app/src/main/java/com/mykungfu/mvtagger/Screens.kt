@@ -354,6 +354,16 @@ private fun GetCard(state: UiState, viewModel: AppViewModel) {
                 }
             }
 
+            get.video?.cappedFrom?.takeIf { it > 0 }?.let { tallest ->
+                Text(
+                    "YouTube also has this in " + tallest + "p, but only as VP9 or " +
+                            "AV1 with Opus sound — which cannot be tagged inside the " +
+                            "file and needs an iPad to decode it in software.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             get.audio?.let { sound ->
                 OutlinedButton(
                     onClick = { viewModel.fetch(audioOnly = true) },

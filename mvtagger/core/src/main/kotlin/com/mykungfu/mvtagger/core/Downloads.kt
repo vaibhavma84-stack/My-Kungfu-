@@ -58,6 +58,16 @@ object Downloads {
         val video: Option?,
         val audio: Option?,
         val warning: String? = null,
+        /**
+         * The tallest size the site offered, when it is bigger than the one
+         * chosen. Zero when what was chosen is the best there was.
+         *
+         * Worth reporting rather than hiding: someone who knows the video is
+         * in 4K and sees 1080p on the button deserves to be told why, and
+         * "the bigger sizes are in a format this app cannot tag" is a reason
+         * rather than a limitation.
+         */
+        val cappedFrom: Int = 0,
     ) {
         val needsJoining: Boolean get() = video != null && audio != null
     }
@@ -87,13 +97,20 @@ object Downloads {
             .maxByOrNull { it.height }
 
         // Joining only earns its place when it actually gets a better picture.
+        // The tallest anything on offer, ceiling included, so the choice can
+        // say what it passed over.
+        val tallest = options.filter { it.hasVideo }.maxOfOrNull { it.height } ?: 0
+        fun cap(chosen: Option): Int = if (tallest > chosen.height) tallest else 0
+
         if (mp4Only != null && audio != null && audio.container == Container.M4A &&
             mp4Only.height > (mp4Whole?.height ?: 0)
         ) {
-            return Choice(mp4Only, audio)
+            return Choice(mp4Only, audio, cappedFrom = cap(mp4Only))
         }
-        if (mp4Whole != null) return Choice(mp4Whole, null)
-        if (mp4Only != null && audio != null) return Choice(mp4Only, audio)
+        if (mp4Whole != null) return Choice(mp4Whole, null, cappedFrom = cap(mp4Whole))
+        if (mp4Only != null && audio != null) {
+            return Choice(mp4Only, audio, cappedFrom = cap(mp4Only))
+        }
 
         val anything = usable.filter { it.hasVideo }.maxByOrNull { it.height }
             ?: options.filter { it.hasVideo }.minByOrNull { it.height }
