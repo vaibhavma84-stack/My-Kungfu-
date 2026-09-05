@@ -122,7 +122,12 @@ fun AppScreen(
 
     val playing = state.playing
     if (playing != null) {
-        PlayerScreen(playing, onClose = viewModel::stopPlaying, onOpenExternally = onOpenExternally)
+        PlayerScreen(
+            playing,
+            keepPlayingInBackground = state.settings.keepPlayingInBackground,
+            onClose = viewModel::stopPlaying,
+            onOpenExternally = onOpenExternally,
+        )
         return
     }
 
@@ -1941,6 +1946,26 @@ private fun SettingsScreen(
             Field("TMDb API key", settings.tmdbApiKey) {
                 viewModel.applySettings(settings.copy(tmdbApiKey = it ?: ""))
             }
+
+            HorizontalDivider()
+            Text("Playing", style = MaterialTheme.typography.titleMedium)
+            Toggle(
+                "Keep playing when the app is put away",
+                settings.keepPlayingInBackground,
+            ) { viewModel.applySettings(settings.copy(keepPlayingInBackground = it)) }
+            Text(
+                if (settings.keepPlayingInBackground)
+                    "ON. The sound carries on when you leave the app or the screen " +
+                            "goes off, which is what you want for a music video played " +
+                            "as a song. There are no lock-screen controls: getting back " +
+                            "to it means opening the app, and Android may stop it when " +
+                            "it needs the memory."
+                else
+                    "Off. Leaving the app or letting the screen go off pauses the " +
+                            "film where it is, and it is still there when you come back.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             HorizontalDivider()
             Text("After saving", style = MaterialTheme.typography.titleMedium)

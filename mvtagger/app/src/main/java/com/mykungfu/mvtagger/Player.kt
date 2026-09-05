@@ -62,6 +62,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -141,6 +144,7 @@ private const val QUALITY = 95
 @Composable
 fun PlayerScreen(
     playing: Playing,
+    keepPlayingInBackground: Boolean,
     onClose: () -> Unit,
     onOpenExternally: (Uri, String) -> Unit,
 ) {
@@ -174,6 +178,37 @@ fun PlayerScreen(
             playWhenReady = true
             prepare()
         }
+    }
+
+    /*
+       What happens when the app is put away or the screen goes off.
+
+       Left alone, a player carries on: the activity stops, the surface goes,
+       and the sound keeps coming out of a phone in a pocket. For a film that
+       is wrong, which is why stopping is what happens unless it was asked for.
+
+       Asked for, it is a music video played as a song, and the wake lock is
+       what makes that survive the screen going off rather than being cut a
+       minute later by the processor idling. ExoPlayer holds it only while
+       something is actually playing.
+
+       What this deliberately is not is a media service with a notification
+       and lock-screen controls. That is a different piece of work: it would
+       mean playback that outlives the app, and getting back to it means
+       opening the app again. Android may still stop this eventually when it
+       needs the memory.
+    */
+    LaunchedEffect(player, keepPlayingInBackground) {
+        player.setWakeMode(if (keepPlayingInBackground) C.WAKE_MODE_LOCAL else C.WAKE_MODE_NONE)
+    }
+
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner, player, keepPlayingInBackground) {
+        val watcher = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP && !keepPlayingInBackground) player.pause()
+        }
+        owner.lifecycle.addObserver(watcher)
+        onDispose { owner.lifecycle.removeObserver(watcher) }
     }
 
     // Release it whatever ends the screen -- back, a rotation, or the file

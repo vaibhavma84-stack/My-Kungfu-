@@ -65,6 +65,15 @@ data class Settings(
     /** Browse the collection as a wall of covers rather than a list. */
     val collectionAsGrid: Boolean = true,
     /**
+     * Keep the sound going when the app is put away or the screen goes off.
+     *
+     * Off, which is what anybody watching a film expects: putting the phone in
+     * a pocket should not leave it talking. On, a music video keeps playing as
+     * though it were a song, which is the one case where the picture is not
+     * the point.
+     */
+    val keepPlayingInBackground: Boolean = false,
+    /**
      * Write the poster.jpg and .nfo files Infuse, Plex and Jellyfin look for.
      *
      * Costs a few kilobytes per file and saves those apps from guessing the
@@ -128,6 +137,7 @@ class Store(context: Context) {
         subtitleLanguages = prefs.getString(KEY_SUB_LANGS, null) ?: "en",
         deleteOriginalAfterSaving = prefs.getBoolean(KEY_DELETE_ORIGINAL, false),
         collectionAsGrid = prefs.getBoolean(KEY_GRID, true),
+        keepPlayingInBackground = prefs.getBoolean(KEY_BACKGROUND_PLAY, false),
         writeLibraryFiles = prefs.getBoolean(KEY_LIBRARY_FILES, true),
     )
 
@@ -156,6 +166,7 @@ class Store(context: Context) {
             putString(KEY_SUB_LANGS, settings.subtitleLanguages)
             putBoolean(KEY_DELETE_ORIGINAL, settings.deleteOriginalAfterSaving)
             putBoolean(KEY_GRID, settings.collectionAsGrid)
+            putBoolean(KEY_BACKGROUND_PLAY, settings.keepPlayingInBackground)
             putBoolean(KEY_LIBRARY_FILES, settings.writeLibraryFiles)
         }.apply()
     }
@@ -205,6 +216,7 @@ class Store(context: Context) {
         const val KEY_SUB_LANGS = "subtitleLanguages"
         const val KEY_DELETE_ORIGINAL = "deleteOriginalAfterSaving"
         const val KEY_GRID = "collectionAsGrid"
+        const val KEY_BACKGROUND_PLAY = "keepPlayingInBackground"
         const val KEY_LIBRARY_FILES = "writeLibraryFiles"
     }
 }

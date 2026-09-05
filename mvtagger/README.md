@@ -72,7 +72,9 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
   scrub, a double tap either side for ten seconds, and a lock for when it is
   being held in two hands. Handing the file to another app is still one button
   away, and still the right answer when the phone has no decoder for what is
-  inside.
+  inside. Putting the app away pauses it, unless **Keep playing when the app
+  is put away** is on in Settings -- which is the difference between a film
+  and a music video played as a song.
 - **Steps a frame at a time.** Paused, asking for a frame drops the player into
   frame mode: the picture and one small row, no play button and no shade over
   the image. Pinch to zoom into the still and drag to move about it; **Save
