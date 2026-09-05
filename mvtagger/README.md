@@ -93,6 +93,20 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
   frame** writes what is on screen to *Pictures › Media Centre*, read back out
   of the file at its full size rather than copied off the screen.
 
+- **Fetches from a link.** **Get** on the To-do tab, or Share a link to Media
+  Centre from the YouTube app, and the video lands in your first to-do folder
+  ready to be tagged like anything else. Sound alone is offered too, as an
+  `.m4a`, which is an MP4 underneath and so takes the title, artist and cover
+  inside it exactly as a video does.
+
+  It does not offer 4K, and that is deliberate rather than a limitation:
+  above 1080p there is no H.264, and the larger sizes exist only as VP9 or
+  AV1 with Opus sound — the files this same app warns you about on the
+  Collection tab, because they cannot be tagged internally and an iPad
+  decodes them in software. Where the best H.264 comes as separate picture
+  and sound, the two are fetched and joined into one MP4 without re-encoding
+  anything.
+
 **Your originals are never modified.** Every result is a new file in the output
 folder, so a wrong match costs you a delete and nothing else.
 
@@ -102,6 +116,22 @@ cannot be undone. With it on, the original is removed only after the new file
 has been checked -- it must exist, be a sensible size, and, where tags went
 inside it, open again and read back correctly. If any of those fail the
 original is kept and the app tells you so.
+
+## Where the library lives
+
+The output folder is picked through Android's own folder picker, so it can be
+internal storage, an SD card, or a USB drive or SSD plugged into the phone —
+anything the system shows as a place to put files. The grant is remembered
+across restarts.
+
+A drive that is not plugged in is not the same as a folder with nothing in it,
+and the app now says so rather than scanning an absent folder, finding nothing,
+and writing "nothing" over what it remembers.
+
+## Licence
+
+The app links NewPipeExtractor, which is GPL-3, so this is GPL-3 as well. The
+source is in this repository beside every release it builds.
 
 ## Which files it can work with
 

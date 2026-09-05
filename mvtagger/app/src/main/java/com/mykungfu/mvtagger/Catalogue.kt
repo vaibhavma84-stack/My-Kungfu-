@@ -157,7 +157,7 @@ object Catalogue {
                     if (path.size < 8) queue += child.documentId to (path + child.name)
                     continue
                 }
-                if (!Saf.isVideo(child.name, child.mimeType)) continue
+                if (!Saf.isMedia(child.name, child.mimeType)) continue
 
                 val key = child.documentId + "|" + child.size + "|" + child.lastModified
                 // A remembered entry is only usable while its thumbnail is

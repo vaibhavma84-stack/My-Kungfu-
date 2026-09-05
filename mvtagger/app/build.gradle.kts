@@ -50,6 +50,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // NewPipeExtractor is written against the Java 8 date and stream
+        // classes, which Android only carries from API 26. Desugaring puts
+        // them back for the phones below that, which this app still supports.
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
         jvmTarget = "17"
@@ -81,4 +85,22 @@ dependencies {
     // file to another app stays available for exactly that case.
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
+
+    /*
+       Fetching a video from YouTube.
+
+       There is no API for this: YouTube publishes one for listing and none for
+       the streams themselves, so anything that downloads works by asking the
+       site the way its own player does. Doing that by hand is a losing game --
+       the details change every few months and the code stops working with no
+       warning. NewPipeExtractor is a library whose entire job is keeping up
+       with those changes, which makes a break here a version bump rather than
+       an afternoon of reverse engineering.
+
+       It is GPL-3, so this app is too, which is why the source lives in the
+       open beside the release it builds.
+    */
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.24.6")
+
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.2")
 }

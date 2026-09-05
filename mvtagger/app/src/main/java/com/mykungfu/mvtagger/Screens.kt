@@ -252,7 +252,12 @@ private fun ToDoContent(state: UiState, viewModel: AppViewModel, onAddSource: ()
             Spacer(Modifier.width(6.dp))
             Text("Folder")
         }
+        OutlinedButton(onClick = { viewModel.openGet(!state.get.open) }) {
+            Text(if (state.get.open) "Close" else "Get")
+        }
     }
+
+    if (state.get.open) GetCard(state, viewModel)
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 24.dp),
@@ -260,6 +265,107 @@ private fun ToDoContent(state: UiState, viewModel: AppViewModel, onAddSource: ()
     ) {
         items(state.items, key = { it.id }) { item ->
             ItemRow(item) { viewModel.open(item) }
+        }
+    }
+}
+
+/**
+ * Fetching a video by its link, into the folder the tagger already watches.
+ *
+ * The whole point of it being here rather than in another app is what happens
+ * next: the file lands in the to-do folder, the list picks it up on the scan
+ * that follows, and it is tagged and filed without being touched again.
+ *
+ * What it offers is deliberately not "every size available". Above 1080p there
+ * is no H.264, and the larger sizes are the exact files the collection screen
+ * warns about -- untaggable, and software-decoded on an iPad. So the choice is
+ * made by [Downloads] and shown as one line rather than a menu of twelve.
+ */
+@Composable
+private fun GetCard(state: UiState, viewModel: AppViewModel) {
+    val get = state.get
+
+    Card(Modifier.fillMaxWidth().padding(16.dp, 0.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = get.link,
+                onValueChange = viewModel::setLink,
+                label = { Text("YouTube link") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { viewModel.lookUp() },
+                    enabled = !get.looking && get.progress == null && get.link.isNotBlank(),
+                ) { Text(if (get.looking) "Looking…" else "Look up") }
+
+                if (get.progress != null) {
+                    OutlinedButton(onClick = { viewModel.stopFetch() }) { Text("Stop") }
+                }
+            }
+
+            get.title?.let { title ->
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                val by = listOfNotNull(
+                    get.uploader,
+                    get.durationSeconds.takeIf { it > 0 }?.let { seconds ->
+                        (seconds / 60).toString() + " min"
+                    },
+                ).joinToString("  ·  ")
+                if (by.isNotBlank()) {
+                    Text(
+                        by,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            val picture = get.video?.video
+            if (picture != null) {
+                Button(
+                    onClick = { viewModel.fetch(audioOnly = false) },
+                    enabled = get.progress == null,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "Download video · " + picture.label +
+                                if (get.video?.needsJoining == true) " + sound" else "",
+                    )
+                }
+            }
+
+            get.audio?.let { sound ->
+                OutlinedButton(
+                    onClick = { viewModel.fetch(audioOnly = true) },
+                    enabled = get.progress == null,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Download sound only · " + sound.label) }
+            }
+
+            get.progress?.let {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(it, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            get.note?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Text(
+                "Downloads land in your first to-do folder and are tagged from " +
+                        "there like anything else. Nothing above 1080p is offered: " +
+                        "the larger sizes exist only in formats this app cannot tag " +
+                        "and an iPad cannot decode in hardware.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

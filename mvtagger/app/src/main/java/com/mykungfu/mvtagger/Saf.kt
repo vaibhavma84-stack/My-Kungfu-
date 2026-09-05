@@ -75,7 +75,13 @@ object Saf {
             "ts", "m2ts", "mts" -> "video/mp2t"
             "mpg", "mpeg" -> "video/mpeg"
             "ogv" -> "video/ogg"
-            else -> "video/*"
+            "m4a", "m4b" -> "audio/mp4"
+            "mp3" -> "audio/mpeg"
+            "flac" -> "audio/flac"
+            "opus", "oga" -> "audio/ogg"
+            "wav" -> "audio/wav"
+            "aac" -> "audio/aac"
+            else -> if (isAudio(fileName, "")) "audio/*" else "video/*"
         }
 
     fun isVideo(name: String, mimeType: String): Boolean {
@@ -83,6 +89,27 @@ object Saf {
         val ext = name.substringAfterLast('.', "").lowercase()
         return ext in VIDEO_EXTENSIONS
     }
+
+    /**
+     * Music with no picture, which the app now has to handle because it can
+     * now fetch it: a song downloaded as sound alone is an .m4a, and an .m4a
+     * is an MP4 underneath, so the title, artist and cover go inside it
+     * exactly as they would in a video.
+     */
+    private val AUDIO_EXTENSIONS = setOf(
+        "m4a", "m4b", "mp3", "flac", "opus", "oga", "ogg", "aac", "wav", "wma",
+        "aiff", "aif", "alac",
+    )
+
+    fun isAudio(name: String, mimeType: String): Boolean {
+        if (mimeType.startsWith("audio/")) return true
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return ext in AUDIO_EXTENSIONS
+    }
+
+    /** Anything this app is willing to take charge of. */
+    fun isMedia(name: String, mimeType: String): Boolean =
+        isVideo(name, mimeType) || isAudio(name, mimeType)
 
     /** Keeps a folder grant alive across app restarts. */
     fun persist(context: Context, treeUri: Uri) {
@@ -144,7 +171,7 @@ object Saf {
             for (child in listChildren(resolver, treeUri, docId)) {
                 if (child.isDirectory) {
                     if (depth < maxDepth) queue += child.documentId to depth + 1
-                } else if (isVideo(child.name, child.mimeType)) {
+                } else if (isMedia(child.name, child.mimeType)) {
                     found += child
                     onProgress(found.size)
                 }
@@ -245,6 +272,19 @@ object Saf {
         resolver.query(
             uri, arrayOf(DocumentsContract.Document.COLUMN_SIZE), null, null, null
         )?.use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null }
+
+    /**
+     * Whether the folder behind a tree URI can actually be reached right now.
+     *
+     * Not the same question as whether it is empty, and the difference matters
+     * for a library kept on a memory card or a plugged-in drive. An empty
+     * listing from a folder that is not there looks exactly like a folder with
+     * nothing in it, and treating one as the other is how a remembered library
+     * gets overwritten with nothing while the drive is in a drawer.
+     */
+    fun canRead(resolver: ContentResolver, treeUri: Uri): Boolean = runCatching {
+        queryName(resolver, documentUri(treeUri, rootDocumentId(treeUri))) != null
+    }.getOrDefault(false)
 
     fun queryName(resolver: ContentResolver, uri: Uri): String? =
         resolver.query(

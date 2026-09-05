@@ -207,6 +207,93 @@ object Remux {
         }
     }
 
+    /**
+     * Joins a video-only file and an audio-only file into one MP4.
+     *
+     * This is what makes a proper download possible without re-encoding
+     * anything. Above 720p a site hands over the picture and the sound
+     * separately, and joining them is a copy: the H.264 frames and the AAC
+     * frames go into one container untouched, which takes seconds and loses
+     * nothing.
+     *
+     * Both sources are local files rather than documents, because they are
+     * pieces this app has just fetched into its own cache and will delete
+     * afterwards. Nothing the user owns is read or written here.
+     */
+    fun join(video: java.io.File, audio: java.io.File, target: Uri, context: Context): Long {
+        require(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            "Joining needs Android 8 or newer"
+        }
+
+        val picture = MediaExtractor()
+        val sound = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        val descriptor = context.contentResolver.openFileDescriptor(target, "rw")
+            ?: throw java.io.IOException("could not open the new file for writing")
+
+        try {
+            picture.setDataSource(video.absolutePath)
+            sound.setDataSource(audio.absolutePath)
+            muxer = MediaMuxer(descriptor.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+
+            var bufferSize = MIN_BUFFER
+            val tracks = ArrayList<Triple<MediaExtractor, Int, Int>>()
+
+            for (source in listOf(picture, sound)) {
+                for (i in 0 until source.trackCount) {
+                    val format = source.getTrackFormat(i)
+                    val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                    if (mime !in VIDEO_SUPPORTED && mime !in AUDIO_SUPPORTED) continue
+                    source.selectTrack(i)
+                    tracks += Triple(source, i, muxer.addTrack(format))
+                    bufferSize = maxOf(bufferSize, bufferFor(format))
+                    if (mime.startsWith("video/") && format.containsKey(MediaFormat.KEY_ROTATION)) {
+                        runCatching {
+                            muxer.setOrientationHint(format.getInteger(MediaFormat.KEY_ROTATION))
+                        }
+                    }
+                }
+            }
+            if (tracks.size < 2) {
+                throw java.io.IOException("the picture and the sound could not both go into an MP4")
+            }
+
+            muxer.start()
+
+            val buffer = ByteBuffer.allocate(bufferSize)
+            val info = MediaCodec.BufferInfo()
+            var samples = 0L
+
+            // One source at a time rather than interleaved by timestamp. The
+            // muxer sorts the result out itself, and reading them in turn
+            // keeps each extractor sequential, which is how they are fastest.
+            for ((source, _, to) in tracks) {
+                while (true) {
+                    val size = source.readSampleData(buffer, 0)
+                    if (size < 0) break
+                    info.offset = 0
+                    info.size = size
+                    info.presentationTimeUs = source.sampleTime.coerceAtLeast(0L)
+                    info.flags = if (source.sampleFlags and
+                        MediaExtractor.SAMPLE_FLAG_SYNC != 0
+                    ) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
+                    muxer.writeSampleData(to, buffer, info)
+                    samples++
+                    source.advance()
+                }
+            }
+
+            if (samples == 0L) throw java.io.IOException("neither piece had anything in it")
+            muxer.stop()
+            return samples
+        } finally {
+            runCatching { muxer?.release() }
+            runCatching { picture.release() }
+            runCatching { sound.release() }
+            runCatching { descriptor.close() }
+        }
+    }
+
     /** What actually came out of a cut, which is not quite what was asked for. */
     data class Cut(val samples: Long, val startedAtMs: Long, val endedAtMs: Long)
 

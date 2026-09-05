@@ -55,6 +55,35 @@ class MainActivity : ComponentActivity() {
             CrashLog.save(this, t, "Failed while building the screen.")
             showError(CrashLog.read(this) ?: t.stackTraceToString())
         }
+
+        takeSharedLink(intent)
+    }
+
+    /** A link shared while the app is already open arrives here instead. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        takeSharedLink(intent)
+    }
+
+    /**
+     * A link shared from the YouTube app, or from a browser.
+     *
+     * This is the way anybody actually downloads something: they are already
+     * watching it, and Share is right there. Typing a YouTube link by hand is
+     * nobody's plan.
+     */
+    private fun takeSharedLink(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val shared = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+        // Share text often reads "Watch this - https://youtu.be/...", so the
+        // link is picked out of it rather than taken whole.
+        val link = shared.split(Regex("\\s+")).firstOrNull { YouTube.looksLikeYouTube(it) }
+            ?: return
+        viewModel.setLink(link)
+        viewModel.openGet(true)
+        viewModel.showTab(MainTab.TO_DO)
+        viewModel.lookUp()
     }
 
     /**

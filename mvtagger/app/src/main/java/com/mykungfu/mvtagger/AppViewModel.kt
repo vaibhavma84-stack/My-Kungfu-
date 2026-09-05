@@ -8,6 +8,7 @@ import com.mykungfu.mvtagger.core.AlbumInfo
 import com.mykungfu.mvtagger.core.ArtistInfo
 import com.mykungfu.mvtagger.core.Candidate
 import com.mykungfu.mvtagger.core.Clips
+import com.mykungfu.mvtagger.core.Downloads
 import com.mykungfu.mvtagger.core.CreditNames
 import com.mykungfu.mvtagger.core.FilmTitle
 import com.mykungfu.mvtagger.core.FilenameParser
@@ -46,6 +47,25 @@ data class Item(
     val uri: Uri get() = Saf.documentUri(treeUri, documentId)
     val extension: String get() = FilenameParser.extensionOf(name)
 }
+
+/**
+ * The download panel: a link, what it turned out to be, and how far along.
+ *
+ * Kept as plain values rather than the extractor's own types so that nothing
+ * outside [YouTube] depends on which library is doing the fetching.
+ */
+data class GetState(
+    val open: Boolean = false,
+    val link: String = "",
+    val looking: Boolean = false,
+    val title: String? = null,
+    val uploader: String? = null,
+    val durationSeconds: Long = 0,
+    val video: Downloads.Choice? = null,
+    val audio: Downloads.Option? = null,
+    val progress: String? = null,
+    val note: String? = null,
+)
 
 /** The file currently open, and everything looked up for it. */
 data class Detail(
@@ -139,6 +159,7 @@ data class UiState(
     val message: String? = null,
     val detail: Detail? = null,
     val showSettings: Boolean = false,
+    val get: GetState = GetState(),
     val tab: MainTab = MainTab.TO_DO,
     /** Everything in the output folder, read from the tags inside the files. */
     val collection: List<Entry> = emptyList(),
@@ -331,6 +352,181 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
+    // --- fetching a video from a link ----------------------------------------
+
+    /**
+     * Set while a download is running, cleared to stop it.
+     *
+     * Volatile because it is written from the main thread and read from the
+     * one doing the copying, several times a second.
+     */
+    @Volatile
+    private var stopFetching = false
+
+    fun openGet(open: Boolean) {
+        _state.value = _state.value.copy(get = _state.value.get.copy(open = open, note = null))
+    }
+
+    fun setLink(text: String) {
+        _state.value = _state.value.copy(
+            get = _state.value.get.copy(link = text, note = null),
+        )
+    }
+
+    /**
+     * Asks what is at the link.
+     *
+     * Everything that can go wrong here goes wrong at the site rather than in
+     * this app -- a video that is private, a link that is not one, or YouTube
+     * having changed something the extractor has not caught up with. All three
+     * are a sentence on the screen rather than a crash.
+     */
+    fun lookUp() = viewModelScope.launch {
+        val link = _state.value.get.link.trim()
+        if (!YouTube.looksLikeYouTube(link)) {
+            _state.value = _state.value.copy(
+                get = _state.value.get.copy(note = "That does not look like a YouTube link."),
+            )
+            return@launch
+        }
+
+        _state.value = _state.value.copy(
+            get = _state.value.get.copy(looking = true, note = null, video = null, audio = null),
+        )
+
+        val found = withContext(Dispatchers.IO) { runCatching { YouTube.about(link) } }
+        val get = _state.value.get
+
+        found.onSuccess { video ->
+            val best = Downloads.bestVideo(video.options)
+            _state.value = _state.value.copy(
+                get = get.copy(
+                    looking = false,
+                    title = video.title,
+                    uploader = video.uploader,
+                    durationSeconds = video.durationSeconds,
+                    video = best,
+                    audio = Downloads.bestAudio(video.options),
+                    note = best?.warning,
+                ),
+            )
+        }.onFailure { trouble ->
+            _state.value = _state.value.copy(
+                get = get.copy(
+                    looking = false,
+                    note = "That link could not be read: " +
+                            (trouble.message ?: trouble.javaClass.simpleName) +
+                            ". If this keeps happening for every link, YouTube has " +
+                            "changed something and the app needs a newer extractor.",
+                ),
+            )
+        }
+    }
+
+    fun stopFetch() {
+        stopFetching = true
+    }
+
+    /**
+     * Fetches what was found into the first to-do folder, where the tagger
+     * will find it on the next scan.
+     *
+     * A video above 720p arrives as picture and sound separately, so those are
+     * fetched into this app's own cache and joined into one MP4 afterwards.
+     * The pieces are deleted whatever happens: a cancelled download must not
+     * leave a gigabyte behind, and half a video must never look like a whole
+     * one.
+     */
+    fun fetch(audioOnly: Boolean) = viewModelScope.launch {
+        val get = _state.value.get
+        val tree = settings.sourceTrees.firstOrNull()?.let(Uri::parse)
+        if (tree == null) {
+            _state.value = _state.value.copy(
+                get = get.copy(note = "Add a to-do folder in Settings first; that is " +
+                        "where downloads land."),
+            )
+            return@launch
+        }
+
+        val choice = get.video
+        val sound = get.audio
+        if (audioOnly && sound == null || !audioOnly && choice?.video == null) {
+            _state.value = _state.value.copy(get = get.copy(note = "Nothing to fetch yet."))
+            return@launch
+        }
+
+        stopFetching = false
+        val app = getApplication<Application>()
+        val resolver = app.contentResolver
+
+        val outcome = withContext(Dispatchers.IO) {
+            val container = if (audioOnly) sound!!.container else choice!!.video!!.container
+            val name = Downloads.fileName(get.title, container)
+            val mime = if (audioOnly) "audio/mp4" else "video/mp4"
+            val root = Saf.rootDocumentId(tree)
+            val made = Saf.createFile(resolver, tree, root, name, mime)
+                ?: return@withContext "The file could not be created in the to-do folder."
+
+            val pieces = ArrayList<java.io.File>()
+            try {
+                if (audioOnly || choice!!.audio == null) {
+                    val from = if (audioOnly) sound!!.id else choice!!.video!!.id
+                    Fetcher.toDocument(app, from, made.uri, { !stopFetching }) { done, total ->
+                        report(done, total, "Downloading")
+                    }
+                } else {
+                    // Two pieces, then one file. Fetched into the cache rather
+                    // than the user's folder, so nothing half-finished is ever
+                    // visible to anything else.
+                    val video = java.io.File(app.cacheDir, "fetch-video.tmp")
+                    val audio = java.io.File(app.cacheDir, "fetch-audio.tmp")
+                    pieces += video
+                    pieces += audio
+
+                    Fetcher.toFile(choice.video!!.id, video, { !stopFetching }) { done, total ->
+                        report(done, total, "Downloading the picture")
+                    }
+                    Fetcher.toFile(choice.audio!!.id, audio, { !stopFetching }) { done, total ->
+                        report(done, total, "Downloading the sound")
+                    }
+                    _state.value = _state.value.copy(
+                        get = _state.value.get.copy(progress = "Joining them…"),
+                    )
+                    Remux.join(video, audio, made.uri, app)
+                }
+                "Saved " + made.name + " to the to-do folder."
+            } catch (stopped: InterruptedException) {
+                runCatching { Saf.delete(resolver, made.uri) }
+                "Stopped. Nothing was kept."
+            } catch (trouble: Exception) {
+                runCatching { Saf.delete(resolver, made.uri) }
+                "That download did not finish: " +
+                        (trouble.message ?: trouble.javaClass.simpleName)
+            } finally {
+                for (piece in pieces) runCatching { piece.delete() }
+            }
+        }
+
+        _state.value = _state.value.copy(
+            get = _state.value.get.copy(progress = null, note = outcome),
+        )
+        // So it appears in the list it was fetched for.
+        rescan()
+    }
+
+    /** Percentages only, because a redraw per chunk is a redraw per 256 kilobytes. */
+    private fun report(done: Long, total: Long, what: String) {
+        val text = if (total > 0L) {
+            what + "… " + (done * 100 / total) + "%"
+        } else {
+            what + "… " + (done / (1024 * 1024)) + " MB"
+        }
+        val get = _state.value.get
+        if (get.progress != text) {
+            _state.value = _state.value.copy(get = get.copy(progress = text))
+        }
+    }
+
     /** The lyrics switch in the player, kept for the next song. */
     fun showLyrics(on: Boolean) {
         applySettings(settings.copy(showLyrics = on))
@@ -366,10 +562,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             )
             return@launch
         }
+        /*
+           A folder that cannot be reached is not a folder with nothing in it.
+
+           They look identical from here -- both list no children -- and the
+           difference is the whole story when the library lives on a memory
+           card or a drive that plugs in. Scanning anyway would find nothing,
+           write "nothing" over the remembered index, and leave an empty
+           Collection tab that reads as a library that has been lost. So the
+           question is asked first, and a drive in a drawer costs a sentence
+           rather than a rescan.
+        */
+        val app = getApplication<Application>()
+        if (!Saf.canRead(app.contentResolver, tree)) {
+            _state.value = _state.value.copy(
+                busy = null,
+                message = "The output folder could not be reached. If it is on a memory " +
+                        "card or a drive, connect it and open this tab again. Nothing " +
+                        "has been lost.",
+            )
+            return@launch
+        }
+
         _state.value = _state.value.copy(busy = "Reading your collection…")
         val found = withContext(Dispatchers.IO) {
-            runCatching { Catalogue.scan(getApplication<Application>(), tree) }
-                .getOrDefault(emptyList())
+            runCatching { Catalogue.scan(app, tree) }.getOrDefault(emptyList())
         }
         /*
            Whatever was open may not be there any more.
