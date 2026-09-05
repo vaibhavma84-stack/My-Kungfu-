@@ -1,6 +1,7 @@
 package com.mykungfu.mvtagger
 
 import com.mykungfu.mvtagger.core.Downloads
+import com.mykungfu.mvtagger.core.YouTubeLinks
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.downloader.Downloader
@@ -39,6 +40,9 @@ object YouTube {
         val options: List<Downloads.Option>,
     )
 
+    /** Where the browser starts. The mobile site is the one built for a phone. */
+    const val HOME = YouTubeLinks.HOME
+
     private var started = false
 
     @Synchronized
@@ -48,13 +52,14 @@ object YouTube {
         started = true
     }
 
-    /** True for the links worth pasting in, so a typo is caught before a request. */
-    fun looksLikeYouTube(text: String): Boolean {
-        val trimmed = text.trim().lowercase()
-        if (!trimmed.startsWith("http")) return false
-        return trimmed.contains("youtube.com/") || trimmed.contains("youtu.be/") ||
-                trimmed.contains("youtube-nocookie.com/")
-    }
+    /**
+     * True for the links worth pasting in, so a typo is caught before a
+     * request. The parsing and the reasoning are in [YouTubeLinks], where they
+     * can be tested.
+     */
+    fun looksLikeYouTube(text: String): Boolean = YouTubeLinks.isYouTube(text)
+
+    fun isWatchable(url: String?): Boolean = YouTubeLinks.isWatchable(url)
 
     /**
      * What is at this link. Throws when the site will not say, which is a

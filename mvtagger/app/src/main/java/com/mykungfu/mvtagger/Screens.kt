@@ -121,6 +121,11 @@ fun AppScreen(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? -> uri?.let(viewModel::setOutputFolder) }
 
+    if (state.browsing) {
+        BrowserScreen(state, viewModel)
+        return
+    }
+
     val playing = state.playing
     if (playing != null) {
         PlayerScreen(
@@ -288,10 +293,21 @@ private fun GetCard(state: UiState, viewModel: AppViewModel) {
 
     Card(Modifier.fillMaxWidth().padding(16.dp, 0.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { viewModel.openBrowser(true) },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Browse YouTube here") }
+            Text(
+                "Opens inside the app and goes nowhere else. Find something, " +
+                        "press Download, and it lands in the to-do folder.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
             OutlinedTextField(
                 value = get.link,
                 onValueChange = viewModel::setLink,
-                label = { Text("YouTube link") },
+                label = { Text("Or paste a link") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )

@@ -160,6 +160,10 @@ data class UiState(
     val detail: Detail? = null,
     val showSettings: Boolean = false,
     val get: GetState = GetState(),
+    /** The browser is open over everything else, like the player. */
+    val browsing: Boolean = false,
+    /** Where it is now, which is also what the download button acts on. */
+    val browserUrl: String = YouTube.HOME,
     val tab: MainTab = MainTab.TO_DO,
     /** Everything in the output folder, read from the tags inside the files. */
     val collection: List<Entry> = emptyList(),
@@ -362,6 +366,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     @Volatile
     private var stopFetching = false
+
+    // --- the browser ---------------------------------------------------------
+
+    fun openBrowser(open: Boolean) {
+        _state.value = _state.value.copy(
+            browsing = open,
+            // A fresh panel each time: last time's answer under this time's
+            // video is the kind of thing that gets the wrong file downloaded.
+            get = if (open) _state.value.get.copy(
+                title = null, uploader = null, video = null, audio = null, note = null,
+            ) else _state.value.get,
+        )
+    }
+
+    /** Every page the browser lands on, so the button knows what it would fetch. */
+    fun browsedTo(url: String) {
+        if (url.isBlank() || url == _state.value.browserUrl) return
+        val state = _state.value
+        _state.value = state.copy(
+            browserUrl = url,
+            // What was found belonged to the page that has just been left.
+            get = state.get.copy(
+                title = null, uploader = null, video = null, audio = null, note = null,
+            ),
+        )
+    }
+
+    /** Look up whatever the browser is showing, without leaving it. */
+    fun lookUpCurrent() {
+        setLink(_state.value.browserUrl)
+        lookUp()
+    }
 
     fun openGet(open: Boolean) {
         _state.value = _state.value.copy(get = _state.value.get.copy(open = open, note = null))

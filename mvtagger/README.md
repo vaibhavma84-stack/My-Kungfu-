@@ -105,9 +105,14 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
   language — Tamil, Telugu, Korean. The app knows the language of a file, which
   is the closest honest thing it has to an industry; a British film is not
   really Hollywood, and that is the price of the shorthand.
-- **Fetches from a link.** **Get** on the To-do tab, or Share a link to Media
-  Centre from the YouTube app, and the video lands in your first to-do folder
-  ready to be tagged like anything else. Sound alone is offered too, as an
+- **Browses YouTube, inside the app.** **Get** on the To-do tab opens YouTube
+  in a window of its own: find something, press Download, and it lands in your
+  first to-do folder ready to be tagged like anything else — without leaving
+  for another app and coming back with a link in the clipboard. The window is
+  locked to YouTube and refuses every other address, including a page asking
+  to be handed to the YouTube app. It is signed in to nothing, reads nothing
+  off the page, and touches no cookies: the address bar is all it takes.
+  Pasting a link and sharing one from the YouTube app still work. Sound alone is offered too, as an
   `.m4a`, which is an MP4 underneath and so takes the title, artist and cover
   inside it exactly as a video does.
 
