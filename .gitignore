@@ -8,3 +8,4 @@ mvtagger/.gradle/
 mvtagger/build/
 mvtagger/*/build/
 mvtagger/local.properties
+mvtagger/.kotlin/

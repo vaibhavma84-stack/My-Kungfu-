@@ -62,6 +62,23 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
 - **Optionally clears up after itself.** A setting deletes each original once
   its replacement has been verified. Off by default; see below.
 
+- **Plays them.** The app started with no player of its own, on the grounds
+  that the phone already has good ones. That turned out to be wrong in
+  practice: handing a file over goes through a permission grant on a folder
+  URI, and enough players open it in a component that never received the grant
+  that "cannot play this video" was a common answer for a perfectly good file.
+  So there is a player: full screen when the phone turns, brightness on the
+  left of the picture and volume on the right, a drag across the middle to
+  scrub, a double tap either side for ten seconds, and a lock for when it is
+  being held in two hands. Handing the file to another app is still one button
+  away, and still the right answer when the phone has no decoder for what is
+  inside.
+- **Steps a frame at a time.** Paused, asking for a frame drops the player into
+  frame mode: the picture and one small row, no play button and no shade over
+  the image. Pinch to zoom into the still and drag to move about it; **Save
+  frame** writes what is on screen to *Pictures › Media Centre*, read back out
+  of the file at its full size rather than copied off the screen.
+
 **Your originals are never modified.** Every result is a new file in the output
 folder, so a wrong match costs you a delete and nothing else.
 
@@ -146,8 +163,7 @@ failure deletes the partial rather than leaving something that looks finished.
 
 ## What it deliberately does not do
 
-- **No player.** Your phone already has good ones; the app hands the file to
-  whichever you pick.
+- **No transcoding on the way out.** See below.
 - **No re-encoding.** Repackaging into MP4 is lossless and supported; actually
   transcoding one codec into another is not. A VP9/Opus `.webm` cannot become an
   MP4 without it, and doing it on a phone would take far longer than
