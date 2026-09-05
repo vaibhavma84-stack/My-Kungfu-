@@ -10,8 +10,11 @@
 
     Zooming into a frame needs exactly that. So frame mode swaps in this one,
     backed by a TextureView, which is an ordinary view and can be transformed
-    like one. It costs a copy per frame -- paid only while paused and looking
+    like one. It costs a copy per frame, paid only while paused and looking
     closely at a still, which is the one time nobody is counting.
+
+    (No double hyphens anywhere above: XML forbids them inside a comment, and
+    the resource compiler refuses the whole file over one.)
 -->
 <androidx.media3.ui.PlayerView
     xmlns:android="http://schemas.android.com/apk/res/android"

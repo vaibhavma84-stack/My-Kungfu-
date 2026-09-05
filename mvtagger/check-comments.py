@@ -22,6 +22,12 @@ Two things are checked, both of which are always mistakes rather than style:
 Deliberate nesting in a plain `/* */` comment, which is how you comment out a
 block of code that already has comments in it, is left alone.
 
+The same round trip is available in XML, by a different route: a resource
+comment may not contain a double hyphen, so a line of prose that uses one as a
+dash makes the resource compiler reject the whole file. That is checked here
+too, along with an XML comment left open, because both are the same kind of
+mistake -- a comment that costs a build rather than a comment that is wrong.
+
 Give it directories to check, or none to walk everything beside this script.
 """
 
@@ -128,6 +134,34 @@ def scan(text):
     return problems
 
 
+def scan_xml(text):
+    """The two things an XML comment can do to a build, both invisible while writing it."""
+    problems = []
+    i = 0
+    line = 1
+    while True:
+        at = text.find("<!--", i)
+        if at < 0:
+            return problems
+        line += text.count("\n", i, at)
+        end = text.find("-->", at + 4)
+        if end < 0:
+            problems.append((line, "this comment is never closed"))
+            return problems
+        body = text[at + 4:end]
+        # A double hyphen anywhere inside is rejected by every XML parser,
+        # including the one the resource compiler uses.
+        offset = body.find("--")
+        if offset >= 0:
+            problems.append((
+                line + body.count("\n", 0, offset),
+                "a double hyphen inside an XML comment; the resource compiler "
+                "refuses the whole file over it",
+            ))
+        line += text.count("\n", at, end)
+        i = end + 3
+
+
 def main(argv):
     roots = [pathlib.Path(a) for a in argv] or [HERE]
     files = sorted(f for root in roots for f in root.rglob("*.kt"))
@@ -136,16 +170,26 @@ def main(argv):
         print("check-comments: no Kotlin sources found", file=sys.stderr)
         return 1
 
+    xml = sorted(f for root in roots for f in root.rglob("*.xml"))
+    xml = [f for f in xml if "/build/" not in str(f)]
+
     bad = 0
     for path in files:
         for line, message in scan(path.read_text(encoding="utf-8")):
+            bad += 1
+            print("%s:%d: %s" % (path, line, message), file=sys.stderr)
+    for path in xml:
+        for line, message in scan_xml(path.read_text(encoding="utf-8")):
             bad += 1
             print("%s:%d: %s" % (path, line, message), file=sys.stderr)
 
     if bad:
         print("check-comments: %d problem(s)" % bad, file=sys.stderr)
         return 1
-    print("check-comments: %d Kotlin files, every comment closes where it looks like it does." % len(files))
+    print(
+        "check-comments: %d Kotlin and %d XML files, every comment closes where it "
+        "looks like it does." % (len(files), len(xml))
+    )
     return 0
 
 
