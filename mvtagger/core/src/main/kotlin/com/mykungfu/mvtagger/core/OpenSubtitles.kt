@@ -68,7 +68,11 @@ object OpenSubtitles {
                 episode?.let { sb.append("&episode_number=").append(it) }
             }
             MediaKind.MOVIE -> sb.append("&type=movie")
-            MediaKind.MUSIC_VIDEO -> Unit
+            // Nobody subtitles a music video, a workout or a lecture, and
+            // asking anyway would spend one of a rationed number of requests
+            // on a search that cannot succeed.
+            MediaKind.MUSIC_VIDEO, MediaKind.PODCAST,
+            MediaKind.FITNESS, MediaKind.LEARNING -> Unit
         }
         if (!year.isNullOrBlank()) sb.append("&year=").append(urlEncode(year))
         return sb.toString()

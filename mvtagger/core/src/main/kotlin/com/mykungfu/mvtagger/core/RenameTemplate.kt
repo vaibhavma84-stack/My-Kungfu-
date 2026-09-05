@@ -34,6 +34,11 @@ object RenameTemplate {
         MediaKind.MUSIC_VIDEO -> "{artist} - {title}"
         MediaKind.MOVIE -> "{title}[ ({year})]"
         MediaKind.TV_EPISODE -> "{show} - S{season2}E{episode2}[ - {title}]"
+        // Numbered where there are numbers, named where there are not: a
+        // podcast episode usually has both, a workout usually has neither.
+        MediaKind.PODCAST -> "[{show} - ][{date} - ]{title}"
+        MediaKind.FITNESS -> "[{show} - ]{title}"
+        MediaKind.LEARNING -> "[{show} - ][S{season2}E{episode2} - ]{title}"
     }
 
     /** Characters no Android filesystem, SD card included, will accept. */

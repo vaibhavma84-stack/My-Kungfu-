@@ -132,6 +132,22 @@ object Duplicates {
             // reuse names constantly.
             if (title.isBlank() || by.isBlank()) null else "song:" + title + ":" + by
         }
+
+        /*
+           Podcasts, workouts and lessons.
+
+           Nothing online says what these are, so there is no catalogue number
+           to match on and the title is all there is. Which is why they are
+           matched on the title *and* whatever they belong to: two episodes
+           called "Introduction" in two different courses are not the same
+           file, and a rule that said they were would offer to delete one.
+        */
+        MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING -> {
+            val title = fold(item.title)
+            val within = fold(item.showName)
+            if (title.isBlank()) null
+            else item.kind.name.lowercase() + ":" + within + ":" + title
+        }
     }
 
     private fun labelOf(item: Item): String = when (item.kind) {
@@ -146,6 +162,10 @@ object Duplicates {
             item.title.orEmpty() + (item.year?.let { " (" + it + ")" } ?: "")
         MediaKind.MUSIC_VIDEO ->
             listOfNotNull(item.artist, item.title).joinToString(" — ").ifBlank {
+                item.title.orEmpty()
+            }
+        MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING ->
+            listOfNotNull(item.showName, item.title).joinToString(" — ").ifBlank {
                 item.title.orEmpty()
             }
     }

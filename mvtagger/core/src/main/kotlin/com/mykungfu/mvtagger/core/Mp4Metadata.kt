@@ -63,6 +63,17 @@ object Mp4Metadata {
     private const val FF_SOURCE = "MVTAGGER_SOURCE"
     private const val FF_SOURCE_ID = "MVTAGGER_SOURCE_ID"
 
+    /**
+     * What the app calls this file.
+     *
+     * Apple's `stik` says a great deal but not everything: it has a value for
+     * a podcast and one for a lecture, and none at all for a workout, which
+     * would come back as a film. So the app writes its own word for it as
+     * well, and reads that one first. `stik` is still written, because that is
+     * what an iPad reads.
+     */
+    private const val FF_KIND = "MVTAGGER_KIND"
+
     /** Data box type indicators. */
     private const val TYPE_IMPLICIT = 0
     private const val TYPE_UTF8 = 1
@@ -113,6 +124,9 @@ object Mp4Metadata {
 
     private fun readIlst(buf: ByteArray, ilst: Mp4.BoxRef): VideoTags {
         var tags = VideoTags()
+        // Whether the file carried the app's own word for what it is, which
+        // outranks Apple's stik however the two are ordered inside the file.
+        var saidItsKind = false
         for (item in Mp4.children(buf, ilst.payloadStart.toInt(), ilst.end.toInt())) {
             val kids = Mp4.children(buf, item.payloadStart.toInt(), item.end.toInt())
             val data = kids.firstOrNull { it.type == "data" } ?: continue
@@ -147,6 +161,11 @@ object Mp4Metadata {
                     tags.copy(episodeNumber = Mp4.be32(payload, 0).takeIf { it > 0 }) else tags
                 MEDIA_KIND -> {
                     val v = if (payload.isNotEmpty()) payload[payload.size - 1].toInt() else -1
+                    // Never over the app's own word, wherever the two atoms
+                    // happen to sit in the file. stik has no value for a
+                    // workout, so a fitness video carries a film's number and
+                    // would come back as a film.
+                    if (saidItsKind) tags else
                     MediaKind.fromStik(v)?.let { tags.copy(mediaKind = it) } ?: tags
                 }
                 COMPOSER -> tags.copy(composer = text())
@@ -180,6 +199,12 @@ object Mp4Metadata {
                         FF_ALBUM_INFO -> tags.copy(albumInfo = value)
                         FF_SOURCE -> tags.copy(source = value)
                         FF_SOURCE_ID -> tags.copy(sourceId = value)
+                        // The app's own word wins over stik, which cannot tell
+                        // a workout from a film.
+                        FF_KIND -> MediaKind.byName(value)?.let {
+                            saidItsKind = true
+                            tags.copy(mediaKind = it)
+                        } ?: tags
                         else -> tags
                     }
                 }
@@ -466,6 +491,7 @@ object Mp4Metadata {
         if (!tags.albumInfo.isNullOrBlank()) body.write(freeform(FF_ALBUM_INFO, tags.albumInfo))
         if (!tags.source.isNullOrBlank()) body.write(freeform(FF_SOURCE, tags.source))
         if (!tags.sourceId.isNullOrBlank()) body.write(freeform(FF_SOURCE_ID, tags.sourceId))
+        body.write(freeform(FF_KIND, tags.mediaKind.name))
 
         text(TV_SHOW, tags.showName)
         text(TV_NETWORK, tags.network)

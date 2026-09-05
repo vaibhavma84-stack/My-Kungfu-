@@ -69,10 +69,11 @@ data class Entry(
 
     val subheading: String?
         get() = when (kind) {
-            MediaKind.TV_EPISODE -> showName
             MediaKind.MOVIE -> year
             MediaKind.MUSIC_VIDEO -> listOfNotNull(artist, album).joinToString(" · ")
                 .takeIf { it.isNotBlank() }
+            // Everything else hangs off a series, a programme or a course.
+            else -> showName
         }
 
     /**
@@ -132,6 +133,11 @@ object Catalogue {
         "films" to MediaKind.MOVIE,
         "tv shows" to MediaKind.TV_EPISODE,
         "series" to MediaKind.TV_EPISODE,
+        "podcasts" to MediaKind.PODCAST,
+        "fitness" to MediaKind.FITNESS,
+        "workouts" to MediaKind.FITNESS,
+        "learning" to MediaKind.LEARNING,
+        "courses" to MediaKind.LEARNING,
     )
 
     fun scan(
@@ -462,6 +468,9 @@ object Catalogue {
     private const val NO_ARTIST = "Artist not known"
     private const val NO_FILM = "Film not known"
 
+    /** For a podcast, workout or lesson that names nothing it belongs to. */
+    private const val NO_SHOW = "Not in a series"
+
     /**
      * Languages whose popular music is film music.
      *
@@ -491,16 +500,40 @@ object Catalogue {
                 val (filmSongs, rest) = wanted.partition { it.language in FILM_SONG_LANGUAGES }
                 filmGroups(filmSongs) + artistGroups(rest)
             }
-            MediaKind.TV_EPISODE -> of.groupBy { it.showName ?: "Unknown series" }
+            MediaKind.TV_EPISODE -> withinLanguage(of, language)
+                .groupBy { it.showName ?: "Unknown series" }
                 .toSortedMap(compareBy { it.lowercase() })
                 .map { (show, items) ->
                     flat(show, items.sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 })))
                 }
-            MediaKind.MOVIE -> of.groupBy { it.year ?: "Year not known" }
+            MediaKind.MOVIE -> withinLanguage(of, language)
+                .groupBy { it.year ?: "Year not known" }
                 .toSortedMap(compareByDescending { it })
                 .map { (year, items) -> flat(year, items.sortedBy { sortKey(it) }) }
+
+            /*
+               Podcasts, workouts and lessons all hang off the thing they
+               belong to -- a series, a programme, a course -- which is one
+               level rather than the two a song needs. Nothing is grouped
+               below that: a workout is not from an album.
+            */
+            MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING ->
+                of.groupBy { it.showName?.trim()?.ifBlank { null } ?: NO_SHOW }
+                    .toList()
+                    .sortedBy { (show, _) -> Transliterate.fold(show) }
+                    .map { (show, items) -> flat(show, items.sortedBy { sortKey(it) }) }
         }
     }
+
+    /**
+     * Filtered to one language, or not filtered at all.
+     *
+     * This is what puts Hollywood and Bollywood on separate shelves: the app
+     * knows the language of a film, and the language is the closest honest
+     * thing it has to an industry. See [Industry].
+     */
+    private fun withinLanguage(entries: List<Entry>, language: String?): List<Entry> =
+        if (language == null) entries else entries.filter { it.language == language }
 
     /** Artist, then the album within them. */
     private fun artistGroups(songs: List<Entry>): List<Group> =
@@ -582,8 +615,12 @@ object Catalogue {
     const val SEASON_UNKNOWN = Int.MIN_VALUE
 
     /** The series on the shelf, with everything filed under each. */
-    fun series(entries: List<Entry>): List<Pair<String, List<Entry>>> =
+    fun series(
+        entries: List<Entry>,
+        language: String? = null,
+    ): List<Pair<String, List<Entry>>> =
         entries.filter { it.kind == MediaKind.TV_EPISODE }
+            .filter { language == null || it.language == language }
             .groupBy { it.showName.orBlank(NO_SERIES) }
             .toList()
             .sortedBy { (name, _) -> Transliterate.fold(name) }
@@ -625,8 +662,11 @@ object Catalogue {
         entries.filter { it.appleWarning != null }.sortedByDescending { it.pixels }
 
     /** Languages present among the music videos, most files first. */
-    fun languagesPresent(entries: List<Entry>): List<Pair<String?, Int>> =
-        entries.filter { it.kind == MediaKind.MUSIC_VIDEO }
+    fun languagesPresent(
+        entries: List<Entry>,
+        kind: MediaKind = MediaKind.MUSIC_VIDEO,
+    ): List<Pair<String?, Int>> =
+        entries.filter { it.kind == kind }
             .groupBy { it.language }
             .map { (code, items) -> code to items.size }
             .sortedWith(compareByDescending<Pair<String?, Int>> { it.second }.thenBy {

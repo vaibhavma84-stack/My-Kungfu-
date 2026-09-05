@@ -713,6 +713,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val p = FilenameParser.parse(name)
             listOfNotNull(p.artist, p.title).joinToString(" — ").ifBlank { p.query }
         }
+        // Nothing online knows what a workout or a lecture is, so the filename
+        // is not a query here -- it is simply what the file is called until
+        // somebody says otherwise.
+        else -> FilenameParser.stripExtension(name)
     }
 
     // --- one file ------------------------------------------------------------
@@ -757,6 +761,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 mediaKind = MediaKind.MOVIE,
                 title = base.title ?: media.name,
                 date = base.date ?: media.year,
+            )
+            MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING -> base.copy(
+                mediaKind = item.kind,
+                // The show is a podcast series, a programme or a course; the
+                // filename is the best guess at the episode within it, which
+                // is all there is to go on and often right.
+                showName = base.showName ?: media.name.takeIf { item.kind != MediaKind.FITNESS },
+                seasonNumber = base.seasonNumber ?: media.season,
+                episodeNumber = base.episodeNumber ?: media.episode,
+                title = base.title ?: media.episodeTitle
+                    ?: FilenameParser.stripExtension(item.name),
             )
             MediaKind.MUSIC_VIDEO -> {
                 val p = FilenameParser.parse(item.name)
@@ -1087,6 +1102,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // right series from another one with the same episode number.
                 Matching.rankEpisodes(found, detail.durationMs) to found
             }
+
+            /*
+               A podcast is looked up by its series, because that is what a
+               catalogue holds: Apple lists the show and its artwork, not
+               every episode of it. So the answer fills in the show and gives
+               the file a cover, and the episode's own title stays whatever
+               the file said it was.
+
+               Workouts and lessons are not looked up at all. Nothing online
+               knows them, and a search that can only return the wrong answer
+               is worse than no search -- it invites you to accept something.
+            */
+            MediaKind.PODCAST -> {
+                val show = detail.tags.showName?.trim()?.ifBlank { null } ?: media.name
+                val found = Lookup.podcast(show)
+                Matching.rank(found, FilenameParser.parse(item.name), null) to found
+            }
+
+            MediaKind.FITNESS, MediaKind.LEARNING ->
+                emptyList<Matching.Scored>() to emptyList<Candidate>()
         }
     }
 

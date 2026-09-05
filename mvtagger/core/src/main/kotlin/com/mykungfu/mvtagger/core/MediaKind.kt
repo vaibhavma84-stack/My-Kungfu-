@@ -7,14 +7,42 @@ package com.mykungfu.mvtagger.core
 enum class MediaKind {
     MUSIC_VIDEO,
     MOVIE,
-    TV_EPISODE;
+    TV_EPISODE,
 
-    /** Apple's `stik` value. This is what makes an iPad file it correctly. */
+    /*
+       The three below are different in kind from the three above, and it is
+       worth being plain about how.
+
+       A film, an episode and a song all exist in a catalogue somewhere, which
+       is what the whole lookup half of this app is built on. A podcast mostly
+       does; a workout video and a lecture do not, and never will. So these
+       are filed by what the person watching them says they are, and the app's
+       job for them is naming, folders and finding them again -- not guessing.
+
+       They are still worth being kinds rather than folders. A kind decides
+       the shelf, the name, the atoms written inside the file and which tab it
+       appears under, and "a folder called Fitness" would give none of that.
+    */
+    PODCAST,
+    FITNESS,
+    LEARNING;
+
+    /**
+     * Apple's `stik` value. This is what makes an iPad file it correctly.
+     *
+     * Podcast and iTunes U are Apple's own values for exactly these things.
+     * Fitness has no value of its own, so it goes in as a film, which is what
+     * a player should treat it as; the app does not rely on reading it back
+     * that way -- see [VideoTags.mediaKind], which is written separately.
+     */
     val stik: Int
         get() = when (this) {
             MUSIC_VIDEO -> 6
             MOVIE -> 9
             TV_EPISODE -> 10
+            PODCAST -> 21
+            FITNESS -> 9
+            LEARNING -> 23
         }
 
     val label: String
@@ -22,15 +50,32 @@ enum class MediaKind {
             MUSIC_VIDEO -> "Music video"
             MOVIE -> "Movie"
             TV_EPISODE -> "TV episode"
+            PODCAST -> "Podcast"
+            FITNESS -> "Fitness"
+            LEARNING -> "Learning"
         }
+
+    /** Whether anything online can be asked about a file of this kind. */
+    val hasCatalogue: Boolean
+        get() = this == MUSIC_VIDEO || this == MOVIE || this == TV_EPISODE || this == PODCAST
+
+    /** Whether files of this kind are grouped under a series, course or show. */
+    val hasShow: Boolean
+        get() = this == TV_EPISODE || this == PODCAST || this == FITNESS || this == LEARNING
 
     companion object {
         fun fromStik(value: Int?): MediaKind? = when (value) {
             6 -> MUSIC_VIDEO
             9 -> MOVIE
             10 -> TV_EPISODE
+            21 -> PODCAST
+            23 -> LEARNING
             else -> null
         }
+
+        /** By name, for reading back what the app itself wrote. */
+        fun byName(name: String?): MediaKind? =
+            values().firstOrNull { it.name.equals(name?.trim(), ignoreCase = true) }
     }
 }
 

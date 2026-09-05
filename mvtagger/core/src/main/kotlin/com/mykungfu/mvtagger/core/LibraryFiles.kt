@@ -84,6 +84,30 @@ object LibraryFiles {
                 "director" to tags.composer,
             ),
         )
+
+        /*
+           Podcasts, workouts and lessons, written as episodes of their show.
+
+           There is no Kodi or Jellyfin type for any of these, and inventing
+           one would produce a file every scraper ignores. `episodedetails`
+           under a show is what they all understand, and it is not a fiction:
+           a lesson in a course really is an episode of a series, and that is
+           how anyone wants it listed.
+        */
+        MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING -> document(
+            "episodedetails",
+            listOf(
+                "title" to tags.title,
+                "showtitle" to tags.showName,
+                "season" to tags.seasonNumber?.toString(),
+                "episode" to tags.episodeNumber?.toString(),
+                "aired" to tags.date?.takeIf { it.length >= 10 },
+                "year" to tags.year,
+                "plot" to tags.albumInfo,
+                "studio" to tags.network,
+                "genre" to tags.genre,
+            ),
+        )
     }
 
     /**

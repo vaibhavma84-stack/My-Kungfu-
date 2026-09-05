@@ -24,6 +24,7 @@ data class Settings(
     val musicFolderTemplate: String = Organiser.MUSIC_VIDEOS,
     val movieFolderTemplate: String = Organiser.MOVIES,
     val episodeFolderTemplate: String = Organiser.TV_EPISODES,
+
     /** Blank unless the user wants film posters from TMDb. */
     val tmdbApiKey: String = "",
     /** Nudges the ranking and is written to the file when nothing better is known. */
@@ -99,12 +100,20 @@ data class Settings(
         MediaKind.MUSIC_VIDEO -> musicNameTemplate
         MediaKind.MOVIE -> movieNameTemplate
         MediaKind.TV_EPISODE -> episodeNameTemplate
+        /*
+           Podcasts, workouts and lessons keep their default naming and are
+           not offered in Settings beside the others. Nobody is going to
+           hand-tune the filenames of their yoga videos, and a settings screen
+           with twelve template boxes is one nobody reads.
+        */
+        else -> RenameTemplate.defaultFor(kind)
     }
 
     fun folderTemplateFor(kind: MediaKind): String = when (kind) {
         MediaKind.MUSIC_VIDEO -> musicFolderTemplate
         MediaKind.MOVIE -> movieFolderTemplate
         MediaKind.TV_EPISODE -> episodeFolderTemplate
+        else -> Organiser.defaultFor(kind)
     }
 
     val outputUri: Uri? get() = outputTree?.let(Uri::parse)

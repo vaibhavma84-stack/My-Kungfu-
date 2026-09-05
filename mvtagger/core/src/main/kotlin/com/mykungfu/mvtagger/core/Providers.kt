@@ -61,7 +61,20 @@ data class Candidate(
         // "Kesariya (From \"Brahmastra\")" is the song plus the film. The song
         // belongs in the title and the film in the album; repeating the film in
         // both is how a library ends up unreadable.
-        title = if (mediaKind == MediaKind.MUSIC_VIDEO) FilmTitle.songTitle(title) else title,
+        /*
+           A podcast answer names the show, not the episode.
+
+           Apple's directory lists podcast series: the artwork, the publisher
+           and the description are the show's. The episode's own title is
+           whatever the file already said it was, and overwriting two hundred
+           episodes with the name of the series would be worse than not
+           looking anything up.
+        */
+        title = when (mediaKind) {
+            MediaKind.MUSIC_VIDEO -> FilmTitle.songTitle(title)
+            MediaKind.PODCAST -> null
+            else -> title
+        },
         artist = artist,
         albumArtist = albumArtist ?: artist,
         album = FilmTitle.fromTrackTitle(title)
@@ -77,7 +90,7 @@ data class Candidate(
         sourceId = id,
         description = description?.take(250),
         longDescription = description,
-        showName = showName,
+        showName = showName ?: title.takeIf { mediaKind == MediaKind.PODCAST },
         seasonNumber = season,
         episodeNumber = episode,
         network = network,
@@ -157,6 +170,41 @@ object ITunes {
                 "&entity=" + entity +
                 "&country=" + country +
                 "&limit=" + limit
+
+    /**
+     * Apple's podcast directory, which is the podcast directory: keyless, and
+     * the one place a show's own artwork can be had.
+     *
+     * Separate from [parse] because a podcast result is shaped differently --
+     * the show is in `collectionName`, the publisher in `artistName`, and
+     * there is no track to speak of. Running it through the music parser
+     * produced a music video by a podcaster.
+     */
+    fun parsePodcasts(body: String, storefront: String): List<Candidate> {
+        val root = Json.parseOrNull(body)
+        return root["results"].array.mapNotNull { r ->
+            val show = r["collectionName"].string ?: r["trackName"].string
+                ?: return@mapNotNull null
+            Candidate(
+                source = "iTunes",
+                id = r["collectionId"].string ?: r["trackId"].string ?: show,
+                title = show,
+                artist = r["artistName"].string,
+                albumArtist = r["artistName"].string,
+                album = show,
+                date = r["releaseDate"].string?.take(10),
+                genre = r["primaryGenreName"].string,
+                artworkUrls = artworkSizes(
+                    r["artworkUrl600"].string ?: r["artworkUrl100"].string
+                ),
+                kind = "podcast",
+                mediaKind = MediaKind.PODCAST,
+                description = r["longDescription"].string ?: r["shortDescription"].string,
+                showName = show,
+                storefront = storefront,
+            )
+        }
+    }
 
     fun parse(body: String, storefront: String): List<Candidate> {
         val root = Json.parseOrNull(body)

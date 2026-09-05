@@ -93,6 +93,18 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
   frame** writes what is on screen to *Pictures › Media Centre*, read back out
   of the file at its full size rather than copied off the screen.
 
+- **Six kinds, not three.** Music videos, movies and series, plus **podcasts,
+  fitness and learning** — the three that no catalogue on earth knows about.
+  Those are filed by what you say they are rather than by lookup, with their
+  own folders (`Podcasts/`, `Fitness/`, `Learning/`) and their own tab. A
+  podcast is the exception: Apple's directory is the podcast directory, so the
+  show's artwork and publisher are fetched, while the episode keeps whatever
+  title the file gave it.
+- **Hollywood and Bollywood.** Movies and Series split by language the way
+  anyone with such a library splits them, with everything else named by its
+  language — Tamil, Telugu, Korean. The app knows the language of a file, which
+  is the closest honest thing it has to an industry; a British film is not
+  really Hollywood, and that is the price of the shorthand.
 - **Fetches from a link.** **Get** on the To-do tab, or Share a link to Media
   Centre from the YouTube app, and the video lands in your first to-do folder
   ready to be tagged like anything else. Sound alone is offered too, as an

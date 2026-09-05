@@ -88,6 +88,7 @@ import androidx.compose.ui.unit.dp
 import com.mykungfu.mvtagger.core.Artwork
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.mykungfu.mvtagger.core.Industry
 import com.mykungfu.mvtagger.core.Languages
 import com.mykungfu.mvtagger.core.FilenameParser
 import com.mykungfu.mvtagger.core.Matching
@@ -421,10 +422,23 @@ private fun CollectionContent(
         }
     }
 
-    // Music videos get a second row: the languages actually present, so a
-    // library of mostly Hindi does not offer thirty empty choices.
-    if (state.collectionKind == MediaKind.MUSIC_VIDEO) {
-        val languages = Catalogue.languagesPresent(state.collection)
+    /*
+       A second row, for the kinds where one line splits the library before any
+       other.
+
+       For songs that line is the language. For films and series it is the same
+       line under a different name -- Hollywood and Bollywood are what everyone
+       calls the two halves of such a library, and the language of the file is
+       the closest honest thing the app knows. See [Industry].
+
+       Only what is actually present is offered, so a library of nothing but
+       Hindi does not show thirty empty choices.
+    */
+    if (state.collectionKind == MediaKind.MUSIC_VIDEO ||
+        state.collectionKind == MediaKind.MOVIE ||
+        state.collectionKind == MediaKind.TV_EPISODE
+    ) {
+        val languages = Catalogue.languagesPresent(state.collection, state.collectionKind)
         if (languages.size > 1) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
@@ -436,15 +450,24 @@ private fun CollectionContent(
                     onClick = { viewModel.setCollectionLanguage(null) },
                     label = { Text("All") },
                 )
-                for ((code, count) in languages) {
+                val ordered = if (state.collectionKind == MediaKind.MUSIC_VIDEO) languages
+                else languages.sortedWith(
+                    compareBy({ Industry.order(Industry.label(it.first)) }, { -it.second })
+                )
+                for ((code, count) in ordered) {
                     FilterChip(
                         selected = state.collectionLanguage == code && code != null,
                         onClick = { viewModel.setCollectionLanguage(code) },
                         label = {
-                            Text(
-                                (code?.let { Languages.displayName(it) } ?: "Not known") +
-                                        "  " + count
-                            )
+                            // A song is filed by its language; a film is filed
+                            // by the industry that made it, which is the same
+                            // fact under the name people use for it.
+                            val name = if (state.collectionKind == MediaKind.MUSIC_VIDEO) {
+                                code?.let { Languages.displayName(it) } ?: "Not known"
+                            } else {
+                                Industry.label(code)
+                            }
+                            Text(name + "  " + count)
                         },
                     )
                 }
@@ -493,7 +516,7 @@ private fun CollectionContent(
                 ShelfItem(
                     key = it.label,
                     label = it.label,
-                    subtitle = countOf(it.entries.size, "song"),
+                    subtitle = countOf(it.entries.size, unitOf(state.collectionKind)),
                     cover = coverOf(it.entries),
                 )
             },
@@ -539,9 +562,10 @@ private fun SeriesBrowser(
     val season = state.collectionSeason
 
     if (series == null) {
-        val shelf = Catalogue.series(state.collection).map { (name, of) ->
-            ShelfItem(name, name, countOf(of.size, "episode"), coverOf(of))
-        }
+        val shelf = Catalogue.series(state.collection, state.collectionLanguage)
+            .map { (name, of) ->
+                ShelfItem(name, name, countOf(of.size, "episode"), coverOf(of))
+            }
         if (shelf.isEmpty()) {
             NothingHere(state)
             return
@@ -1224,6 +1248,25 @@ private fun plural(kind: MediaKind): String = when (kind) {
     MediaKind.MUSIC_VIDEO -> "Music videos"
     MediaKind.MOVIE -> "Movies"
     MediaKind.TV_EPISODE -> "Series"
+    MediaKind.PODCAST -> "Podcasts"
+    MediaKind.FITNESS -> "Fitness"
+    MediaKind.LEARNING -> "Learning"
+}
+
+/** What the show field is called for each kind, since it is four things. */
+private fun showLabel(kind: MediaKind): String = when (kind) {
+    MediaKind.PODCAST -> "Podcast"
+    MediaKind.FITNESS -> "Programme"
+    MediaKind.LEARNING -> "Course"
+    else -> "Series"
+}
+
+/** What one of these is called, for "12 episodes" under a shelf. */
+private fun unitOf(kind: MediaKind): String = when (kind) {
+    MediaKind.MUSIC_VIDEO -> "song"
+    MediaKind.MOVIE -> "film"
+    MediaKind.TV_EPISODE, MediaKind.PODCAST -> "episode"
+    MediaKind.FITNESS, MediaKind.LEARNING -> "video"
 }
 
 /**
@@ -1573,8 +1616,14 @@ private fun DetailScreen(
             Field("Release date or year", tags.date) { viewModel.editTags(tags.copy(date = it)) }
             Field("Genre", tags.genre) { viewModel.editTags(tags.copy(genre = it)) }
 
-            if (tags.mediaKind == MediaKind.TV_EPISODE) {
-                Field("Series", tags.showName) { viewModel.editTags(tags.copy(showName = it)) }
+            if (tags.mediaKind.hasShow) {
+                // A series, a podcast, a programme and a course are the same
+                // field wearing four different words, and the word matters:
+                // "Series" over a box meant for "Yoga with Adriene" reads as
+                // the wrong box.
+                Field(showLabel(tags.mediaKind), tags.showName) {
+                    viewModel.editTags(tags.copy(showName = it))
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.weight(1f)) {
                         Field("Season", tags.seasonNumber?.toString()) {
@@ -1853,7 +1902,12 @@ private fun Background(title: String, text: String) {
 
 @Composable
 private fun MediaKindPicker(current: MediaKind, onPick: (MediaKind) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Six of them no longer fit across a phone, so the row scrolls rather
+    // than quietly cutting the last two off the edge.
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         for (kind in MediaKind.entries) {
             FilterChip(
                 selected = kind == current,

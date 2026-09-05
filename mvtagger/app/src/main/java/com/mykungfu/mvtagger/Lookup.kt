@@ -111,6 +111,28 @@ object Lookup {
     }
 
     /**
+     * Podcast series. Apple's directory is *the* podcast directory and still
+     * needs no key.
+     *
+     * The show is what is looked up, because that is what a directory holds --
+     * the artwork, the publisher and the blurb belong to the series. Which
+     * episode this file is stays whatever the file says.
+     */
+    fun podcast(show: String, storefronts: List<String> = ITunes.STOREFRONTS): List<Candidate> {
+        if (show.isBlank()) return emptyList()
+        val found = ArrayList<Candidate>()
+        for (store in storefronts) {
+            Net.getTextOrNull(ITunes.searchUrl(show, "podcast", store, limit = 8))
+                ?.let { found += ITunes.parsePodcasts(it, store) }
+            // One storefront that answers is enough: a podcast is the same
+            // show in every country, unlike a film, which has a poster per
+            // territory worth comparing.
+            if (found.isNotEmpty()) break
+        }
+        return found.distinctBy { it.source + ":" + it.id }
+    }
+
+    /**
      * Episodes. TVmaze answers "season 2, episode 4 of this show" directly,
      * which is exactly the question an `S02E04` filename asks.
      */

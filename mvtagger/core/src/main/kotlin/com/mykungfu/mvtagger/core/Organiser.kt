@@ -19,10 +19,23 @@ object Organiser {
     const val MOVIES = "Movies/{title}[ ({year})]"
     const val TV_EPISODES = "TV Shows/{show}[/Season {season2}]"
 
+    /*
+       The three that have no catalogue behind them are grouped by whatever
+       they belong to -- a podcast series, a programme, a course -- which is
+       the show field under another name. A file with nothing in that field
+       lands one level up rather than in a folder called "Unknown".
+    */
+    const val PODCASTS = "Podcasts[/{show}]"
+    const val FITNESS = "Fitness[/{show}]"
+    const val LEARNING = "Learning[/{show}]"
+
     fun defaultFor(kind: MediaKind): String = when (kind) {
         MediaKind.MUSIC_VIDEO -> MUSIC_VIDEOS
         MediaKind.MOVIE -> MOVIES
         MediaKind.TV_EPISODE -> TV_EPISODES
+        MediaKind.PODCAST -> PODCASTS
+        MediaKind.FITNESS -> FITNESS
+        MediaKind.LEARNING -> LEARNING
     }
 
     /**
