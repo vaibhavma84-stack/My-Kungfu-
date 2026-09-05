@@ -50,6 +50,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,11 +65,15 @@ import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.gasplanet.grabber.DownloadService
 import com.gasplanet.grabber.Downloads
+import com.gasplanet.grabber.Engine
 import com.gasplanet.grabber.Job
 import com.gasplanet.grabber.JobState
 import com.gasplanet.grabber.MainActivity
 import com.gasplanet.grabber.Settings
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun AppRoot(incomingUrl: String?, onIncomingConsumed: () -> Unit) {
@@ -195,6 +200,8 @@ private fun HomeScreen(padding: PaddingValues, onGrab: (String) -> Unit) {
             ) { Text("Grab") }
         }
 
+        EngineBanner()
+
         Spacer(Modifier.height(16.dp))
 
         if (jobs.isEmpty()) {
@@ -245,6 +252,81 @@ private fun EmptyState() {
         )
     }
 }
+
+/**
+ * Warns when the download engine has gone stale, and updates it in one tap.
+ *
+ * The engine bundled in the APK is only as fresh as the library release it
+ * came from, which is routinely months behind by the time anyone installs the
+ * app. Sites change how they serve video constantly, so a stale engine fails
+ * on links that ought to work -- and the failure looks like a broken app
+ * rather than a fixable one. Better to say so before a download is wasted.
+ */
+@Composable
+private fun EngineBanner() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var ageDays by remember { mutableStateOf<Long?>(null) }
+    var updating by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+
+    suspend fun refresh() {
+        ageDays = withContext(Dispatchers.IO) {
+            runCatching {
+                Engine.ensureInit(context)
+                Engine.ageDays(Engine.version(context))
+            }.getOrNull()
+        }
+    }
+
+    LaunchedEffect(Unit) { refresh() }
+
+    val age = ageDays
+    if (note == null && (age == null || age < STALE_AFTER_DAYS)) return
+
+    Spacer(Modifier.height(12.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                note ?: "The download engine is $age days old",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            if (note == null) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "Sites change constantly, and an old engine fails on links that " +
+                        "should work. This is almost always the fix.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    enabled = !updating,
+                    onClick = {
+                        updating = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                runCatching { Engine.update(context) }
+                            }
+                            note = result.getOrElse { "Update failed: ${it.message}" }
+                            refresh()
+                            updating = false
+                        }
+                    },
+                ) { Text(if (updating) "Updating…" else "Update engine") }
+            }
+        }
+    }
+}
+
+/** Roughly how long yt-dlp stays reliable before sites move on under it. */
+private const val STALE_AFTER_DAYS = 45L
 
 @Composable
 private fun JobCard(job: Job, context: Context) {

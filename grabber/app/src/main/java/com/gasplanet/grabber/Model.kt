@@ -162,9 +162,13 @@ object VrDetect {
     private val WORD_360 = Regex("""\b360\b|\bequirect\w*|\bspherical\b""")
     private val WORD_180 = Regex("""\b180\b|\bvr180\b|\bfisheye\b""")
     private val WORD_VR = Regex("""\bvr\b|\bstereoscopic\b|\bimmersive\b|\bquest\b|\binsta360\b""")
-    private val WORD_SBS = Regex("""\bsbs\b|side.by.side|\b3dh\b|\blr\b""")
-    private val WORD_TB = Regex("""\btb\b|\bou\b|over.under|top.bottom|\b3dv\b""")
-    private val WORD_3D = Regex("""\b3d\b|\bstereo\b""")
+    // These deliberately exclude the short forms that read as VR jargon to a
+    // programmer and as ordinary text to everyone else. "lr", "tb" and "ou"
+    // match inside perfectly normal descriptions -- "ou" is a common French
+    // word -- and "stereo" almost always refers to the audio.
+    private val WORD_SBS = Regex("""\bsbs\b|side.by.side|\b3dh\b""")
+    private val WORD_TB = Regex("""over.under|top.bottom|\b3dv\b""")
+    private val WORD_3D = Regex("""\b3d\b|\bstereoscopic\b""")
 
     private fun near(value: Double, target: Double): Boolean =
         kotlin.math.abs(value - target) < target * 0.04
@@ -182,13 +186,22 @@ object VrDetect {
         val ratio = width.toDouble() / height.toDouble()
         val anyWord = has360 || has180 || hasVr
 
+        // Frame shape alone is never enough to call something VR. A flat video
+        // wrongly labelled is worse than a VR one missed: the player wraps it
+        // around your head and it is unwatchable, whereas a missed clip is one
+        // tap away in the override. So there has to be corroborating evidence
+        // -- either the uploader says so, or the frame is far too large for
+        // anything but VR.
+        val hugeFrame = width >= 3840
+        if (!anyWord && !hugeFrame) return VrProfile.NONE to false
+
         return when {
             // Two eyes side by side, each one a full sphere.
-            near(ratio, 4.0) -> VrProfile.SBS360 to (has360 || hasVr)
+            near(ratio, 4.0) && anyWord -> VrProfile.SBS360 to (has360 || hasVr)
 
             // One unwrapped sphere, or two 180 eyes packed side by side --
             // both land on 2:1 and only the wording tells them apart.
-            near(ratio, 2.0) && height >= 960 -> when {
+            near(ratio, 2.0) && height >= 960 && (anyWord || hugeFrame) -> when {
                 has180 -> VrProfile.SBS180 to true
                 has360 -> VrProfile.MONO360 to true
                 // 4K and up at a clean 2:1 is overwhelmingly 360 footage;

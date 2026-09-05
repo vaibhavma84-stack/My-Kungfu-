@@ -52,6 +52,29 @@ object Engine {
             .getOrDefault("unknown")
 
     /**
+     * How old the engine is, in days.
+     *
+     * yt-dlp names its releases after the date they were cut -- 2025.11.12 --
+     * so the version string is also its age. The copy bundled inside the app
+     * is only as fresh as the library release it came from, which is usually
+     * months behind by the time anyone installs it.
+     *
+     * java.time would be the obvious way to do this and is not available on
+     * Android 7, which this app still supports.
+     */
+    fun ageDays(version: String): Long? {
+        val match = Regex("""(\d{4})\.(\d{1,2})\.(\d{1,2})""").find(version) ?: return null
+        val (year, month, day) = match.destructured
+        return runCatching {
+            val released = java.util.Calendar.getInstance().apply {
+                clear()
+                set(year.toInt(), month.toInt() - 1, day.toInt())
+            }
+            (System.currentTimeMillis() - released.timeInMillis) / 86_400_000L
+        }.getOrNull()?.takeIf { it >= 0 }
+    }
+
+    /**
      * Pulls a newer yt-dlp. Worth doing regularly: sites change how they serve
      * video constantly, and a months-old engine is the usual reason a link
      * that used to work suddenly does not.

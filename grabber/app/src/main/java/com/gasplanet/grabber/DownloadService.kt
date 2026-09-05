@@ -198,7 +198,29 @@ class DownloadService : Service() {
      * commonest failures are worth saying plainly.
      */
     private fun friendlyError(e: Throwable): String {
-        val raw = (e.message ?: e.toString()).trim()
+        val all = (e.message ?: e.toString()).lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+
+        // An out-of-date engine is the single commonest reason a download that
+        // ought to work does not, and it is the one the user can actually fix,
+        // so it is checked before anything else and named as an instruction.
+        if (all.any { it.contains("is older than", ignoreCase = true) } &&
+            all.none { it.startsWith("ERROR:") && !it.contains("older than", true) }
+        ) {
+            return "The download engine is out of date, which is the usual reason " +
+                "this happens. Go to Settings and tap Update engine, then try again."
+        }
+
+        // yt-dlp writes warnings and errors to the same stream and the library
+        // hands back the lot, so the warnings -- which are almost never the
+        // reason it failed -- bury the one line that is.
+        val raw = (all.lastOrNull { it.startsWith("ERROR:") }
+            ?: all.lastOrNull { !it.startsWith("WARNING:") }
+            ?: all.lastOrNull()
+            ?: "")
+            .removePrefix("ERROR:")
+            .trim()
         val lower = raw.lowercase()
         return when {
             lower.contains("drm") || lower.contains("this video is drm") ->
