@@ -101,11 +101,25 @@ class Settings(context: Context) {
             Site("Archive: silent films", "https://archive.org/details/silent_films", "Films"),
             Site("Public Domain Movies", "https://archive.org/details/moviesandfilms", "Films"),
 
-            Site("YouTube 360°", "https://m.youtube.com/results?search_query=360+video+8k", "VR & 360"),
-            Site("YouTube VR180", "https://m.youtube.com/results?search_query=vr180", "VR & 360"),
+            // Searching YouTube for "360" mostly returns flat videos with 360
+            // in the title. The producers below actually shoot in the format,
+            // which is a far better way in than any search term.
+            Site("AirPano 360°", "https://m.youtube.com/@AirPano", "VR & 360"),
+            Site("Insta360 films", "https://m.youtube.com/@Insta360", "VR & 360"),
+            Site("National Geographic", "https://m.youtube.com/@NatGeo", "VR & 360"),
+            Site("YouTube VR180", "https://m.youtube.com/results?search_query=vr180+3d", "VR & 360"),
+            Site("YouTube 8K 360°", "https://m.youtube.com/results?search_query=8k+360+video", "VR & 360"),
             Site("Vimeo 360°", "https://vimeo.com/search?q=360%20video", "VR & 360"),
             Site("VeeR VR", "https://veer.tv/", "VR & 360"),
-            Site("Insta360 films", "https://m.youtube.com/@Insta360", "VR & 360"),
+
+            // Stock libraries publish genuine equirectangular 360 files, and
+            // they hand them over directly -- no downloader involved. For
+            // finding real VR footage rather than videos that merely mention
+            // it, these beat any streaming search.
+            Site("Pexels 360° (direct)", "https://www.pexels.com/search/videos/360%20vr/", "VR stock"),
+            Site("Vecteezy 360° (direct)", "https://www.vecteezy.com/free-videos/360-vr", "VR stock"),
+            Site("Mettle free 360°", "https://www.mettle.com/360vr-master-series-free-360-downloads-page/", "VR stock"),
+            Site("Pikwizard 360°", "https://pikwizard.com/most-popular/video/360-vr/", "VR stock"),
         )
     }
 }
