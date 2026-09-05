@@ -511,14 +511,33 @@ object Catalogue {
                 Group(artist, sectionsBy(theirs, NO_ALBUM) { it.album })
             }
 
-    /** Film, then the singers within it. */
+    /**
+     * Film, then the singers within it -- and the singer when there is no film.
+     *
+     * Not every Hindi song is from one. A single, an album track, anything
+     * released on its own: the film field is empty because there is no film,
+     * not because anything is missing. Shelving those under "Film not known"
+     * puts real songs behind a heading that says the app failed, and gathers
+     * everything unconnected into one useless pile.
+     *
+     * So the shelf falls back to whoever sang it, which is the other thing a
+     * person looks a song up by. Only the heading changes: nothing is written
+     * into the file, because putting the singer's name in the album field
+     * would be a plain untruth for anything that reads it afterwards.
+     */
     private fun filmGroups(songs: List<Entry>): List<Group> =
-        songs.groupBy { it.album.orBlank(NO_FILM) }
+        songs.groupBy { filmShelf(it) }
             .toList()
             .sortedBy { (film, _) -> Transliterate.fold(film) }
             .map { (film, from) ->
                 Group(film, sectionsBy(from, NO_ARTIST) { it.artist })
             }
+
+    /** The film a song is from, or the singer when it is not from one. */
+    private fun filmShelf(entry: Entry): String =
+        entry.album?.trim()?.ifBlank { null }
+            ?: entry.artist?.trim()?.ifBlank { null }
+            ?: NO_FILM
 
     /**
      * The second level of a music-video group.
