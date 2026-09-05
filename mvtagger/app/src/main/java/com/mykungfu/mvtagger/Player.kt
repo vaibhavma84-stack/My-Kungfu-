@@ -19,6 +19,8 @@ import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -26,6 +28,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -57,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -74,6 +78,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.mykungfu.mvtagger.core.FrameShot
+import com.mykungfu.mvtagger.core.Lrc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -145,6 +150,10 @@ private const val QUALITY = 95
 fun PlayerScreen(
     playing: Playing,
     keepPlayingInBackground: Boolean,
+    showLyrics: Boolean,
+    onShowLyrics: (Boolean) -> Unit,
+    /** Cuts the piece between two marks out into its own file, and says what happened. */
+    onClip: suspend (Long, Long) -> String,
     onClose: () -> Unit,
     onOpenExternally: (Uri, String) -> Unit,
 ) {
@@ -165,12 +174,20 @@ fun PlayerScreen(
     var offsetX by remember { mutableStateOf(0f) }
     var offsetY by remember { mutableStateOf(0f) }
     var saving by remember { mutableStateOf(false) }
+    var clipping by remember(playing.uri) { mutableStateOf(false) }
+    var clipFrom by remember(playing.uri) { mutableStateOf<Long?>(null) }
+    var clipTo by remember(playing.uri) { mutableStateOf<Long?>(null) }
     // Where the player is, as a value composition can see. Reading
     // currentPosition straight off the player during composition looks like it
     // works and does not: nothing about it is observable, so the clock would
     // sit still while the frames moved.
     var position by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
+
+    // Parsed once per file rather than per frame: this runs a regex over every
+    // line of the song, and the clock ticks five times a second.
+    val song = remember(playing.lyrics) { Lrc.parse(playing.lyrics) }
+    val wordsUp = showLyrics && song != null && !frameMode
 
     val player = remember(playing.uri) {
         ExoPlayer.Builder(context).build().apply {
@@ -284,12 +301,18 @@ fun PlayerScreen(
         }
     }
 
-    // A seek finishes when it finishes, so the clock is read back rather than
-    // assumed. Only while stepping: the ordinary controls have their own.
-    LaunchedEffect(frameMode) {
-        while (frameMode) {
+    /*
+       A seek finishes when it finishes, so the clock is read back rather than
+       assumed.
+
+       Two things need it: stepping frames, where the number itself is what is
+       being read, and the words, where the line has to change when the singing
+       does. Nothing else does, so the loop runs only while one of them is on.
+    */
+    LaunchedEffect(frameMode, wordsUp, clipping) {
+        while (frameMode || wordsUp || clipping) {
             position = player.currentPosition
-            delay(120)
+            delay(if (frameMode) 120 else 200)
         }
     }
 
@@ -693,12 +716,33 @@ fun PlayerScreen(
                     }
                 }
 
+                // Only where there is something to show. A Lyrics button on a
+                // film with no words is a button that does nothing, and the
+                // row is already crowded.
+                if (song != null) {
+                    FrameKey(
+                        if (showLyrics) "Lyrics ✓" else "Lyrics",
+                        dim = !showLyrics,
+                        onClick = { onShowLyrics(!showLyrics) },
+                    )
+                }
+
+                FrameKey(
+                    if (clipping) "Clip ✓" else "Clip",
+                    dim = !clipping,
+                    onClick = {
+                        clipping = !clipping
+                        if (clipping && clipFrom == null) clipFrom = player.currentPosition
+                    },
+                )
+
                 IconButton(onClick = { locked = true }) {
                     Icon(Icons.Default.Lock, contentDescription = "Lock the screen", tint = Color.White)
                 }
-                TextButton(onClick = { onOpenExternally(playing.uri, playing.mimeType) }) {
-                    Text("Another app", color = Color.White)
-                }
+                FrameKey(
+                    "Another app",
+                    onClick = { onOpenExternally(playing.uri, playing.mimeType) },
+                )
             }
         }
 
@@ -795,6 +839,139 @@ fun PlayerScreen(
             }
         }
 
+        /*
+           Cutting a piece out, marked from the player rather than typed in.
+
+           Two marks, both set at wherever the film happens to be, because that
+           is how anybody decides where a clip starts: by watching until it
+           looks right. The ordinary controls stay up in this mode, unlike
+           frame mode -- the scrub bar is how you get to the second mark.
+
+           Nothing here touches the file being watched. The piece is written as
+           a new video in a Clips folder, and this row says so once it has.
+        */
+        if (clipping && !locked && !frameMode) {
+            Row(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 56.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(horizontal = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FrameKey("Start " + clock(clipFrom ?: 0L), onClick = {
+                    clipFrom = player.currentPosition
+                    // A mark set after the end is a mark that unsets the end,
+                    // rather than a pair that quietly refuses to save.
+                    clipTo?.let { if (it <= player.currentPosition) clipTo = null }
+                })
+                FrameKey(
+                    clipTo?.let { "End " + clock(it) } ?: "End —",
+                    onClick = { clipTo = player.currentPosition },
+                )
+                FrameKey(
+                    "Save clip",
+                    enabled = !saving && clipFrom != null && clipTo != null,
+                    onClick = {
+                        val from = clipFrom
+                        val to = clipTo
+                        if (from != null && to != null) {
+                            saving = true
+                            scope.launch {
+                                val said = onClip(from, to)
+                                saving = false
+                                clipping = false
+                                indicator = said
+                            }
+                        }
+                    },
+                )
+                FrameKey("✕", onClick = {
+                    clipping = false
+                    clipFrom = null
+                    clipTo = null
+                })
+            }
+        }
+
+        /*
+           The words, over the picture.
+
+           Timed words are one line at a time, with the next one under it in
+           grey: a line on its own gives no warning of what is coming, which is
+           the difference between reading along and singing along. Untimed
+           words cannot follow the song, so they are a panel to scroll instead
+           of a line that would be a guess.
+
+           Either way they sit above where the controls appear, so the two do
+           not end up on top of each other, and they go away entirely in frame
+           mode, which is meant to have nothing on it.
+        */
+        if (wordsUp && song != null) {
+            if (song.isSynced) {
+                val at = Lrc.indexAt(song.lines, position)
+                val now = song.lines.getOrNull(at)?.text.orEmpty()
+                val next = song.lines.getOrNull(at + 1)?.text.orEmpty()
+
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 88.dp)
+                        .padding(horizontal = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    if (now.isNotBlank()) {
+                        Text(
+                            now,
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleLarge,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.Black.copy(alpha = 0.45f))
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                        )
+                    }
+                    if (next.isNotBlank()) {
+                        Text(
+                            next,
+                            color = Color.White.copy(alpha = 0.55f),
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .padding(top = 6.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.Black.copy(alpha = 0.35f))
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            } else {
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.45f)
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 80.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        // Locked, the panel stops taking touches along with
+                        // everything else -- otherwise the lock would still
+                        // let a palm scroll the words away.
+                        .verticalScroll(rememberScrollState(), enabled = !locked)
+                        .padding(16.dp),
+                ) {
+                    Text(
+                        song.plain.orEmpty(),
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+
         // Locked, the only thing on screen is the way out of it, and only
         // after a tap -- otherwise the lock would be its own distraction.
         if (locked && showUnlock) {
@@ -812,7 +989,7 @@ fun PlayerScreen(
 
         if (saving) {
             Text(
-                "Reading the frame…",
+                if (clipping) "Cutting the clip…" else "Reading the frame…",
                 color = Color.White,
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier
@@ -867,10 +1044,20 @@ fun PlayerScreen(
  * thumb aiming at a glyph twelve pixels across would miss most of the time.
  */
 @Composable
-private fun FrameKey(label: String, enabled: Boolean = true, onClick: () -> Unit) {
+private fun FrameKey(
+    label: String,
+    enabled: Boolean = true,
+    /** A switch that is currently off, rather than a button that cannot be pressed. */
+    dim: Boolean = false,
+    onClick: () -> Unit,
+) {
     Text(
         label,
-        color = if (enabled) Color.White else Color.White.copy(alpha = 0.4f),
+        color = when {
+            !enabled -> Color.White.copy(alpha = 0.4f)
+            dim -> Color.White.copy(alpha = 0.7f)
+            else -> Color.White
+        },
         style = MaterialTheme.typography.labelLarge,
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))

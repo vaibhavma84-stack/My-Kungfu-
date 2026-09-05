@@ -75,6 +75,18 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
   inside. Putting the app away pauses it, unless **Keep playing when the app
   is put away** is on in Settings -- which is the difference between a film
   and a music video played as a song.
+- **Shows the words.** Lyrics fetched for a song were written into the file
+  and into a `.lrc` beside it, and never read back. The player now reads them:
+  **Lyrics** in the top row puts them over the video, a line at a time with
+  the next one under it where the words carry times, and a panel to scroll
+  where they do not. The switch is remembered.
+- **Cuts a piece out.** **Clip** in the player marks a start and an end at
+  whatever the video happens to be showing, and writes that piece to a
+  `Clips` folder as its own MP4. Nothing is re-encoded and the original is
+  opened for reading only, so cutting costs no quality and cannot damage what
+  it was cut from. The cut begins at the keyframe at or before the mark, which
+  is the one thing stream copying cannot do exactly, and the app says where it
+  actually landed.
 - **Steps a frame at a time.** Paused, asking for a frame drops the player into
   frame mode: the picture and one small row, no play button and no shade over
   the image. Pinch to zoom into the still and drag to move about it; **Save

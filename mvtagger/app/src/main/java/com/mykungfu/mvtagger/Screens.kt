@@ -125,6 +125,9 @@ fun AppScreen(
         PlayerScreen(
             playing,
             keepPlayingInBackground = state.settings.keepPlayingInBackground,
+            showLyrics = state.settings.showLyrics,
+            onShowLyrics = viewModel::showLyrics,
+            onClip = { from, to -> viewModel.cutClip(playing, from, to) },
             onClose = viewModel::stopPlaying,
             onOpenExternally = onOpenExternally,
         )
@@ -483,6 +486,11 @@ private fun play(viewModel: AppViewModel, outputTree: Uri?, entry: Entry) {
             Saf.documentUri(tree, entry.documentId),
             entry.heading,
             Saf.mimeForName(entry.name),
+            // So the words can be found: inside the file, or in the .lrc the
+            // app wrote next to it.
+            tree = tree,
+            parentDocumentId = entry.parentDocumentId,
+            fileName = entry.name,
         )
     }
 }
@@ -1370,6 +1378,9 @@ private fun DetailScreen(
                             detail.item.uri,
                             detail.item.name,
                             Saf.mimeForName(detail.item.name),
+                            tree = detail.item.treeUri,
+                            parentDocumentId = detail.item.parentDocumentId,
+                            fileName = detail.item.name,
                         )
                     }) {
                         Icon(Icons.Default.PlayArrow, contentDescription = "Play")

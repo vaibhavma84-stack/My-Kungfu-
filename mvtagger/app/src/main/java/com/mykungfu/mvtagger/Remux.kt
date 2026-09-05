@@ -207,6 +207,131 @@ object Remux {
         }
     }
 
+    /** What actually came out of a cut, which is not quite what was asked for. */
+    data class Cut(val samples: Long, val startedAtMs: Long, val endedAtMs: Long)
+
+    /**
+     * Copies the part of [source] between [fromMs] and [toMs] into an MP4.
+     *
+     * The source is opened for reading and nothing else: the original comes out
+     * of this exactly as it went in, which is the point of the whole feature.
+     *
+     * ### Why the start moves
+     *
+     * Nothing here is re-encoded, and a video frame is not a picture -- most
+     * frames only say how they differ from the one before, going back to the
+     * last keyframe. A cut that began between keyframes would open on a smear
+     * of half-described motion. So the cut starts at the keyframe at or before
+     * the mark, which is anywhere from instant to several seconds earlier
+     * depending on how the file was encoded, and [Cut.startedAtMs] reports
+     * where it actually landed rather than pretending.
+     *
+     * Cutting exactly would mean decoding and re-encoding the run-up, which
+     * costs quality on every frame of it and time on a phone. Not worth it to
+     * save two seconds at the front of a clip.
+     *
+     * The end needs no such care: a frame after the mark is simply not written.
+     *
+     * Timestamps are rebased so the clip starts at zero. Left alone they would
+     * still say "one minute in", and a player asked to show a file that begins
+     * a minute into itself shows a minute of nothing.
+     */
+    fun cut(context: Context, source: Uri, target: Uri, fromMs: Long, toMs: Long): Cut {
+        require(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            "Cutting needs Android 8 or newer"
+        }
+
+        val extractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        val descriptor = context.contentResolver.openFileDescriptor(target, "rw")
+            ?: throw java.io.IOException("could not open the new file for writing")
+
+        try {
+            extractor.setDataSource(context, source, null)
+            muxer = MediaMuxer(descriptor.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+
+            val trackMap = HashMap<Int, Int>()
+            var bufferSize = MIN_BUFFER
+
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                if (mime !in VIDEO_SUPPORTED && mime !in AUDIO_SUPPORTED) continue
+
+                extractor.selectTrack(i)
+                trackMap[i] = muxer.addTrack(format)
+                bufferSize = maxOf(bufferSize, bufferFor(format))
+
+                if (mime.startsWith("video/") && format.containsKey(MediaFormat.KEY_ROTATION)) {
+                    runCatching { muxer.setOrientationHint(format.getInteger(MediaFormat.KEY_ROTATION)) }
+                }
+            }
+            if (trackMap.isEmpty()) throw java.io.IOException("nothing in this file can go into an MP4")
+
+            val endUs = toMs * 1000L
+            extractor.seekTo(fromMs * 1000L, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            // Where the seek actually landed, which is what the clip is
+            // measured from. Reading it before the first write is the only
+            // moment it is available.
+            val base = extractor.sampleTime.coerceAtLeast(0L)
+
+            muxer.start()
+
+            val buffer = ByteBuffer.allocate(bufferSize)
+            val info = MediaCodec.BufferInfo()
+            var samples = 0L
+            var last = base
+            val finished = HashSet<Int>()
+
+            while (finished.size < trackMap.size) {
+                val from = extractor.sampleTrackIndex
+                if (from < 0) break
+                val to = trackMap[from]
+                if (to == null) {
+                    extractor.advance()
+                    continue
+                }
+
+                val at = extractor.sampleTime
+                if (at < 0L || at > endUs) {
+                    // This track has reached the mark. Unselecting it leaves
+                    // the others running: audio and video do not arrive in
+                    // step, and stopping at the first one to finish would cut
+                    // the sound off early.
+                    finished += from
+                    runCatching { extractor.unselectTrack(from) }
+                    continue
+                }
+
+                val size = extractor.readSampleData(buffer, 0)
+                if (size < 0) break
+
+                info.offset = 0
+                info.size = size
+                info.presentationTimeUs = (at - base).coerceAtLeast(0L)
+                info.flags = if (extractor.sampleFlags and
+                    MediaExtractor.SAMPLE_FLAG_SYNC != 0
+                ) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
+
+                muxer.writeSampleData(to, buffer, info)
+                samples++
+                last = at
+                extractor.advance()
+            }
+
+            // A muxer stopped with nothing in it throws, and would leave a
+            // zero-byte file looking like a clip.
+            if (samples == 0L) throw java.io.IOException("nothing landed between those two times")
+
+            muxer.stop()
+            return Cut(samples, base / 1000L, last / 1000L)
+        } finally {
+            runCatching { muxer?.release() }
+            runCatching { extractor.release() }
+            runCatching { descriptor.close() }
+        }
+    }
+
     private const val MIN_BUFFER = 2 * 1024 * 1024
 
     /**

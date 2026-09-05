@@ -74,6 +74,14 @@ data class Settings(
      */
     val keepPlayingInBackground: Boolean = false,
     /**
+     * Show the words over the video while it plays, where the file has any.
+     *
+     * Remembered rather than asked each time: somebody who wants the words for
+     * one song wants them for the next one, and somebody who does not never
+     * wants to see them again.
+     */
+    val showLyrics: Boolean = false,
+    /**
      * Write the poster.jpg and .nfo files Infuse, Plex and Jellyfin look for.
      *
      * Costs a few kilobytes per file and saves those apps from guessing the
@@ -138,6 +146,7 @@ class Store(context: Context) {
         deleteOriginalAfterSaving = prefs.getBoolean(KEY_DELETE_ORIGINAL, false),
         collectionAsGrid = prefs.getBoolean(KEY_GRID, true),
         keepPlayingInBackground = prefs.getBoolean(KEY_BACKGROUND_PLAY, false),
+        showLyrics = prefs.getBoolean(KEY_SHOW_LYRICS, false),
         writeLibraryFiles = prefs.getBoolean(KEY_LIBRARY_FILES, true),
     )
 
@@ -167,6 +176,7 @@ class Store(context: Context) {
             putBoolean(KEY_DELETE_ORIGINAL, settings.deleteOriginalAfterSaving)
             putBoolean(KEY_GRID, settings.collectionAsGrid)
             putBoolean(KEY_BACKGROUND_PLAY, settings.keepPlayingInBackground)
+            putBoolean(KEY_SHOW_LYRICS, settings.showLyrics)
             putBoolean(KEY_LIBRARY_FILES, settings.writeLibraryFiles)
         }.apply()
     }
@@ -217,6 +227,7 @@ class Store(context: Context) {
         const val KEY_DELETE_ORIGINAL = "deleteOriginalAfterSaving"
         const val KEY_GRID = "collectionAsGrid"
         const val KEY_BACKGROUND_PLAY = "keepPlayingInBackground"
+        const val KEY_SHOW_LYRICS = "showLyrics"
         const val KEY_LIBRARY_FILES = "writeLibraryFiles"
     }
 }

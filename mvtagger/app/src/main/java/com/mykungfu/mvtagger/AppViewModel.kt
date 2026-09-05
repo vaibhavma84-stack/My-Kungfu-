@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.mykungfu.mvtagger.core.AlbumInfo
 import com.mykungfu.mvtagger.core.ArtistInfo
 import com.mykungfu.mvtagger.core.Candidate
+import com.mykungfu.mvtagger.core.Clips
 import com.mykungfu.mvtagger.core.CreditNames
 import com.mykungfu.mvtagger.core.FilmTitle
 import com.mykungfu.mvtagger.core.FilenameParser
@@ -119,7 +120,17 @@ enum class MainTab { TO_DO, COLLECTION }
 enum class CollectionView { BROWSE, DUPLICATES, IPAD }
 
 /** A file handed to the player, and enough to label it while it runs. */
-data class Playing(val uri: Uri, val title: String, val mimeType: String)
+data class Playing(
+    val uri: Uri,
+    val title: String,
+    val mimeType: String,
+    /**
+     * The words, as they were written -- timed or not. Null until the lookup
+     * has been done, which happens after the player is already on screen: a
+     * song should start when it is asked to, not once its lyrics are in.
+     */
+    val lyrics: String? = null,
+)
 
 data class UiState(
     val settings: Settings = Settings(),
@@ -236,8 +247,93 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** One step back out: episodes to seasons, seasons or songs to the shelf. */
-    fun play(uri: Uri, title: String, mimeType: String) {
+    fun play(
+        uri: Uri,
+        title: String,
+        mimeType: String,
+        tree: Uri? = null,
+        parentDocumentId: String? = null,
+        fileName: String? = null,
+    ) {
         _state.value = _state.value.copy(playing = Playing(uri, title, mimeType))
+
+        // The words come afterwards. Finding them means reading the head of
+        // the file or a document beside it, and neither is worth a moment's
+        // delay before the video starts.
+        viewModelScope.launch {
+            val words = withContext(Dispatchers.IO) {
+                LyricsSource.of(
+                    getApplication<Application>(), uri, tree, parentDocumentId, fileName
+                )
+            } ?: return@launch
+            val current = _state.value.playing
+            // Unless something else is playing by now, in which case these are
+            // the wrong words for it.
+            if (current?.uri == uri) {
+                _state.value = _state.value.copy(playing = current.copy(lyrics = words))
+            }
+        }
+    }
+
+    /**
+     * Cuts a piece out of what is playing and writes it to the Clips folder.
+     *
+     * Returns what to tell the person, because this is asked for from inside
+     * the player, where the ordinary message bar is behind the video.
+     *
+     * The source is opened for reading only. Whatever happens here, the video
+     * that was playing is the same file it was before -- a trim that can eat
+     * the original is a trim nobody dares use, and this app has never modified
+     * a source file.
+     */
+    suspend fun cutClip(playing: Playing, fromMs: Long, toMs: Long): String =
+        withContext(Dispatchers.IO) {
+            Clips.refuse(fromMs, toMs)?.let { return@withContext it }
+
+            val app = getApplication<Application>()
+            val resolver = app.contentResolver
+            val tree = settings.outputUri
+                ?: return@withContext "Choose an output folder in Settings first; " +
+                        "that is where clips go."
+
+            // Asked before anything is created, so a file that cannot be cut
+            // does not leave an empty one behind to explain.
+            val verdict = Remux.inspect(app, playing.uri)
+            if (!verdict.possible) {
+                return@withContext "This one cannot be cut without re-encoding it. " +
+                        verdict.reason
+            }
+
+            val folder = Saf.ensurePath(resolver, tree, listOf(Clips.FOLDER))
+                ?: return@withContext "The Clips folder could not be made."
+            val made = Saf.createFile(
+                resolver, tree, folder, Clips.fileName(playing.title, fromMs, toMs), "video/mp4"
+            ) ?: return@withContext "The clip file could not be created."
+
+            try {
+                val cut = Remux.cut(app, playing.uri, made.uri, fromMs, toMs)
+                val moved = fromMs - cut.startedAtMs
+                buildString {
+                    append("Saved ").append(made.name).append(" in ").append(Clips.FOLDER)
+                    // Only worth mentioning when it is enough to notice. Every
+                    // cut lands slightly early; a quarter of a second is not
+                    // news, three seconds is.
+                    if (moved > 250L) {
+                        append(". It begins at ").append(Clips.stamp(cut.startedAtMs))
+                        append(", the nearest keyframe before your mark -- cutting ")
+                        append("without re-encoding cannot start anywhere else.")
+                    }
+                }
+            } catch (e: Exception) {
+                // Never leave half a clip looking like a whole one.
+                runCatching { Saf.delete(resolver, made.uri) }
+                "The clip could not be written: " + (e.message ?: e.javaClass.simpleName)
+            }
+        }
+
+    /** The lyrics switch in the player, kept for the next song. */
+    fun showLyrics(on: Boolean) {
+        applySettings(settings.copy(showLyrics = on))
     }
 
     fun stopPlaying() {
