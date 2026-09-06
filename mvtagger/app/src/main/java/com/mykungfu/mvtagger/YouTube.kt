@@ -8,6 +8,7 @@ import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.stream.StreamInfo
+import org.schabi.newpipe.extractor.stream.StreamType
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -38,6 +39,17 @@ object YouTube {
         val uploader: String?,
         val durationSeconds: Long,
         val options: List<Downloads.Option>,
+        /**
+         * Going out now, or only just finished.
+         *
+         * A live stream is not a file. It is a queue of a few seconds at a
+         * time, described by a manifest, and there is nothing to take until
+         * the broadcast ends and YouTube publishes the recording -- which for
+         * a long stream can be a while after the last word is spoken. Worth
+         * saying plainly, because from the outside a live video looks exactly
+         * like any other video with a download button that does nothing.
+         */
+        val live: Boolean,
     )
 
     /** Where the browser starts. The mobile site is the one built for a phone. */
@@ -104,11 +116,15 @@ object YouTube {
             )
         }
 
+        val type = info.streamType
         return Video(
             title = info.name.orEmpty().ifBlank { "Video" },
             uploader = info.uploaderName?.ifBlank { null },
             durationSeconds = info.duration,
             options = options,
+            live = type == StreamType.LIVE_STREAM ||
+                    type == StreamType.AUDIO_LIVE_STREAM ||
+                    type == StreamType.POST_LIVE_STREAM,
         )
     }
 

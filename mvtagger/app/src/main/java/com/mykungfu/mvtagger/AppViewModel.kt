@@ -467,13 +467,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     audio = sound,
                     offered = video.options,
                     note = when {
+                        // Said first, because it is not a fault and no report
+                        // would help: there is genuinely nothing there yet.
+                        video.live -> "This is live, or has only just finished. A live " +
+                                "stream is not a file -- there is nothing to take until " +
+                                "the broadcast ends and YouTube publishes the recording, " +
+                                "which for a long stream can be a while afterwards."
                         nothing -> "YouTube gave no stream this app can take. That " +
                                 "usually means it has changed something and the " +
                                 "extractor needs updating -- copy the details and " +
                                 "send them over."
                         else -> best?.warning
                     },
-                    report = if (nothing) {
+                    report = if (nothing && !video.live) {
                         DownloadReport.of(
                             link, YouTube.EXTRACTOR, video.options, best,
                             "choosing a stream", "nothing on offer could be used",
