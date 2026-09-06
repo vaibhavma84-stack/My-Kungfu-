@@ -337,6 +337,8 @@ private fun DownloadBar(state: UiState, viewModel: AppViewModel, onClose: () -> 
             )
         }
 
+        get.report?.let { CopyReportButton(it) }
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val picture = get.video?.video
             if (picture == null) {

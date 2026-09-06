@@ -50,8 +50,31 @@ object Fetcher {
         return out.use { stream(link, it, keepGoing, onProgress) }
     }
 
+    /**
+     * One go, with one identity.
+     *
+     * Google hands a stream URL to whichever client asked for it, and
+     * sometimes wants that client back when the bytes are collected. So a
+     * refusal is retried once as the phone app rather than as a browser --
+     * cheap, and the difference between a download and a shrug.
+     */
     private fun stream(
         link: String,
+        out: OutputStream,
+        keepGoing: () -> Boolean,
+        onProgress: (Long, Long) -> Unit,
+    ): Long = try {
+        attempt(link, BROWSER, out, keepGoing, onProgress)
+    } catch (refused: Refused) {
+        attempt(link, PHONE_APP, out, keepGoing, onProgress)
+    }
+
+    /** A server that will not serve this at all, as opposed to one that failed. */
+    private class Refused(message: String) : java.io.IOException(message)
+
+    private fun attempt(
+        link: String,
+        agent: String,
         out: OutputStream,
         keepGoing: () -> Boolean,
         onProgress: (Long, Long) -> Unit,
@@ -64,9 +87,14 @@ object Fetcher {
             // Some hosts hand a media file to a browser and an error to
             // anything else. Asking as a browser is not a trick here so much
             // as the absence of one.
-            connection.setRequestProperty("User-Agent", USER_AGENT)
+            connection.setRequestProperty("User-Agent", agent)
 
             val code = connection.responseCode
+            if (code == 401 || code == 403) {
+                throw Refused("the server answered " + code + " " +
+                        (connection.responseMessage ?: "") + " (asked as " +
+                        (if (agent == BROWSER) "a browser" else "the phone app") + ")")
+            }
             if (code !in 200..299) {
                 throw java.io.IOException("the server answered " + code + " " +
                         (connection.responseMessage ?: ""))
@@ -93,7 +121,16 @@ object Fetcher {
         }
     }
 
-    private const val USER_AGENT =
+    private const val BROWSER =
         "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) " +
                 "Chrome/120.0 Mobile Safari/537.36"
+
+    /**
+     * What YouTube's own iPhone app calls itself, which is the client the
+     * extractor usually asks as. Kept here rather than read from the library,
+     * which does not expose it; wrong only in the details, and the details do
+     * not appear to be what is checked.
+     */
+    private const val PHONE_APP =
+        "com.google.ios.youtube/21.03.2(iPhone16,2; U; CPU iOS 18_7_2 like Mac OS X; US)"
 }

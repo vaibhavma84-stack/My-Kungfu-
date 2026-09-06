@@ -43,6 +43,16 @@ object YouTube {
     /** Where the browser starts. The mobile site is the one built for a phone. */
     const val HOME = YouTubeLinks.HOME
 
+    /**
+     * The extractor this build carries, for the report.
+     *
+     * Kept by hand beside the dependency rather than read from the library,
+     * which does not say. Wrong only if somebody bumps one and not the other,
+     * and a version in a report is worth that risk: "which extractor" is the
+     * first question when a download stops working.
+     */
+    const val EXTRACTOR = "0.26.5"
+
     private var started = false
 
     @Synchronized

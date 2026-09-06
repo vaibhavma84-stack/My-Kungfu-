@@ -100,7 +100,7 @@ dependencies {
        It is GPL-3, so this app is too, which is why the source lives in the
        open beside the release it builds.
     */
-    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.24.6")
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
 
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.2")
 }

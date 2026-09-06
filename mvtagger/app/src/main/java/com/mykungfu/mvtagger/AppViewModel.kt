@@ -8,6 +8,7 @@ import com.mykungfu.mvtagger.core.AlbumInfo
 import com.mykungfu.mvtagger.core.ArtistInfo
 import com.mykungfu.mvtagger.core.Candidate
 import com.mykungfu.mvtagger.core.Clips
+import com.mykungfu.mvtagger.core.DownloadReport
 import com.mykungfu.mvtagger.core.Downloads
 import com.mykungfu.mvtagger.core.CreditNames
 import com.mykungfu.mvtagger.core.FilmTitle
@@ -63,6 +64,10 @@ data class GetState(
     val durationSeconds: Long = 0,
     val video: Downloads.Choice? = null,
     val audio: Downloads.Option? = null,
+    /** Everything the site offered, kept only so a failure can be described. */
+    val offered: List<Downloads.Option> = emptyList(),
+    /** A paste-back account of what went wrong, when something did. */
+    val report: String? = null,
     val progress: String? = null,
     val note: String? = null,
 )
@@ -442,6 +447,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
         found.onSuccess { video ->
             val best = Downloads.bestVideo(video.options)
+            val sound = Downloads.bestAudio(video.options)
+
+            /*
+               A video with nothing takeable in it is the failure worth
+               separating out. It means the asking worked and the answer was
+               empty or entirely in formats this app will not take -- which is
+               what an out-of-date extractor looks like from the outside, and
+               is a different repair from a link that could not be read.
+            */
+            val nothing = best?.video == null && sound == null
             _state.value = _state.value.copy(
                 get = get.copy(
                     looking = false,
@@ -449,8 +464,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     uploader = video.uploader,
                     durationSeconds = video.durationSeconds,
                     video = best,
-                    audio = Downloads.bestAudio(video.options),
-                    note = best?.warning,
+                    audio = sound,
+                    offered = video.options,
+                    note = when {
+                        nothing -> "YouTube gave no stream this app can take. That " +
+                                "usually means it has changed something and the " +
+                                "extractor needs updating -- copy the details and " +
+                                "send them over."
+                        else -> best?.warning
+                    },
+                    report = if (nothing) {
+                        DownloadReport.of(
+                            link, YouTube.EXTRACTOR, video.options, best,
+                            "choosing a stream", "nothing on offer could be used",
+                        )
+                    } else {
+                        null
+                    },
                 ),
             )
         }.onFailure { trouble ->
@@ -459,8 +489,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     looking = false,
                     note = "That link could not be read: " +
                             (trouble.message ?: trouble.javaClass.simpleName) +
-                            ". If this keeps happening for every link, YouTube has " +
-                            "changed something and the app needs a newer extractor.",
+                            ". If this happens for every link, YouTube has changed " +
+                            "something and the app needs a newer extractor.",
+                    report = DownloadReport.of(
+                        link, YouTube.EXTRACTOR, emptyList(), null, "asking YouTube",
+                        trouble.javaClass.name + ": " + (trouble.message ?: "no message"),
+                    ),
                 ),
             )
         }
@@ -499,6 +533,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         stopFetching = false
+        var failed: String? = null
         val app = getApplication<Application>()
         val resolver = app.contentResolver
 
@@ -543,6 +578,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 "Stopped. Nothing was kept."
             } catch (trouble: Exception) {
                 runCatching { Saf.delete(resolver, made.uri) }
+                failed = DownloadReport.of(
+                    get.link, YouTube.EXTRACTOR, get.offered, choice, "fetching the file",
+                    trouble.javaClass.name + ": " + (trouble.message ?: "no message"),
+                )
                 "That download did not finish: " +
                         (trouble.message ?: trouble.javaClass.simpleName)
             } finally {
@@ -551,7 +590,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         _state.value = _state.value.copy(
-            get = _state.value.get.copy(progress = null, note = outcome),
+            get = _state.value.get.copy(progress = null, note = outcome, report = failed),
         )
         // So it appears in the list it was fetched for.
         rescan()

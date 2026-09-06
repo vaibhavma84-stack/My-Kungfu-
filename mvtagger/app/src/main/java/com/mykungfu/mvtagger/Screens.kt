@@ -385,6 +385,8 @@ private fun GetCard(state: UiState, viewModel: AppViewModel) {
                 )
             }
 
+            get.report?.let { CopyReportButton(it) }
+
             Text(
                 "Downloads land in your first to-do folder and are tagged from " +
                         "there like anything else. Nothing above 1080p is offered: " +
@@ -1268,6 +1270,28 @@ private fun CollectionTile(
             )
         }
     }
+}
+
+/**
+ * Copies a report to the clipboard.
+ *
+ * The one reliable way to see what happened on a phone that is not here. Two
+ * pasted-back reports have produced two real fixes in this app already, where
+ * three rounds of guessing produced none.
+ */
+@Composable
+fun CopyReportButton(report: String, label: String = "Copy the details") {
+    val context = LocalContext.current
+    OutlinedButton(onClick = {
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                as android.content.ClipboardManager
+        clipboard.setPrimaryClip(
+            android.content.ClipData.newPlainText("Media Centre report", report)
+        )
+        android.widget.Toast.makeText(
+            context, "Copied", android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }) { Text(label) }
 }
 
 private fun plural(kind: MediaKind): String = when (kind) {
