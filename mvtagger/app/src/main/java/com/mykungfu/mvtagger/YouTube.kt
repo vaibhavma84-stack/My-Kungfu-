@@ -160,6 +160,25 @@ object YouTube {
      * megabyte in the APK, and nothing kept between calls.
      */
     private object PlainDownloader : Downloader() {
+
+        /**
+         * Who this says it is, and the whole reason the first version failed.
+         *
+         * Left alone, Android's own HTTP client announces itself as `Dalvik`,
+         * and YouTube answers a Dalvik request with a page that has none of
+         * the data in it -- which surfaced as "Could not get ytInitialData",
+         * an error that reads like the extractor being broken and was in fact
+         * this app not saying who it was.
+         *
+         * A desktop Firefox, then, which is what NewPipe's own downloader
+         * sends and what the site expects to be talking to. Set before the
+         * request's own headers rather than after, so that where the extractor
+         * has an opinion about the client -- the iPhone app, for a player
+         * request -- its opinion wins.
+         */
+        private const val DEFAULT_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
+
         override fun execute(request: Request): Response {
             val connection = URL(request.url()).openConnection() as HttpURLConnection
             try {
@@ -167,9 +186,17 @@ object YouTube {
                 connection.connectTimeout = 20_000
                 connection.readTimeout = 30_000
                 connection.instanceFollowRedirects = true
+                connection.setRequestProperty("User-Agent", DEFAULT_AGENT)
 
                 for ((name, values) in request.headers()) {
-                    for (value in values) connection.addRequestProperty(name, value)
+                    // The first value replaces whatever is there, the rest add
+                    // to it. Appending throughout would leave two user agents
+                    // on a request that carried its own, which is not a header
+                    // anybody parses charitably.
+                    values.forEachIndexed { index, value ->
+                        if (index == 0) connection.setRequestProperty(name, value)
+                        else connection.addRequestProperty(name, value)
+                    }
                 }
 
                 val body = request.dataToSend()
