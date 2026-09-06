@@ -52,9 +52,15 @@ object DownloadReport {
         }
     }
 
+    private fun size(bytes: Long): String? = Downloads.size(bytes)
+
     private fun StringBuilder.describe(what: String, streams: List<Downloads.Option>) {
         if (streams.isEmpty()) return
         append("  ").append(what).append(": ")
-        appendLine(streams.joinToString(", ") { it.label + " " + it.container })
+        appendLine(
+            streams.joinToString(", ") {
+                it.label + " " + it.container + (size(it.bytes)?.let { size -> " " + size } ?: "")
+            }
+        )
     }
 }

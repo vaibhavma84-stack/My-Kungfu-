@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.mykungfu.mvtagger.core.Downloads
 
 /**
  * YouTube, inside the app, with a download button under it.
@@ -356,11 +357,20 @@ private fun DownloadBar(state: UiState, viewModel: AppViewModel, onClose: () -> 
                     }
                 } else {
                     Button(onClick = { viewModel.fetch(audioOnly = false) }) {
-                        Text("Video · " + picture.label)
+                        // The size before the download rather than after: a
+                        // two-hour broadcast at 1080p is several gigabytes,
+                        // and nobody should find that out on mobile data.
+                        Text(
+                            "Video · " + picture.label +
+                                    (get.video?.let { Downloads.size(it) }?.let { " · " + it } ?: "")
+                        )
                     }
                     get.audio?.let { sound ->
                         TextButton(onClick = { viewModel.fetch(audioOnly = true) }) {
-                            Text("Sound only · " + sound.label)
+                            Text(
+                                "Sound only · " + sound.label +
+                                        (Downloads.size(sound.bytes)?.let { " · " + it } ?: "")
+                            )
                         }
                     }
                 }

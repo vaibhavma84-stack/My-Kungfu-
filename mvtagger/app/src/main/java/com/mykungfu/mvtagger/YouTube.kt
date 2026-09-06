@@ -95,12 +95,16 @@ object YouTube {
         // Complete files first, then video without sound, then sound alone.
         // The choosing is not done here: this only reports what exists.
         for (stream in info.videoStreams.orEmpty()) {
-            picture(stream.content, stream.isUrl, stream.resolution, suffixOf(stream.format?.suffix), true)
-                ?.let { options += it }
+            picture(
+                stream.content, stream.isUrl, stream.resolution,
+                suffixOf(stream.format?.suffix), true, sizeOf(stream.itagItem?.contentLength),
+            )?.let { options += it }
         }
         for (stream in info.videoOnlyStreams.orEmpty()) {
-            picture(stream.content, stream.isUrl, stream.resolution, suffixOf(stream.format?.suffix), false)
-                ?.let { options += it }
+            picture(
+                stream.content, stream.isUrl, stream.resolution,
+                suffixOf(stream.format?.suffix), false, sizeOf(stream.itagItem?.contentLength),
+            )?.let { options += it }
         }
         for (stream in info.audioStreams.orEmpty()) {
             if (!stream.isUrl) continue
@@ -113,6 +117,7 @@ object YouTube {
                 hasVideo = false,
                 hasAudio = true,
                 bitrate = stream.averageBitrate,
+                bytes = sizeOf(stream.itagItem?.contentLength),
             )
         }
 
@@ -139,6 +144,7 @@ object YouTube {
         resolution: String?,
         container: Downloads.Container,
         withSound: Boolean,
+        bytes: Long,
     ): Downloads.Option? {
         if (content.isNullOrBlank() || !isUrl) return null
         val label = resolution?.ifBlank { null } ?: "video"
@@ -149,8 +155,13 @@ object YouTube {
             container = container,
             hasVideo = true,
             hasAudio = withSound,
+            bytes = bytes,
         )
     }
+
+    /** The library says -1 when it does not know, which is not a size. */
+    private fun sizeOf(contentLength: Long?): Long =
+        if (contentLength != null && contentLength > 0) contentLength else 0L
 
     /** `1080p60` is 1080 lines at sixty frames, and the number in front is the size. */
     private fun heightOf(resolution: String?): Int {

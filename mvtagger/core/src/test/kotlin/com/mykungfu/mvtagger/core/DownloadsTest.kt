@@ -161,6 +161,26 @@ class DownloadsTest {
     }
 
     @Test
+    fun `a size is rounded the way a person would round it`() {
+        assertEquals("1.4 GB", Downloads.size(1_500_000_000))
+        assertEquals("143 MB", Downloads.size(150_000_000))
+        assertEquals("4.8 MB", Downloads.size(5_000_000))
+        assertNull(Downloads.size(0))
+        assertNull(Downloads.size(-1))
+    }
+
+    @Test
+    fun `a joined download is the size of both halves`() {
+        val choice = Downloads.Choice(
+            Downloads.Option("v", "1080p", 1080, Downloads.Container.MP4, true, false,
+                bytes = 1_000_000_000),
+            Downloads.Option("a", "AAC", 0, Downloads.Container.M4A, false, true,
+                bytes = 100_000_000),
+        )
+        assertEquals("1.0 GB", Downloads.size(choice))
+    }
+
+    @Test
     fun `the name is the title and the right extension`() {
         assertEquals("PERFECT.mp4", Downloads.fileName("PERFECT", Downloads.Container.MP4))
         assertEquals("PERFECT.m4a", Downloads.fileName("PERFECT", Downloads.Container.M4A))

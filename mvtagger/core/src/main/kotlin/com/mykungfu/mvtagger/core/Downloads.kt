@@ -46,6 +46,15 @@ object Downloads {
         val hasAudio: Boolean,
         /** Audio bitrate where the site says, for picking between two of them. */
         val bitrate: Int = 0,
+        /**
+         * How big it is, where the site says. Zero when it will not.
+         *
+         * Shown before anything is fetched, which matters more here than it
+         * looks: a two-hour broadcast at 1080p is several gigabytes, and
+         * nobody should discover that a third of the way through it on mobile
+         * data.
+         */
+        val bytes: Long = 0,
     ) {
         val isProgressive: Boolean get() = hasVideo && hasAudio
     }
@@ -143,6 +152,32 @@ object Downloads {
     fun fileName(title: String?, container: Container): String {
         val base = RenameTemplate.sanitise(title.orEmpty()).ifBlank { "Download" }
         return base + "." + extension(container)
+    }
+
+    /**
+     * A size a person can read, rounded the way a person would round it.
+     *
+     * Deliberately not exact: the difference between 1.43 GB and 1.4 GB is of
+     * no interest to anybody deciding whether to press a button.
+     */
+    fun size(bytes: Long): String? {
+        if (bytes <= 0L) return null
+        // Rounded rather than truncated: 1.397 GB is a gigabyte and four
+        // tenths to everyone who is not a computer.
+        val mb = bytes / (1024.0 * 1024.0)
+        return when {
+            mb >= 1024 -> (Math.round(mb / 1024 * 10) / 10.0).toString() + " GB"
+            mb >= 10 -> Math.round(mb).toString() + " MB"
+            else -> (Math.round(mb * 10) / 10.0).toString() + " MB"
+        }
+    }
+
+    /** The whole download, where both halves are known. */
+    fun size(choice: Choice): String? {
+        val video = choice.video?.bytes ?: 0L
+        val audio = choice.audio?.bytes ?: 0L
+        if (video <= 0L) return null
+        return size(video + audio)
     }
 
     fun extension(container: Container): String = when (container) {
