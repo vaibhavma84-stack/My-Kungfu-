@@ -339,28 +339,31 @@ private fun DownloadBar(state: UiState, viewModel: AppViewModel, onClose: () -> 
 
         get.report?.let { CopyReportButton(it) }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val picture = get.video?.video
-            if (picture == null) {
-                if (!get.looking && get.progress == null) {
-                    Button(onClick = { viewModel.lookUpCurrent() }) { Text("Try again") }
+        /*
+           While something is being fetched, Stop is the only thing worth
+           offering. Leaving the two greyed-out buttons beside it left three
+           across a phone held upright, and the third came out reading "S t o
+           p" down the side of the screen.
+        */
+        if (get.progress != null) {
+            TextButton(onClick = { viewModel.stopFetch() }) { Text("Stop") }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val picture = get.video?.video
+                if (picture == null) {
+                    if (!get.looking) {
+                        Button(onClick = { viewModel.lookUpCurrent() }) { Text("Try again") }
+                    }
+                } else {
+                    Button(onClick = { viewModel.fetch(audioOnly = false) }) {
+                        Text("Video · " + picture.label)
+                    }
+                    get.audio?.let { sound ->
+                        TextButton(onClick = { viewModel.fetch(audioOnly = true) }) {
+                            Text("Sound only · " + sound.label)
+                        }
+                    }
                 }
-            } else {
-                Button(
-                    onClick = { viewModel.fetch(audioOnly = false) },
-                    enabled = get.progress == null,
-                ) { Text("Video · " + picture.label) }
-
-                get.audio?.let { sound ->
-                    TextButton(
-                        onClick = { viewModel.fetch(audioOnly = true) },
-                        enabled = get.progress == null,
-                    ) { Text("Sound only · " + sound.label) }
-                }
-            }
-
-            if (get.progress != null) {
-                TextButton(onClick = { viewModel.stopFetch() }) { Text("Stop") }
             }
         }
     }
