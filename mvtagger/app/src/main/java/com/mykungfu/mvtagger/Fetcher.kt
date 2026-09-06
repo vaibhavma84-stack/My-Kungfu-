@@ -97,7 +97,7 @@ object Fetcher {
                 // Whatever did arrive is kept; the next attempt starts after it.
                 done += stalled.written
                 stalls++
-                if (stalls > STALLS_ALLOWED) throw stalled.cause
+                if (stalls > STALLS_ALLOWED) throw stalled.reason
                 continue
             }
 
@@ -121,8 +121,17 @@ object Fetcher {
     /** A server that will not serve this at all, as opposed to one that failed. */
     private class Refused(message: String) : java.io.IOException(message)
 
-    /** A transfer that stopped partway, and how far it got before it did. */
-    private class Stalled(val written: Long, val cause: java.io.IOException) : java.io.IOException()
+    /**
+     * A transfer that stopped partway, and how far it got before it did.
+     *
+     * The carried exception is called `reason` rather than `cause`, which is
+     * the obvious name and is taken: every Throwable already has one, and
+     * declaring a second is a compile error rather than a shadowing.
+     */
+    private class Stalled(
+        val written: Long,
+        val reason: java.io.IOException,
+    ) : java.io.IOException(reason)
 
     private fun fetchPiece(
         link: String,
