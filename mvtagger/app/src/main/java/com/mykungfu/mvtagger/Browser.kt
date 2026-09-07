@@ -7,6 +7,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.mykungfu.mvtagger.core.Downloads
+import com.mykungfu.mvtagger.core.MediaKind
 
 /**
  * YouTube, inside the app, with a download button under it.
@@ -129,6 +133,24 @@ fun BrowserScreen(state: UiState, viewModel: AppViewModel) {
                     WebView(context).also { made ->
                         made.settings.javaScriptEnabled = true
                         made.settings.domStorageEnabled = true
+
+                        /*
+                           Making YouTube lay itself out as it would in a real
+                           browser, which is what makes the video fill the
+                           width rather than sitting small in the middle.
+
+                           Two things do it. A WebView announces itself with a
+                           "wv" in its user agent, and YouTube serves that a
+                           cut-down page; saying Chrome instead gets the page
+                           everyone else gets. And the wide viewport settings
+                           tell the WebView to honour the page's own viewport
+                           tag rather than laying it out at whatever width it
+                           fancies -- without them the player is sized for a
+                           screen that is not this one.
+                        */
+                        made.settings.userAgentString = PAGE_AGENT
+                        made.settings.useWideViewPort = true
+                        made.settings.loadWithOverviewMode = true
                         // Nothing of the phone's own storage is reachable from
                         // a page. There is no reason for a video site to ask.
                         made.settings.allowFileAccess = false
@@ -338,6 +360,17 @@ private fun DownloadBar(state: UiState, viewModel: AppViewModel, onClose: () -> 
             )
         }
 
+        /*
+           What this will be filed as, asked once per channel.
+
+           It sits above the download buttons because it changes where the
+           file ends up, and after the title because you have to know what you
+           are looking at before you can say what it is. Chosen once: the
+           answer is remembered against the channel, so the next video from
+           the same place arrives already filed.
+        */
+        if (get.title != null) KindChips(state, viewModel)
+
         get.report?.let { CopyReportButton(it) }
 
         /*
@@ -378,6 +411,50 @@ private fun DownloadBar(state: UiState, viewModel: AppViewModel, onClose: () -> 
         }
     }
 }
+
+/**
+ * The kinds a downloaded video is worth being, as a row of choices.
+ *
+ * Not all six. A film or an episode has a catalogue behind it and is better
+ * left to the lookup, which is what "Work it out" means -- the app parses the
+ * name and searches, exactly as it does for anything else dropped in the
+ * folder. The four here are the ones that hang off a channel, where the
+ * channel is the answer and no lookup will ever find it.
+ */
+@Composable
+private fun KindChips(state: UiState, viewModel: AppViewModel) {
+    val chosen = state.get.kind
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        FilterChip(
+            selected = chosen == null,
+            onClick = { viewModel.setDownloadKind(null) },
+            label = { Text("Work it out") },
+        )
+        for (kind in listOf(
+            MediaKind.NEWS, MediaKind.PODCAST, MediaKind.MUSIC_VIDEO,
+            MediaKind.LEARNING, MediaKind.FITNESS,
+        )) {
+            FilterChip(
+                selected = chosen == kind,
+                onClick = { viewModel.setDownloadKind(kind) },
+                label = { Text(kind.label) },
+            )
+        }
+    }
+}
+
+/**
+ * What the browser calls itself to the site.
+ *
+ * Chrome on Android, with no `wv` token in it. The token is how a page tells
+ * a WebView from a browser, and YouTube treats the two differently.
+ */
+private const val PAGE_AGENT =
+    "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/131.0.0.0 Mobile Safari/537.36"
 
 /** The part of an address worth showing on a phone. */
 private fun shortUrl(url: String): String =

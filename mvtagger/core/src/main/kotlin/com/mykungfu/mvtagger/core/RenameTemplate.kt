@@ -39,6 +39,8 @@ object RenameTemplate {
         MediaKind.PODCAST -> "[{show} - ][{date} - ]{title}"
         MediaKind.FITNESS -> "[{show} - ]{title}"
         MediaKind.LEARNING -> "[{show} - ][S{season2}E{episode2} - ]{title}"
+        // The date leads for news, because that is what it is looked up by.
+        MediaKind.NEWS -> "[{date} - ][{show} - ]{title}"
     }
 
     /** Characters no Android filesystem, SD card included, will accept. */

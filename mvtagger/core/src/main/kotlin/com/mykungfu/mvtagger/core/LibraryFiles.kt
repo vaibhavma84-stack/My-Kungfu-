@@ -94,7 +94,7 @@ object LibraryFiles {
            a lesson in a course really is an episode of a series, and that is
            how anyone wants it listed.
         */
-        MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING -> document(
+        MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING, MediaKind.NEWS -> document(
             "episodedetails",
             listOf(
                 "title" to tags.title,

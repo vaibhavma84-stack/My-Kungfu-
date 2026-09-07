@@ -1301,6 +1301,7 @@ private fun plural(kind: MediaKind): String = when (kind) {
     MediaKind.PODCAST -> "Podcasts"
     MediaKind.FITNESS -> "Fitness"
     MediaKind.LEARNING -> "Learning"
+    MediaKind.NEWS -> "News"
 }
 
 /** What the show field is called for each kind, since it is four things. */
@@ -1308,6 +1309,7 @@ private fun showLabel(kind: MediaKind): String = when (kind) {
     MediaKind.PODCAST -> "Podcast"
     MediaKind.FITNESS -> "Programme"
     MediaKind.LEARNING -> "Course"
+    MediaKind.NEWS -> "Channel"
     else -> "Series"
 }
 
@@ -1316,7 +1318,7 @@ private fun unitOf(kind: MediaKind): String = when (kind) {
     MediaKind.MUSIC_VIDEO -> "song"
     MediaKind.MOVIE -> "film"
     MediaKind.TV_EPISODE, MediaKind.PODCAST -> "episode"
-    MediaKind.FITNESS, MediaKind.LEARNING -> "video"
+    MediaKind.FITNESS, MediaKind.LEARNING, MediaKind.NEWS -> "video"
 }
 
 /**

@@ -29,6 +29,14 @@ object Organiser {
     const val FITNESS = "Fitness[/{show}]"
     const val LEARNING = "Learning[/{show}]"
 
+    /**
+     * News under the channel, and then under the day.
+     *
+     * The one kind where the date earns a folder of its own: a channel puts
+     * out a bulletin every day, and a year of them in one folder is a wall.
+     */
+    const val NEWS = "News[/{show}][/{year}]"
+
     fun defaultFor(kind: MediaKind): String = when (kind) {
         MediaKind.MUSIC_VIDEO -> MUSIC_VIDEOS
         MediaKind.MOVIE -> MOVIES
@@ -36,6 +44,7 @@ object Organiser {
         MediaKind.PODCAST -> PODCASTS
         MediaKind.FITNESS -> FITNESS
         MediaKind.LEARNING -> LEARNING
+        MediaKind.NEWS -> NEWS
     }
 
     /**

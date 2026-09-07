@@ -93,10 +93,14 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
   frame** writes what is on screen to *Pictures › Media Centre*, read back out
   of the file at its full size rather than copied off the screen.
 
-- **Six kinds, not three.** Music videos, movies and series, plus **podcasts,
-  fitness and learning** — the three that no catalogue on earth knows about.
+- **Seven kinds, not three.** Music videos, movies and series, plus **news,
+  podcasts, fitness and learning** — the three that no catalogue on earth knows about.
   Those are filed by what you say they are rather than by lookup, with their
-  own folders (`Podcasts/`, `Fitness/`, `Learning/`) and their own tab. A
+  own folders (`News/`, `Podcasts/`, `Fitness/`, `Learning/`) and their own
+  tab. News and podcasts are filed under the channel that made them, because
+  that is what a person looks for — and the downloader knows the channel, so
+  it writes it down: say once that a channel is news, and every later video
+  from it arrives already filed. A
   podcast is the exception: Apple's directory is the podcast directory, so the
   show's artwork and publisher are fetched, while the episode keeps whatever
   title the file gave it.

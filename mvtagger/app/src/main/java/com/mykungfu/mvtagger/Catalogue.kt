@@ -138,6 +138,7 @@ object Catalogue {
         "workouts" to MediaKind.FITNESS,
         "learning" to MediaKind.LEARNING,
         "courses" to MediaKind.LEARNING,
+        "news" to MediaKind.NEWS,
     )
 
     fun scan(
@@ -517,7 +518,7 @@ object Catalogue {
                level rather than the two a song needs. Nothing is grouped
                below that: a workout is not from an album.
             */
-            MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING ->
+            MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING, MediaKind.NEWS ->
                 of.groupBy { it.showName?.trim()?.ifBlank { null } ?: NO_SHOW }
                     .toList()
                     .sortedBy { (show, _) -> Transliterate.fold(show) }

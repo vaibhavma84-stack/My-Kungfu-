@@ -71,8 +71,8 @@ object OpenSubtitles {
             // Nobody subtitles a music video, a workout or a lecture, and
             // asking anyway would spend one of a rationed number of requests
             // on a search that cannot succeed.
-            MediaKind.MUSIC_VIDEO, MediaKind.PODCAST,
-            MediaKind.FITNESS, MediaKind.LEARNING -> Unit
+            MediaKind.MUSIC_VIDEO, MediaKind.PODCAST, MediaKind.FITNESS,
+            MediaKind.LEARNING, MediaKind.NEWS -> Unit
         }
         if (!year.isNullOrBlank()) sb.append("&year=").append(urlEncode(year))
         return sb.toString()

@@ -190,6 +190,32 @@ class Store(context: Context) {
         }.apply()
     }
 
+    // --- what a YouTube channel turned out to be -----------------------------
+
+    /*
+       Chosen once per channel, then remembered.
+
+       A news channel puts out a bulletin a day and a podcast puts out an
+       episode a week, and neither changes what it is. Asking every time would
+       be asking the same question forever; guessing from the title would be
+       guessing. So the answer is kept the first time it is given, and every
+       later download from that channel arrives already filed.
+    */
+    fun kindForChannel(channel: String): MediaKind? {
+        val key = channelKey(channel) ?: return null
+        return MediaKind.byName(prefs.getString(key, null))
+    }
+
+    fun rememberChannel(channel: String, kind: MediaKind) {
+        val key = channelKey(channel) ?: return
+        prefs.edit().putString(key, kind.name).apply()
+    }
+
+    private fun channelKey(channel: String): String? {
+        val name = channel.trim().lowercase()
+        return if (name.isEmpty()) null else "channel:" + name
+    }
+
     // --- per-file outcomes ---------------------------------------------------
 
     private fun outcomeKey(id: String) = "outcome:" + id

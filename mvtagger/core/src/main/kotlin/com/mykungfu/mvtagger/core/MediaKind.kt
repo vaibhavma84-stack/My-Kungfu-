@@ -25,7 +25,18 @@ enum class MediaKind {
     */
     PODCAST,
     FITNESS,
-    LEARNING;
+    LEARNING,
+
+    /**
+     * A news programme, filed under the channel that made it.
+     *
+     * Separate from a podcast on purpose. They are the same shape -- a
+     * channel, and episodes under it -- but nobody looking for last night's
+     * bulletin wants to wade through interview podcasts to find it, and
+     * nobody keeps news the way they keep a podcast. One is watched once and
+     * cleared out; the other is a library.
+     */
+    NEWS;
 
     /**
      * Apple's `stik` value. This is what makes an iPad file it correctly.
@@ -43,6 +54,9 @@ enum class MediaKind {
             PODCAST -> 21
             FITNESS -> 9
             LEARNING -> 23
+            // No value of Apple's own, so it goes in as television, which is
+            // what a news programme is and how a player should file it.
+            NEWS -> 10
         }
 
     val label: String
@@ -53,6 +67,7 @@ enum class MediaKind {
             PODCAST -> "Podcast"
             FITNESS -> "Fitness"
             LEARNING -> "Learning"
+            NEWS -> "News"
         }
 
     /** Whether anything online can be asked about a file of this kind. */
@@ -61,7 +76,8 @@ enum class MediaKind {
 
     /** Whether files of this kind are grouped under a series, course or show. */
     val hasShow: Boolean
-        get() = this == TV_EPISODE || this == PODCAST || this == FITNESS || this == LEARNING
+        get() = this == TV_EPISODE || this == PODCAST || this == FITNESS ||
+                this == LEARNING || this == NEWS
 
     companion object {
         fun fromStik(value: Int?): MediaKind? = when (value) {

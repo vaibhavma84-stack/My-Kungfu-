@@ -66,6 +66,13 @@ data class GetState(
     val audio: Downloads.Option? = null,
     /** Everything the site offered, kept only so a failure can be described. */
     val offered: List<Downloads.Option> = emptyList(),
+    /**
+     * What this will be filed as, remembered per channel once chosen.
+     *
+     * Null means "work it out from the filename later", which is right for a
+     * music video and wrong for everything a channel publishes in a series.
+     */
+    val kind: MediaKind? = null,
     /** A paste-back account of what went wrong, when something did. */
     val report: String? = null,
     val progress: String? = null,
@@ -457,6 +464,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                is a different repair from a link that could not be read.
             */
             val nothing = best?.video == null && sound == null
+            // What this channel turned out to be last time, if it has been
+            // downloaded from before.
+            val remembered = video.uploader?.let { store.kindForChannel(it) }
             _state.value = _state.value.copy(
                 get = get.copy(
                     looking = false,
@@ -466,6 +476,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     video = best,
                     audio = sound,
                     offered = video.options,
+                    kind = remembered,
                     note = when {
                         /*
                            Only when there is genuinely nothing to take.
@@ -517,6 +528,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun stopFetch() {
         stopFetching = true
+    }
+
+    /**
+     * Says what the video on screen is, and remembers it for the channel.
+     *
+     * The remembering is the point. Told once that The Deshbhakt is news,
+     * every later video from that channel is news without being asked.
+     */
+    fun setDownloadKind(kind: MediaKind?) {
+        val get = _state.value.get
+        _state.value = _state.value.copy(get = get.copy(kind = kind))
+        val channel = get.uploader
+        if (kind != null && !channel.isNullOrBlank()) store.rememberChannel(channel, kind)
     }
 
     /**
@@ -587,6 +611,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     )
                     Remux.join(video, audio, made.uri, app)
                 }
+                /*
+                   A note beside the file saying what it is.
+
+                   Everything known at this moment -- the channel, the title,
+                   the day it went out, what kind of thing it is -- is thrown
+                   away the instant the download finishes, because a file in a
+                   folder is just a filename. Writing it beside the video costs
+                   a few hundred bytes and means the tagger opens it already
+                   knowing, instead of parsing "How India Built A Dollar
+                   Magnet And Attracted 1 Trillion" and guessing.
+                */
+                describeBeside(resolver, tree, root, made.name, get, audioOnly)
                 "Saved " + made.name + " to the to-do folder."
             } catch (stopped: InterruptedException) {
                 runCatching { Saf.delete(resolver, made.uri) }
@@ -609,6 +645,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
         // So it appears in the list it was fetched for.
         rescan()
+    }
+
+    /**
+     * Writes the .json note beside a freshly downloaded file.
+     *
+     * Deliberately quiet about anything it does not know. A channel is the
+     * show for the kinds that hang off one, and the artist for a music video;
+     * for a film or an episode it is neither, so nothing is written and the
+     * lookup does its usual work.
+     */
+    private fun describeBeside(
+        resolver: android.content.ContentResolver,
+        tree: Uri,
+        parentId: String,
+        fileName: String,
+        get: GetState,
+        audioOnly: Boolean,
+    ) {
+        val kind = get.kind ?: return
+        val channel = get.uploader?.trim()?.ifBlank { null }
+        val tags = VideoTags(
+            mediaKind = kind,
+            title = get.title?.trim()?.ifBlank { null },
+            showName = channel.takeIf { kind.hasShow },
+            artist = channel.takeIf { kind == MediaKind.MUSIC_VIDEO },
+            source = "YouTube",
+        )
+        runCatching {
+            val base = FilenameParser.stripExtension(fileName)
+            val made = Saf.createFile(
+                resolver, tree, parentId, Sidecar.jsonName(base), "application/json",
+            ) ?: return
+            Saf.openOutput(resolver, made.uri)?.use {
+                it.write(Sidecar.json(tags, fileName).toByteArray(Charsets.UTF_8))
+            }
+        }
     }
 
     /** Percentages only, because a redraw per chunk is a redraw per 256 kilobytes. */
@@ -824,7 +896,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
         val loaded = withContext(Dispatchers.IO) {
             val app = getApplication<Application>()
-            val existing = TagJob.readExisting(app, item.uri, item.name)
+            /*
+               What the file says, and failing that, what the note beside it
+               says.
+
+               The note is written by the downloader, which is the one moment
+               anybody knows for certain which channel a video came from and
+               what it is. A file that already carries its own tags is trusted
+               over it -- the note is for the ordinary case of a fresh download
+               that carries nothing at all.
+            */
+            val inside = TagJob.readExisting(app, item.uri, item.name)
+            val existing = if (!inside.isEmpty) {
+                inside
+            } else {
+                Catalogue.sidecarTags(app, item.treeUri, item.parentDocumentId, item.name)
+                    ?: inside
+            }
             val duration = TagJob.durationMs(app, item.uri)
             // Start from what the file already says, topped up with what the
             // filename suggests, so nothing is blank before a lookup runs.
@@ -859,7 +947,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 title = base.title ?: media.name,
                 date = base.date ?: media.year,
             )
-            MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING -> base.copy(
+            MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING,
+            MediaKind.NEWS -> base.copy(
                 mediaKind = item.kind,
                 // The show is a podcast series, a programme or a course; the
                 // filename is the best guess at the episode within it, which
@@ -1217,7 +1306,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 Matching.rank(found, FilenameParser.parse(item.name), null) to found
             }
 
-            MediaKind.FITNESS, MediaKind.LEARNING ->
+            // Nothing online knows a workout, a lesson or last night's
+            // bulletin. A search that can only return the wrong answer is
+            // worse than none: it invites you to accept something.
+            MediaKind.FITNESS, MediaKind.LEARNING, MediaKind.NEWS ->
                 emptyList<Matching.Scored>() to emptyList<Candidate>()
         }
     }

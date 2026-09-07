@@ -142,7 +142,7 @@ object Duplicates {
            called "Introduction" in two different courses are not the same
            file, and a rule that said they were would offer to delete one.
         */
-        MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING -> {
+        MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING, MediaKind.NEWS -> {
             val title = fold(item.title)
             val within = fold(item.showName)
             if (title.isBlank()) null
@@ -164,7 +164,7 @@ object Duplicates {
             listOfNotNull(item.artist, item.title).joinToString(" — ").ifBlank {
                 item.title.orEmpty()
             }
-        MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING ->
+        MediaKind.PODCAST, MediaKind.FITNESS, MediaKind.LEARNING, MediaKind.NEWS ->
             listOfNotNull(item.showName, item.title).joinToString(" — ").ifBlank {
                 item.title.orEmpty()
             }
