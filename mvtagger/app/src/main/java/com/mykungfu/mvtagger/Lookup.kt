@@ -99,13 +99,52 @@ object Lookup {
         return MusicResult(ranked = ranked, all = deduped)
     }
 
-    /** Films. iTunes has posters and plots for these and still needs no key. */
-    fun movie(media: ParsedMedia, storefronts: List<String> = ITunes.STOREFRONTS): List<Candidate> {
+    /**
+     * Films.
+     *
+     * iTunes first, because it needs no key and carries posters and plots. But
+     * iTunes is a shop rather than a catalogue, and a shop only lists what it
+     * sells: there are no films at all in the Indian storefront, and an older
+     * film can be absent from every storefront while being perfectly well
+     * known. A search that came back with nothing for "The Family Man (2000)"
+     * is what prompted this.
+     *
+     * So TMDb is asked as well when a key is set. It is an actual film
+     * catalogue rather than a shop, it holds everything, and it is free to
+     * register for -- which is why the Settings screen calls the key optional
+     * and this is the moment it stops being optional in practice.
+     */
+    fun movie(
+        media: ParsedMedia,
+        storefronts: List<String> = ITunes.STOREFRONTS,
+        tmdbApiKey: String = "",
+    ): List<Candidate> {
         val found = ArrayList<Candidate>()
         for (store in storefronts) {
             Net.getTextOrNull(ITunes.searchUrl(media.query, "movie", store, limit = 10))
                 ?.let { found += ITunes.parse(it, store) }
         }
+
+        if (tmdbApiKey.isNotBlank()) {
+            Net.getTextOrNull(
+                Tmdb.searchMovieUrl(tmdbApiKey, media.query, media.year, lang = "en-US")
+            )?.let { body ->
+                found += runCatching { Tmdb.parseMovies(body) }.getOrDefault(emptyList())
+                    .map { film ->
+                        Candidate(
+                            source = "TMDb",
+                            id = film.id,
+                            title = film.title,
+                            date = film.releaseDate,
+                            description = film.overview,
+                            artworkUrls = film.posterUrls(),
+                            kind = "movie",
+                            mediaKind = MediaKind.MOVIE,
+                        )
+                    }
+            }
+        }
+
         val yearMatched = found.filter { media.year == null || it.year == media.year }
         return (yearMatched.ifEmpty { found }).distinctBy { it.source + ":" + it.id }
     }

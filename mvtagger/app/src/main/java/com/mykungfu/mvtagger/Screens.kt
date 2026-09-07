@@ -1706,6 +1706,7 @@ private fun SearchReportButton(detail: Detail, settings: Settings) {
             ranked = detail.candidates,
             all = detail.alternatives,
             threshold = settings.autoApplyThreshold,
+            requests = Net.recent(),
         )
     }
 

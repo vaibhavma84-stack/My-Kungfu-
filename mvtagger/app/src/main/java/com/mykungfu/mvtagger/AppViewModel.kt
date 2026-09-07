@@ -1276,6 +1276,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun search(detail: Detail): Pair<List<Matching.Scored>, List<Candidate>> {
+        // So the report describes this lookup rather than the last one.
+        Net.forget()
         val item = detail.item
         val media = MediaClassifier.classify(item.name)
         return when (item.kind) {
@@ -1285,7 +1287,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 r.ranked to r.all
             }
             MediaKind.MOVIE -> {
-                val found = Lookup.movie(media)
+                val found = Lookup.movie(media, tmdbApiKey = settings.tmdbApiKey)
                 val parsed = FilenameParser.parse(item.name)
                 Matching.rank(found, parsed, detail.durationMs) to found
             }

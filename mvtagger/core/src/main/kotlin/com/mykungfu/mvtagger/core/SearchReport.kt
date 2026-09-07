@@ -55,6 +55,15 @@ object SearchReport {
         ranked: List<Matching.Scored>,
         all: List<Candidate>,
         threshold: Double,
+        /**
+         * What was actually asked of the providers, and what each answered.
+         *
+         * The line that decides everything. "Nothing came back" covers two
+         * situations that need entirely different repairs -- the provider was
+         * asked and had nothing, or the request never arrived -- and without
+         * this there is no way to tell them apart from a distance.
+         */
+        requests: List<String> = emptyList(),
     ): String {
         val out = StringBuilder()
         out.append("Media Centre search report\n\n")
@@ -117,7 +126,22 @@ object SearchReport {
             }
         }
 
+        if (requests.isNotEmpty()) {
+            out.append("\nWhat was asked, and what answered\n")
+            for (line in requests) out.append("  ").append(line).append('\n')
+        }
+
         out.append('\n').append(verdict(ranked, all, threshold)).append('\n')
+
+        // The distinction the whole section exists for.
+        if (all.isEmpty() && requests.isNotEmpty() &&
+            requests.none { it.contains("bytes") }
+        ) {
+            out.append(
+                "None of those requests came back with anything at all, so this is " +
+                        "the network or the provider refusing rather than a bad search.\n"
+            )
+        }
         return out.toString()
     }
 

@@ -26,6 +26,45 @@ object Net {
 
     class HttpError(val code: Int, message: String) : Exception(message)
 
+    // --- what was actually asked, and what came back -------------------------
+
+    /*
+       A short log of the last few requests.
+
+       Written because of a report that read "nothing came back, from any
+       source" for a film that certainly is in every catalogue there is. That
+       sentence covers two entirely different situations -- the provider was
+       asked and had nothing, or the request never arrived -- and from a
+       distance there was no way to tell them apart. Now the report says which.
+
+       Kept in memory only, cleared at the start of each lookup, and never
+       written anywhere. Keys are stripped before a line is kept: the report is
+       meant to be pasted to somebody, and nobody's TMDb key should travel with
+       it.
+    */
+    private const val REMEMBERED = 16
+    private val log = ArrayDeque<String>()
+
+    @Synchronized
+    private fun remember(line: String) {
+        log.addLast(line)
+        while (log.size > REMEMBERED) log.removeFirst()
+    }
+
+    @Synchronized
+    fun recent(): List<String> = log.toList()
+
+    @Synchronized
+    fun forget() = log.clear()
+
+    /** Enough of a URL to know what was asked, with any key taken out of it. */
+    private fun short(url: String): String {
+        val withoutScheme = url.removePrefix("https://").removePrefix("http://")
+        return Regex("""(?i)(api_key|apikey|key|token)=[^&]*""")
+            .replace(withoutScheme) { it.groupValues[1] + "=(hidden)" }
+            .take(140)
+    }
+
     /**
      * MusicBrainz allows one request a second and blocks callers that ignore
      * it. Everything MusicBrainz goes through here, so the pacing cannot be
@@ -96,6 +135,20 @@ object Net {
     fun getBytesOrNull(url: String): ByteArray? = runCatching { getBytes(url) }.getOrNull()
 
     private fun get(
+        url: String,
+        limit: Int,
+        accept: String,
+        headers: Map<String, String> = emptyMap(),
+    ): ByteArray = try {
+        val bytes = fetch(url, limit, accept, headers)
+        remember(short(url) + "  ->  " + bytes.size + " bytes")
+        bytes
+    } catch (trouble: Exception) {
+        remember(short(url) + "  ->  " + (trouble.message ?: trouble.javaClass.simpleName))
+        throw trouble
+    }
+
+    private fun fetch(
         url: String,
         limit: Int,
         accept: String,
