@@ -150,6 +150,28 @@ object Lookup {
     }
 
     /**
+     * The crew of a film that has actually been chosen.
+     *
+     * One request, made after the choice rather than for every result, so a
+     * search of ten films does not cost ten more requests for nine nobody
+     * picked. Only TMDb knows this; iTunes sells films and does not say who
+     * made them.
+     */
+    fun credits(candidate: Candidate, tmdbApiKey: String): VideoTags? {
+        if (tmdbApiKey.isBlank() || candidate.source != "TMDb") return null
+        val body = Net.getTextOrNull(Tmdb.creditsUrl(tmdbApiKey, candidate.id)) ?: return null
+        val credits = runCatching { Tmdb.parseCredits(body) }.getOrNull() ?: return null
+        if (credits.director == null && credits.producers == null && credits.cast == null) {
+            return null
+        }
+        return VideoTags(
+            director = credits.director,
+            producers = credits.producers,
+            cast = credits.cast,
+        )
+    }
+
+    /**
      * Podcast series. Apple's directory is *the* podcast directory and still
      * needs no key.
      *

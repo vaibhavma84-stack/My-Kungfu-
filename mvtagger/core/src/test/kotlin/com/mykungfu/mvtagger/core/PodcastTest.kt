@@ -59,3 +59,40 @@ class PodcastTest {
         assertEquals("The Ranveer Show", merged.showName)
     }
 }
+
+/** The crew, pulled out of a list that also contains the caterers. */
+class CreditsParsingTest {
+
+    @Test
+    fun `directors and producers are named and the cast is cut short`() {
+        val body = """
+            {"cast":[
+              {"name":"Nicolas Cage"},{"name":"Téa Leoni"},{"name":"Don Cheadle"},
+              {"name":"Jeremy Piven"},{"name":"Saul Rubinek"},{"name":"Josef Sommer"},
+              {"name":"Makenzie Vega"},{"name":"Jake Milkovich"}
+             ],
+             "crew":[
+              {"job":"Director","name":"Brett Ratner"},
+              {"job":"Producer","name":"Marc Abraham"},
+              {"job":"Executive Producer","name":"Armyan Bernstein"},
+              {"job":"Catering","name":"Somebody Else"},
+              {"job":"Producer","name":"Marc Abraham"}
+             ]}
+        """.trimIndent()
+        val credits = Tmdb.parseCredits(body)
+        assertEquals("Brett Ratner", credits.director)
+        assertEquals("Marc Abraham, Armyan Bernstein", credits.producers)
+        assertEquals(
+            "Nicolas Cage, Téa Leoni, Don Cheadle, Jeremy Piven, Saul Rubinek, Josef Sommer",
+            credits.cast,
+        )
+    }
+
+    @Test
+    fun `a film with no crew listed says nothing rather than nothing found`() {
+        val credits = Tmdb.parseCredits("""{"cast":[],"crew":[]}""")
+        assertNull(credits.director)
+        assertNull(credits.producers)
+        assertNull(credits.cast)
+    }
+}

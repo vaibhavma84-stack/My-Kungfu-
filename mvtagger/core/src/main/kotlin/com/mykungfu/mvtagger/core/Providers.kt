@@ -692,6 +692,51 @@ object Tmdb {
         )
     }
 
+    /**
+     * Who made a film, which the search results do not carry.
+     *
+     * One more request, made only when a film has actually been chosen, so
+     * nothing is spent on the nine results nobody picked.
+     */
+    fun creditsUrl(apiKey: String, id: String): String =
+        "https://api.themoviedb.org/3/movie/" + urlEncode(id) + "/credits?api_key=" +
+                urlEncode(apiKey)
+
+    class Credits(val director: String?, val producers: String?, val cast: String?)
+
+    /**
+     * The names worth keeping out of a crew list of two hundred.
+     *
+     * A film's crew includes the caterers. Directors and producers are named
+     * because those are the credits people look a film up by, and the cast is
+     * cut at six, which is about where the names stop being recognised and
+     * where every catalogue draws its own line.
+     */
+    fun parseCredits(body: String): Credits {
+        val json = Json.parseOrNull(body)
+        val crew = json["crew"].array
+        fun named(vararg jobs: String): String? = crew
+            .filter { it["job"].string in jobs }
+            .mapNotNull { it["name"].string?.trim()?.ifBlank { null } }
+            .distinct()
+            .joinToString(", ")
+            .ifBlank { null }
+
+        val cast = json["cast"].array
+            .mapNotNull { it["name"].string?.trim()?.ifBlank { null } }
+            .take(CAST_LISTED)
+            .joinToString(", ")
+            .ifBlank { null }
+
+        return Credits(
+            director = named("Director"),
+            producers = named("Producer", "Executive Producer"),
+            cast = cast,
+        )
+    }
+
+    private const val CAST_LISTED = 6
+
     fun parseMovies(body: String): List<Movie> =
         Json.parseOrNull(body)["results"].array.mapNotNull { m ->
             val title = m["title"].string ?: m["original_title"].string ?: return@mapNotNull null

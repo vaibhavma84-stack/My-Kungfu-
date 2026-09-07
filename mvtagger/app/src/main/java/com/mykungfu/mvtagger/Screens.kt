@@ -1190,6 +1190,20 @@ private fun plural(kind: MediaKind): String = when (kind) {
     MediaKind.NEWS -> "News"
 }
 
+/**
+ * What the first field is called.
+ *
+ * "Song / episode title" over a box holding the name of a film is the sort of
+ * thing that makes an app feel like it was written for something else.
+ */
+private fun titleLabel(kind: MediaKind): String = when (kind) {
+    MediaKind.MOVIE -> "Film title"
+    MediaKind.MUSIC_VIDEO -> "Song title"
+    MediaKind.TV_EPISODE -> "Episode title"
+    MediaKind.NEWS -> "Programme title"
+    else -> "Title"
+}
+
 /** What the show field is called for each kind, since it is four things. */
 private fun showLabel(kind: MediaKind): String = when (kind) {
     MediaKind.PODCAST -> "Podcast"
@@ -1539,56 +1553,117 @@ private fun DetailScreen(
             if (detail.candidates.isNotEmpty()) HorizontalDivider()
 
             Text("Details", style = MaterialTheme.typography.titleMedium)
-            Field("Song / episode title", tags.title) { viewModel.editTags(tags.copy(title = it)) }
-            Field("Artist", tags.artist) { viewModel.editTags(tags.copy(artist = it)) }
-            Choices(detail.artistChoices, tags.artist) {
-                viewModel.editTags(tags.copy(artist = it))
-            }
-            Field(
-                if (tags.mediaKind == MediaKind.MUSIC_VIDEO) "Album / film" else "Album",
-                tags.album,
-            ) { viewModel.editTags(tags.copy(album = it)) }
-            Choices(detail.albumChoices, tags.album) {
-                viewModel.editTags(tags.copy(album = it))
-            }
-            Field("Release date or year", tags.date) { viewModel.editTags(tags.copy(date = it)) }
-            Field("Genre", tags.genre) { viewModel.editTags(tags.copy(genre = it)) }
 
-            if (tags.mediaKind.hasShow) {
-                // A series, a podcast, a programme and a course are the same
-                // field wearing four different words, and the word matters:
-                // "Series" over a box meant for "Yoga with Adriene" reads as
-                // the wrong box.
-                Field(showLabel(tags.mediaKind), tags.showName) {
-                    viewModel.editTags(tags.copy(showName = it))
+            /*
+               The fields a film has are not the fields a song has.
+
+               This used to show one set for everything: a film asked for its
+               artist, its album and its lyricist, and offered nowhere at all
+               to put the director. Every box in a form that cannot apply is a
+               box somebody has to read and dismiss, and the one that is
+               missing is the one they wanted.
+            */
+            Field(titleLabel(tags.mediaKind), tags.title) {
+                viewModel.editTags(tags.copy(title = it))
+            }
+
+            when (tags.mediaKind) {
+                MediaKind.MUSIC_VIDEO -> {
+                    Field("Artist", tags.artist) { viewModel.editTags(tags.copy(artist = it)) }
+                    Choices(detail.artistChoices, tags.artist) {
+                        viewModel.editTags(tags.copy(artist = it))
+                    }
+                    Field("Album / film", tags.album) {
+                        viewModel.editTags(tags.copy(album = it))
+                    }
+                    Choices(detail.albumChoices, tags.album) {
+                        viewModel.editTags(tags.copy(album = it))
+                    }
+                    Field("Release date or year", tags.date) {
+                        viewModel.editTags(tags.copy(date = it))
+                    }
+                    Field("Genre", tags.genre) { viewModel.editTags(tags.copy(genre = it)) }
+                    Field("Composer / music director", tags.composer) {
+                        viewModel.editTags(tags.copy(composer = it))
+                    }
+                    Field("Lyricist", tags.lyricist) {
+                        viewModel.editTags(tags.copy(lyricist = it))
+                    }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.weight(1f)) {
-                        Field("Season", tags.seasonNumber?.toString()) {
-                            viewModel.editTags(tags.copy(seasonNumber = it?.toIntOrNull()))
+
+                MediaKind.MOVIE -> {
+                    Field("Release date or year", tags.date) {
+                        viewModel.editTags(tags.copy(date = it))
+                    }
+                    Field("Genre", tags.genre) { viewModel.editTags(tags.copy(genre = it)) }
+                    /*
+                       The credits, which MP4 has no atom for. They go into
+                       Apple's own plist atom, which is where Infuse and iTunes
+                       read them, and into the .nfo for Jellyfin and Kodi.
+                       Several names to a field, separated by commas.
+                    */
+                    Field("Director", tags.director) {
+                        viewModel.editTags(tags.copy(director = it))
+                    }
+                    Field("Producers", tags.producers) {
+                        viewModel.editTags(tags.copy(producers = it))
+                    }
+                    Field("Starring", tags.cast, singleLine = false) {
+                        viewModel.editTags(tags.copy(cast = it))
+                    }
+                    Field("Studio", tags.studio) { viewModel.editTags(tags.copy(studio = it)) }
+                }
+
+                else -> {
+                    // A series, a podcast, a channel, a programme, a course:
+                    // the same shape wearing different words.
+                    Field(showLabel(tags.mediaKind), tags.showName) {
+                        viewModel.editTags(tags.copy(showName = it))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(Modifier.weight(1f)) {
+                            Field("Season", tags.seasonNumber?.toString()) {
+                                viewModel.editTags(tags.copy(seasonNumber = it?.toIntOrNull()))
+                            }
+                        }
+                        Box(Modifier.weight(1f)) {
+                            Field("Episode", tags.episodeNumber?.toString()) {
+                                viewModel.editTags(tags.copy(episodeNumber = it?.toIntOrNull()))
+                            }
                         }
                     }
-                    Box(Modifier.weight(1f)) {
-                        Field("Episode", tags.episodeNumber?.toString()) {
-                            viewModel.editTags(tags.copy(episodeNumber = it?.toIntOrNull()))
+                    Field("Date shown", tags.date) { viewModel.editTags(tags.copy(date = it)) }
+                    Field("Genre", tags.genre) { viewModel.editTags(tags.copy(genre = it)) }
+                    Field(
+                        if (tags.mediaKind == MediaKind.TV_EPISODE) "Network" else "Published by",
+                        tags.network,
+                    ) { viewModel.editTags(tags.copy(network = it)) }
+                    if (tags.mediaKind == MediaKind.TV_EPISODE) {
+                        Field("Director", tags.director) {
+                            viewModel.editTags(tags.copy(director = it))
+                        }
+                        Field("Starring", tags.cast, singleLine = false) {
+                            viewModel.editTags(tags.copy(cast = it))
                         }
                     }
                 }
-            } else {
-                Field("Composer / music director", tags.composer) {
-                    viewModel.editTags(tags.copy(composer = it))
-                }
-                Field("Lyricist", tags.lyricist) { viewModel.editTags(tags.copy(lyricist = it)) }
             }
 
             LanguagePicker(tags.language) { viewModel.editTags(tags.copy(language = it)) }
 
-            Field("Lyrics", tags.lyrics, singleLine = false) {
-                viewModel.editTags(tags.copy(lyrics = it))
+            if (tags.mediaKind == MediaKind.MUSIC_VIDEO) {
+                Field("Lyrics", tags.lyrics, singleLine = false) {
+                    viewModel.editTags(tags.copy(lyrics = it))
+                }
             }
 
             tags.artistBio?.let { Background("About the artist", it) }
-            tags.albumInfo?.let { Background("About the album or film", it) }
+            tags.albumInfo?.let {
+                Background(
+                    if (tags.mediaKind == MediaKind.MOVIE) "The story" else "About the album or film",
+                    it,
+                )
+            }
 
             HorizontalDivider()
             detail.destination(state.settings)?.let {

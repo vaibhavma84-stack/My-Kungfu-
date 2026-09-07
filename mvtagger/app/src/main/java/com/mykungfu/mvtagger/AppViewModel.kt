@@ -1382,6 +1382,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             ?: settings.preferredLanguage
         tags = tags.copy(language = language)
 
+        /*
+           Who made it, for a film. One request, only once a film has been
+           chosen, and only from the source that knows.
+
+           Copied field by field rather than overlaid: overlaying takes the
+           other side's kind with it, and a bag of credits carries the default
+           kind, which would quietly turn a film into a music video. Anything
+           already typed in wins, because a person who filled in a director
+           meant it.
+        */
+        if (tags.mediaKind == MediaKind.MOVIE) {
+            Lookup.credits(candidate, settings.tmdbApiKey)?.let { crew ->
+                tags = tags.copy(
+                    director = tags.director?.ifBlank { null } ?: crew.director,
+                    producers = tags.producers?.ifBlank { null } ?: crew.producers,
+                    cast = tags.cast?.ifBlank { null } ?: crew.cast,
+                )
+            }
+        }
+
         if (settings.fetchArtwork && tags.artwork == null) {
             val art = when (tags.mediaKind) {
                 MediaKind.MUSIC_VIDEO -> Lookup.artworkFor(

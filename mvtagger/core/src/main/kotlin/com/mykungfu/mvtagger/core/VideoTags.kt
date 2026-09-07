@@ -87,6 +87,22 @@ data class VideoTags(
     val episodeNumber: Int? = null,
     /** Broadcaster or streaming service the episode came from. */
     val network: String? = null,
+
+    /*
+       Who made it.
+
+       These are for films and television, where "artist" and "album" mean
+       nothing and the credits are what a person actually looks a film up by.
+       MP4 has no atom for any of them; Apple keeps them in one freeform atom
+       holding a plist, which is what Infuse and iTunes read, and [Mp4Metadata]
+       writes exactly that. Several names go in one field separated by commas,
+       the way every catalogue hands them over.
+    */
+    val director: String? = null,
+    val producers: String? = null,
+    val cast: String? = null,
+    /** The studio or production company. */
+    val studio: String? = null,
     val artwork: Artwork? = null,
 ) {
     /** The four-digit year, if [date] starts with one. */
@@ -97,7 +113,8 @@ data class VideoTags(
         get() = listOf(
             title, artist, albumArtist, album, date, genre,
             comment, description, longDescription, artistBio, albumInfo,
-            composer, lyricist, lyrics, syncedLyrics, language, showName, network
+            composer, lyricist, lyrics, syncedLyrics, language, showName, network,
+            director, producers, cast, studio,
         ).all { it.isNullOrBlank() } &&
                 trackNumber == null && seasonNumber == null &&
                 episodeNumber == null && artwork == null
@@ -133,6 +150,10 @@ data class VideoTags(
         seasonNumber = other.seasonNumber ?: seasonNumber,
         episodeNumber = other.episodeNumber ?: episodeNumber,
         network = other.network?.ifBlank { null } ?: network,
+        director = other.director?.ifBlank { null } ?: director,
+        producers = other.producers?.ifBlank { null } ?: producers,
+        cast = other.cast?.ifBlank { null } ?: cast,
+        studio = other.studio?.ifBlank { null } ?: studio,
         artwork = other.artwork ?: artwork,
     )
 }

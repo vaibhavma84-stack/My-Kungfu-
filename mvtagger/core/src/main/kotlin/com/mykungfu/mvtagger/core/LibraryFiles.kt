@@ -52,6 +52,11 @@ object LibraryFiles {
                 "premiered" to tags.date?.takeIf { it.length >= 10 },
                 "plot" to tags.albumInfo,
                 "genre" to tags.genre,
+                // The crew, written the way Kodi and Jellyfin read them.
+                "director" to tags.director,
+                "credits" to tags.producers,
+                "studio" to tags.studio,
+                "actor" to tags.cast,
             ),
         )
 

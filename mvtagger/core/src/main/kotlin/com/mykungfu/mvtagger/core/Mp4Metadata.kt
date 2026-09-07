@@ -201,6 +201,16 @@ object Mp4Metadata {
                         FF_SOURCE_ID -> tags.copy(sourceId = value)
                         // The app's own word wins over stik, which cannot tell
                         // a workout from a film.
+                        // Cast and crew, in Apple's own plist. See [MovieCredits].
+                        MovieCredits.ATOM -> MovieCredits.read(value)?.let { credits ->
+                            tags.copy(
+                                cast = credits.cast ?: tags.cast,
+                                director = credits.director ?: tags.director,
+                                producers = credits.producers ?: tags.producers,
+                                studio = credits.studio ?: tags.studio,
+                            )
+                        } ?: tags
+
                         FF_KIND -> MediaKind.byName(value)?.let {
                             saidItsKind = true
                             tags.copy(mediaKind = it)
@@ -492,6 +502,9 @@ object Mp4Metadata {
         if (!tags.source.isNullOrBlank()) body.write(freeform(FF_SOURCE, tags.source))
         if (!tags.sourceId.isNullOrBlank()) body.write(freeform(FF_SOURCE_ID, tags.sourceId))
         body.write(freeform(FF_KIND, tags.mediaKind.name))
+        // The credits go in as one plist under Apple's own name, which is
+        // where Infuse and iTunes look and the only place they look.
+        MovieCredits.plist(tags)?.let { body.write(freeform(MovieCredits.ATOM, it)) }
 
         text(TV_SHOW, tags.showName)
         text(TV_NETWORK, tags.network)

@@ -46,6 +46,10 @@ object Sidecar {
         fields["longDescription"] = tags.longDescription
         fields["artistBio"] = tags.artistBio
         fields["albumInfo"] = tags.albumInfo
+        fields["director"] = tags.director
+        fields["producers"] = tags.producers
+        fields["cast"] = tags.cast
+        fields["studio"] = tags.studio
         fields["lyrics"] = tags.lyrics
         fields["source"] = tags.source
         fields["sourceId"] = tags.sourceId
@@ -127,6 +131,10 @@ object Sidecar {
             longDescription = str("longDescription"),
             artistBio = str("artistBio"),
             albumInfo = str("albumInfo"),
+            director = str("director"),
+            producers = str("producers"),
+            cast = str("cast"),
+            studio = str("studio"),
             lyrics = str("lyrics"),
             source = str("source"),
             sourceId = str("sourceId"),
