@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The play triangle, drawn inside the 66dp safe zone of the 108dp adaptive
+    canvas: anything outside that can be cropped away by whichever mask the
+    launcher applies, and a clipped corner off a triangle is very visible.
+
+    Nudged right of centre on purpose. A triangle's optical centre sits left of
+    its bounding box, so a mathematically centred one looks like it is drifting
+    backwards.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#9FCAFF"
+        android:pathData="M40,33 L75,54 L40,75 Z" />
+</vector>

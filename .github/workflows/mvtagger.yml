@@ -1,0 +1,127 @@
+name: Build Media Centre APK
+
+on:
+  push:
+    paths:
+      - 'mvtagger/**'
+      - '.github/workflows/mvtagger.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mvtagger
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Named explicitly rather than left to the default, which pulls the
+      # "tools" meta-package and with it the Android Emulator -- several
+      # hundred megabytes for a build that never runs one. Run 21 died on a
+      # corrupted emulator download ("Error on ZipFile unknown archive"), which
+      # is a failure this build had no business being able to have.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The JVM and Android do not share a regex engine, so a pattern the tests
+      # accept can still kill the app on launch -- which is exactly how v1
+      # shipped. Every pattern is compiled against ICU, the engine the phone
+      # uses, before anything else runs.
+      - name: Check the regexes against Android's engine
+        run: python3 check-regexes.py core/src/main app/src/main
+
+      # Kotlin block comments nest, so a `/*` inside a doc comment -- a wildcard
+      # MIME type written out, most easily -- swallows the rest of the file. The
+      # compiler only notices at the last line, and reports every declaration in
+      # the file as unresolved from everywhere else, which reads as anything but
+      # a comment. This says which comment, on which line.
+      - name: Check no comment swallows its file
+        run: python3 check-comments.py core/src/main app/src/main
+
+      # The tagging, filename parsing and matching all live in :core, which is a
+      # plain JVM module. Running its tests first means a broken MP4 writer is
+      # caught here rather than on a phone, with a video that no longer plays.
+      - name: Test the core
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: gradle :core:test --no-daemon --stacktrace
+
+      - name: Build debug APK
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          BUILD_NAME: v${{ github.run_number }}
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      # Same reasoning as the other app in this repo: a wrongly signed APK
+      # builds green and only fails on the phone, where the fix is to uninstall
+      # first -- which throws away the library and every setting with it.
+      - name: Check the APK is signed by the expected key
+        working-directory: .
+        run: |
+          python3 android/verify-signing.py \
+            mvtagger/app/build/outputs/apk/debug/app-debug.apk \
+            mvtagger/mvtagger-debug.keystore android
+
+      - name: Name the APK by date
+        id: name
+        run: echo "stamp=$(date +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MVTagger-${{ steps.name.outputs.stamp }}-apk
+          path: mvtagger/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      # An Actions artifact is a zip behind a sign-in, which a phone browser
+      # cannot get at. A release asset is a plain direct download, so the phone
+      # can fetch the APK itself from a fixed URL.
+      #
+      # Never delete the release first. That is what this did originally, and
+      # when the create afterwards failed with a 403 it left nothing at the
+      # download link at all -- someone trying to install in that window got a
+      # 404 for a release that had existed minutes earlier. Updating in place
+      # means the worst case is a stale APK, not a missing one, and a failure
+      # here is loud rather than destructive.
+      - name: Publish the APK for installing on the phone
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: mvtagger-latest
+          TITLE: Media Centre v${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          cp mvtagger/app/build/outputs/apk/debug/app-debug.apk MVTagger.apk
+
+          NOTES="Build v${{ github.run_number }}, from ${{ github.sha }} on ${{ steps.name.outputs.stamp }}.
+
+          Install straight from the phone: tap MVTagger.apk below, then allow
+          installing from this source when Android asks.
+
+          It installs alongside Deck Log -- different app, different data, and
+          neither one touches the other."
+
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release exists; replacing the asset in place."
+            gh release upload "$TAG" MVTagger.apk --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --prerelease
+          else
+            echo "No release yet; creating it."
+            gh release create "$TAG" MVTagger.apk \
+              --title "$TITLE" \
+              --prerelease \
+              --target "${{ github.sha }}" \
+              --notes "$NOTES"
+          fi
