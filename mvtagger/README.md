@@ -109,8 +109,8 @@ It is a separate app from Deck Log in this repo and shares nothing with it.
   language — Tamil, Telugu, Korean. The app knows the language of a file, which
   is the closest honest thing it has to an industry; a British film is not
   really Hollywood, and that is the price of the shorthand.
-- **Browses YouTube, inside the app.** **Get** on the To-do tab opens YouTube
-  in a window of its own: find something, press the round download button floating over
+- **Browses YouTube, inside the app.** Its own tab, beside To do and Media
+  Centre: find something, press the round download button floating over
   the page — or long-press any video in a list to take that one without
   opening it — and it lands in your first to-do folder ready to be tagged
   like anything else — without leaving

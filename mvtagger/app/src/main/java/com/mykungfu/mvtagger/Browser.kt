@@ -73,6 +73,9 @@ fun BrowserScreen(state: UiState, viewModel: AppViewModel) {
     /** The last address the lock turned away, shown once and then forgotten. */
     var blocked by remember { mutableStateOf<String?>(null) }
 
+    /** The last address handed in from outside, so it is loaded exactly once. */
+    var loaded by remember { mutableStateOf<String?>(null) }
+
     /**
      * The video the panel is about: the page on screen, or one long-pressed in
      * a list. Null means the panel is closed and the button is all there is.
@@ -121,7 +124,7 @@ fun BrowserScreen(state: UiState, viewModel: AppViewModel) {
             )
             TextButton(onClick = { web?.loadUrl(YouTube.HOME) }) { Text("Home") }
             IconButton(onClick = { viewModel.openBrowser(false) }) {
-                Icon(Icons.Default.Close, contentDescription = "Close the browser")
+                Icon(Icons.Default.Close, contentDescription = "Back to the list")
             }
         }
 
@@ -247,6 +250,18 @@ fun BrowserScreen(state: UiState, viewModel: AppViewModel) {
                         web = made
                     }
                 },
+                update = { view ->
+                    // A link shared from elsewhere. Loaded once and then
+                    // forgotten, so coming back to this tab later does not
+                    // drag you to a video from last week.
+                    state.pendingUrl?.let { wanted ->
+                        if (wanted != loaded) {
+                            loaded = wanted
+                            view.loadUrl(wanted)
+                            viewModel.loadedPending()
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxSize(),
             )
 
@@ -300,7 +315,7 @@ fun BrowserScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
 
-        if (asked != null || state.get.progress != null) {
+        if (asked != null || state.get.progress != null || state.get.looking) {
             DownloadBar(state, viewModel) { asked = null }
         }
     }

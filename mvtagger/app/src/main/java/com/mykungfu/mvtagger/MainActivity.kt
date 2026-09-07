@@ -80,10 +80,9 @@ class MainActivity : ComponentActivity() {
         // link is picked out of it rather than taken whole.
         val link = shared.split(Regex("\\s+")).firstOrNull { YouTube.looksLikeYouTube(it) }
             ?: return
-        viewModel.setLink(link)
-        viewModel.openGet(true)
-        viewModel.showTab(MainTab.TO_DO)
-        viewModel.lookUp()
+        // Straight to the YouTube tab, pointed at the video, where the
+        // download button lives. Nothing is fetched until it is pressed.
+        viewModel.openBrowserAt(link)
     }
 
     /**

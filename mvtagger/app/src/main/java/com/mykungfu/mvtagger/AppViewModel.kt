@@ -56,7 +56,6 @@ data class Item(
  * outside [YouTube] depends on which library is doing the fetching.
  */
 data class GetState(
-    val open: Boolean = false,
     val link: String = "",
     val looking: Boolean = false,
     val title: String? = null,
@@ -140,7 +139,15 @@ data class Detail(
 }
 
 /** The two things the app is for: work to do, and what has been done. */
-enum class MainTab { TO_DO, COLLECTION }
+/**
+ * The three things this app is.
+ *
+ * Files waiting to be dealt with, the library they become, and the place new
+ * ones come from. The browser was a button inside the first of those, which
+ * was wrong: finding something to watch is not a chore on a list, it is one
+ * of the three reasons to open the app.
+ */
+enum class MainTab { TO_DO, COLLECTION, YOUTUBE }
 
 /**
  * Which way the finished library is being looked at.
@@ -172,10 +179,16 @@ data class UiState(
     val detail: Detail? = null,
     val showSettings: Boolean = false,
     val get: GetState = GetState(),
-    /** The browser is open over everything else, like the player. */
-    val browsing: Boolean = false,
-    /** Where it is now, which is also what the download button acts on. */
+    /** Where the browser is now, which is also what the download button acts on. */
     val browserUrl: String = YouTube.HOME,
+    /**
+     * A page the browser has been asked to open and has not opened yet.
+     *
+     * Set when a link arrives from somewhere else -- shared from the YouTube
+     * app, most of the time. Cleared the moment it is loaded, so that
+     * returning to the tab later does not drag you back to it.
+     */
+    val pendingUrl: String? = null,
     val tab: MainTab = MainTab.TO_DO,
     /** Everything in the output folder, read from the tags inside the files. */
     val collection: List<Entry> = emptyList(),
@@ -383,13 +396,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openBrowser(open: Boolean) {
         _state.value = _state.value.copy(
-            browsing = open,
+            tab = if (open) MainTab.YOUTUBE else MainTab.TO_DO,
             // A fresh panel each time: last time's answer under this time's
             // video is the kind of thing that gets the wrong file downloaded.
             get = if (open) _state.value.get.copy(
                 title = null, uploader = null, video = null, audio = null, note = null,
             ) else _state.value.get,
         )
+    }
+
+    /** A link from outside: open the tab, and point the browser at it. */
+    fun openBrowserAt(url: String) {
+        _state.value = _state.value.copy(
+            tab = MainTab.YOUTUBE,
+            pendingUrl = url,
+            get = _state.value.get.copy(
+                link = url, title = null, uploader = null,
+                video = null, audio = null, note = null, report = null,
+            ),
+        )
+    }
+
+    /** Loaded; so it is not loaded again the next time the tab is opened. */
+    fun loadedPending() {
+        if (_state.value.pendingUrl != null) {
+            _state.value = _state.value.copy(pendingUrl = null)
+        }
     }
 
     /** Every page the browser lands on, so the button knows what it would fetch. */
@@ -416,10 +448,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun lookUpLink(url: String) {
         setLink(url)
         lookUp()
-    }
-
-    fun openGet(open: Boolean) {
-        _state.value = _state.value.copy(get = _state.value.get.copy(open = open, note = null))
     }
 
     fun setLink(text: String) {
