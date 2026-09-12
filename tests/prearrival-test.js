@@ -186,7 +186,7 @@ const WANT_DEP = [
   // These are done the day before the ship berths, so the date follows the
   // arrival rather than being typed twice.
   const WANT_LM = [
-    'Stores arranged', 'Locks and security seals', 'Vents', 'Paint store PPE',
+    'Stores arranged', 'Locks and security seals', 'Paint store PPE',
     'Paint store MSDS', 'Chemical store PPE', 'Chemical store MSDS',
     'All securing by wires', 'Reducer installed', 'Visitors list at gangway',
     'MSDS at gangway', 'Tide table at gangway', 'Briefing card at gangway',
