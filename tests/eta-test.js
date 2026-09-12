@@ -1,6 +1,8 @@
-// The ETA tool. Departure is entered local and must show UTC; arrival is shown
-// both ways; and the speed band is the point of the thing, so its endpoints and
-// its arithmetic are checked rather than eyeballed.
+// The ETA tool. Everything is UTC now -- the ship works in it, and a local
+// time that has to be chosen from a list of zones is a place to make a mistake
+// rather than a convenience. Departure UTC in, arrival UTC out, distance and
+// speed. The speed band is the point of the thing, so its endpoints and its
+// arithmetic are checked rather than eyeballed.
 const { chromium } = require('playwright-core');
 const http = require('http'); const fs = require('fs'); const path = require('path');
 let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':'  -> '+(x===undefined?'':x))); if(!c)fails++;};
@@ -19,7 +21,12 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.click('[data-tool="eta"]');
   ok('ETA opens', await p.locator('#toolEta').isVisible());
   ok('title reads ETA', (await p.textContent('#pageTitle')).trim()==='ETA');
-  ok('defaults to the ship on China time', (await p.inputValue('#etaZoneFrom'))==='480');
+  ok('there are no time zones to get wrong', await p.locator('#etaZoneFrom').count()===0);
+  ok('and no port pickers either', await p.locator('#etaFromPort').count()===0);
+  ok('the departure date is labelled UTC',
+     /UTC/.test(await p.textContent('label[for], .field:has(#etaDate) label').catch(()=>'')) ||
+     (await p.locator('.field:has(#etaDate) label').textContent()).indexOf('UTC') >= 0,
+     await p.locator('.field:has(#etaDate) label').textContent());
 
   // 1450 NM at 15.0 kn = 96.666.. h = 96h 40m
   await p.fill('#etaDate','2026-09-01');
@@ -29,8 +36,9 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.waitForTimeout(150);
 
   const dep = await p.textContent('#etaDep');
-  ok('departure echoed in local time', /Tue 01-Sep-2026 2030 LT/.test(dep), dep);
-  ok('and converted to UTC automatically', /Tue 01-Sep-2026 1230 UTC/.test(dep), dep);
+  ok('departure is echoed back as the UTC that was typed, unshifted',
+     /Tue 01-Sep-2026 2030 UTC/.test(dep), dep);
+  ok('and nothing anywhere claims a local time', !/LT/.test(dep), dep);
 
   const rows = p.locator('#etaOut .eta-row');
   ok('twenty speeds are listed', await rows.count()===20, await rows.count());
@@ -46,14 +54,15 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
 
   const rowFor = async (kn) => p.locator('.eta-row', { hasText: kn+' kn' }).first();
 
-  // 96h 40m (4d 0h 40m) after 01-Sep 1230 UTC is 05-Sep 1310 UTC; +8 makes it 05-Sep 2110 LT
+  // 1450 NM at 15.0 kn is 96h 40m. 01-Sep 2030 UTC plus that is 05-Sep 2110 UTC.
   const sel = await rowFor('15.0');
   ok('steaming time is right at the selected speed',
      /4d 0h 40m/.test(await sel.textContent()), await sel.textContent());
   ok('arrival UTC is right',
-     /05-Sep-2026 1310 UTC/.test(await sel.textContent()), await sel.textContent());
-  ok('arrival LT is right',
-     /Sat 05-Sep-2026 2110/.test(await sel.textContent()), await sel.textContent());
+     /Sat 05-Sep-2026 2110 UTC/.test(await sel.textContent()), await sel.textContent());
+  ok('and the row says UTC once, not a local time beside it',
+     (await sel.textContent()).split('UTC').length === 2 && !/LT/.test(await sel.textContent()),
+     await sel.textContent());
 
   // 1450 at 16.0 kn = 90.625 h = 3d 18h 38m (rounded up from 37.5m)
   const fast = await rowFor('16.0');
@@ -63,30 +72,6 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   const slow = await rowFor('14.1');
   ok('a slower speed lengthens it correctly',
      /4d 6h 50m/.test(await slow.textContent()), await slow.textContent());
-
-  // ---- a different arrival zone ----
-  await p.selectOption('#etaZoneTo','0');
-  await p.waitForTimeout(150);
-  const sel2 = await rowFor('15.0');
-  ok('arrival zone is applied separately from departure',
-     /Sat 05-Sep-2026 1310/.test(await sel2.textContent()), await sel2.textContent());
-  ok('departure line still shows the departure zone', /2030 LT/.test(await p.textContent('#etaDep')));
-  await p.selectOption('#etaZoneTo','480');
-
-  // ---- half-hour zones exist ----
-  await p.selectOption('#etaZoneFrom','330');       // India
-  await p.waitForTimeout(150);
-  ok('half-hour zones are offered', (await p.inputValue('#etaZoneFrom'))==='330');
-  ok('a half-hour zone converts correctly',
-     /Tue 01-Sep-2026 1500 UTC/.test(await p.textContent('#etaDep')), await p.textContent('#etaDep'));
-  await p.selectOption('#etaZoneFrom','480');
-
-  // ---- a date-line crossing zone ----
-  await p.selectOption('#etaZoneFrom','-660');
-  await p.waitForTimeout(150);
-  ok('a negative zone rolls the UTC date forward',
-     /Wed 02-Sep-2026 0730 UTC/.test(await p.textContent('#etaDep')), await p.textContent('#etaDep'));
-  await p.selectOption('#etaZoneFrom','480');
 
   // ---- guards ----
   await p.fill('#etaSpeed','');
@@ -113,7 +98,12 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.click('[data-tool="eta"]');
   ok('remembers the distance', (await p.inputValue('#etaDist'))==='830');
   ok('remembers the speed',    (await p.inputValue('#etaSpeed'))==='12.5');
-  ok('remembers the zones',    (await p.inputValue('#etaZoneFrom'))==='480');
+  // The distance and the speed are remembered. The departure is not, and should
+  // not be: a date left over from the last passage is exactly the sort of thing
+  // that gets noticed only after the ETA has been passed to an agent.
+  ok('but not a stale departure date -- it comes back as today',
+     (await p.inputValue('#etaDate')) === new Date().toISOString().slice(0, 10),
+     await p.inputValue('#etaDate'));
 
   await p.click('#etaBackBtn');
   ok('back returns to the launcher', await p.locator('#toolsHome').isVisible());

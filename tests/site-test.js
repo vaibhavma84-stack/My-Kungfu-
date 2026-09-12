@@ -78,18 +78,28 @@ function serve(){
        await p.locator('.tool-tile[data-tool]').count() === 6,
        await p.locator('.tool-tile[data-tool]').count());
 
-    // the ETA port picker needs the list of ports, which stays with the log
+    // the ETA tool works in UTC and needs nothing from the map at all
     await p.click('[data-tool="eta"]');
     await p.waitForTimeout(300);
-    await p.focus('#etaFromPort');
+    ok('the ETA tool works without the chart behind it',
+       await p.locator('#toolEta').isVisible() &&
+       await p.locator('#etaZoneFrom').count() === 0);
+    await p.fill('#etaDate', '2026-09-01');
+    await p.fill('#etaTime', '20:30');
+    await p.fill('#etaDist', '1450');
+    await p.fill('#etaSpeed', '15');
+    await p.waitForTimeout(300);
+    ok('and gives an arrival in UTC on the hosted copy',
+       /Sat 05-Sep-2026 2110 UTC/.test(await p.textContent('#etaOut')),
+       (await p.textContent('#etaOut')).slice(0, 90));
+
+    // the port-call panel still offers ports, which is what the list is for now
+    await p.click('#topTabs button[data-tab="jobs"]');
+    await p.focus('#paPort');
     await p.waitForTimeout(600);
-    ok('the ETA tool still offers every port',
-       await p.locator('#etaPortList option').count() > 3000,
-       await p.locator('#etaPortList option').count());
-    await p.fill('#etaFromPort', 'Singapore');
-    await p.waitForTimeout(400);
-    ok('and still knows their time zones', await p.inputValue('#etaZoneFrom') === '480',
-       await p.inputValue('#etaZoneFrom'));
+    ok('the pre-arrival port picker still offers every port',
+       await p.locator('#paPortList option').count() > 3000,
+       await p.locator('#paPortList option').count());
 
     // a job survives, which is the thing the app is actually for
     await p.click('#topTabs button[data-tab="jobs"]');
@@ -101,7 +111,7 @@ function serve(){
     ok('a job entered on the hosted copy is still there after a reload',
        (await p.textContent('#listWrap')).indexOf('Sound bilges') >= 0);
 
-    ok('the deck log never asked for any map data', servedData === 0, servedData + ' requests');
+    ok('and none of that needed a byte of chart data', servedData === 0, servedData + ' requests');
     ok('no page errors on the deck log', errs.length === 0, errs.join(' | '));
     await ctx.close();
   }

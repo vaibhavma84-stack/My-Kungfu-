@@ -247,28 +247,14 @@ function ok(name, cond, got){
      Math.abs(view.lat - 35.6) < 0.5 && Math.abs(view.lon - 139.7) < 0.5,
      JSON.stringify(view));
 
-  // --- the ETA port picker ------------------------------------------------
+  // The ETA tool no longer takes a port: everything is worked in UTC, so there
+  // are no zones to look up and nothing for a port name to set.
   await p.click('#mapBackBtn');
   await p.click('[data-tool="eta"]');
   await p.waitForTimeout(300);
-  await p.focus('#etaFromPort');
-  await p.waitForTimeout(800);
-  ok('the ETA tool offers ports now',
-     await p.locator('#etaPortList option').count() > 3000,
-     await p.locator('#etaPortList option').count());
-  await p.fill('#etaFromPort', 'Singapore');
-  await p.waitForTimeout(400);
-  ok('picking one sets the departure zone', await p.inputValue('#etaZoneFrom') === '480',
-     await p.inputValue('#etaZoneFrom'));
-  ok('and says it keeps that zone all year',
-     /all year/.test(await p.textContent('#etaPortNote')));
-  await p.fill('#etaToPort', 'Rotterdam');
-  await p.waitForTimeout(400);
-  ok('the arrival zone too', await p.inputValue('#etaZoneTo') === '60',
-     await p.inputValue('#etaZoneTo'));
-  ok('and a summer-time port is flagged rather than assumed',
-     /observes summer time/.test(await p.textContent('#etaPortNote')),
-     await p.textContent('#etaPortNote'));
+  ok('the ETA tool asks for UTC and nothing else',
+     await p.locator('#etaFromPort').count() === 0 &&
+     await p.locator('#etaZoneFrom').count() === 0);
 
   ok('no page errors', errs.length === 0, errs.join(' | '));
   await b.close();
