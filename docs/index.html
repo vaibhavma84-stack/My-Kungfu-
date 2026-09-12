@@ -10484,6 +10484,21 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', function(){
     navigator.serviceWorker.register('./sw.js').catch(function(){ /* offline cache unavailable */ });
   });
+  // A newer worker has taken over, so this page is the old one. Reload it --
+  // but never over something half typed: the update will still be there on the
+  // next launch, and losing a job somebody was entering is the worse of the two.
+  navigator.serviceWorker.addEventListener('message', function(e){
+    if (!e.data || e.data.type !== 'sw-updated') return;
+    // Answering stops the worker reloading this page out from under us.
+    if (e.ports && e.ports[0]) e.ports[0].postMessage('ok');
+    var dirty = false;
+    var fields = document.querySelectorAll('input[type=text], input[type=number], input[type=search], textarea');
+    for (var i = 0; i < fields.length; i++) {
+      if (fields[i].value && fields[i].value.trim()) { dirty = true; break; }
+    }
+    // Half-typed work is worth more than being one launch newer.
+    if (!dirty) location.reload();
+  });
 }
 </script>
 </body>
