@@ -9,7 +9,9 @@ The app itself is written in `../expenses/GasPlanet_ToDoList.html`. That repo's
 
 Every `tests/*-test.js` is picked up automatically. `site-test.js` serves the
 two hosted apps over HTTP, because the map fetches its data and `fetch` does not
-work from a `file://` URL.
+work from a `file://` URL. `notes-test.js` does the same, and reads
+`sample.pdf` — two pages of real text, written by `tests/make-sample-pdf.py`
+rather than downloaded, so the suite has nothing to fetch.
 
 ## Releasing
 
@@ -17,9 +19,14 @@ Only when asked. Then:
 
 1. bump `APP_BUILD` in the app source
 2. `python3 ../expenses/build-site.py`
-3. copy `site/index.html` and `site/sw.js` here — **this is what triggers the
+3. copy **`apk/index.html`** here as `index.html` — **this is what triggers the
    APK build**; a push that touches neither `android/**` nor `index.html` does
-   not build anything
+   not build anything. It must be `apk/`, never `site/`: `site/index.html` is
+   the deck log with the world map taken out, and copying that here would
+   quietly remove the map from the Android app. That nearly shipped once.
+   `docs/` is the hosted deck log — copy `site/` there, and note that its
+   service worker cache is keyed on `APP_BUILD`, so a page updated without a
+   version bump reaches an installed phone only on its second opening
 4. `python3 verify-release.py vNN` — it checks the published APK reports that
    version **and** was built from HEAD. Never send a link before it says OK.
 
