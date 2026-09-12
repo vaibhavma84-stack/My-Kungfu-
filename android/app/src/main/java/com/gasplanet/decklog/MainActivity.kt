@@ -217,7 +217,15 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    /** Writes a data: URL handed over from the page into the Downloads folder. */
+    /**
+     * Everything this app saves goes into one folder of its own rather than
+     * being scattered through Downloads among everything else the phone has
+     * ever fetched. On Android 10 and later that is a RELATIVE_PATH on the
+     * MediaStore entry; before that it is a real directory.
+     */
+    private val SAVE_DIR = "GAS PLANET Deck Log"
+
+    /** Writes a data: URL handed over from the page into that folder. */
     private fun saveDownload(dataUrl: String, filename: String) {
         try {
             val comma = dataUrl.indexOf(',')
@@ -230,6 +238,8 @@ class MainActivity : AppCompatActivity() {
                 val values = ContentValues().apply {
                     put(MediaStore.Downloads.DISPLAY_NAME, filename)
                     put(MediaStore.Downloads.MIME_TYPE, mime)
+                    put(MediaStore.Downloads.RELATIVE_PATH,
+                        Environment.DIRECTORY_DOWNLOADS + "/" + SAVE_DIR)
                     put(MediaStore.Downloads.IS_PENDING, 1)
                 }
                 val resolver = contentResolver
@@ -241,11 +251,14 @@ class MainActivity : AppCompatActivity() {
                 resolver.update(uri, values, null, null)
             } else {
                 @Suppress("DEPRECATION")
-                val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val dir = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    SAVE_DIR
+                )
                 dir.mkdirs()
                 FileOutputStream(File(dir, filename)).use { it.write(bytes) }
             }
-            toast("Saved to Downloads: $filename")
+            toast("Saved to Downloads/$SAVE_DIR: $filename")
         } catch (e: Exception) {
             toast("Could not save $filename: ${e.message}")
         }
