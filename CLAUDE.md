@@ -9,7 +9,11 @@ The app itself is written in `../expenses/GasPlanet_ToDoList.html`. That repo's
 
 Every `tests/*-test.js` is picked up automatically. `site-test.js` serves the
 two hosted apps over HTTP, because the map fetches its data and `fetch` does not
-work from a `file://` URL. `notes-test.js` does the same, and reads
+work from a `file://` URL. `offline-test.js` is the one that matters most: it serves the real hosted
+build, lets the service worker take hold, then removes the network entirely and
+does the day's work with nothing to fetch — open the app, read a photograph,
+open and mark a PDF, write a marked copy, sign off. `notes-test.js` does the
+same, and reads
 `sample.pdf` — two pages of real text, written by `tests/make-sample-pdf.py`
 rather than downloaded, so the suite has nothing to fetch.
 
