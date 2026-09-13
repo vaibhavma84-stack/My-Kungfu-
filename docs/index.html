@@ -1115,6 +1115,12 @@
     .jobs-toolbar select.filter, .jobs-toolbar .btn{width:100%; margin:0; justify-content:center;}
     header{position:static;}
   }
+  /* note-bar and .pdfv .pv-actions are declared further down (with the rest
+     of the Notes feature), after this point in the stylesheet -- an override
+     up here would lose the cascade to their own unconditional rule below no
+     matter the viewport. A second media query, same condition, placed after
+     them, is what actually wins. Caught by phone-polish-test.js checking
+     computed display rather than trusting a rule with this name existed. */
 
   /* ---------- notes ---------- */
   /* A note is either written or a PDF that has been marked. Both live in the
@@ -1162,7 +1168,9 @@
 
   /* the PDF, open */
   .pdfv{display:flex; flex-direction:column; height:calc(100vh - 118px);}
-  .pdfv .pv-head{display:flex; gap:6px; align-items:center; padding:8px 12px; flex-wrap:wrap;}
+  .pdfv .pv-head{display:flex; gap:6px; align-items:center; padding:8px 12px 0;}
+  .pdfv .pv-actions{display:flex; gap:6px; padding:8px 12px; flex-wrap:wrap;}
+  .pdfv .pv-actions .btn{flex:1; min-width:100px;}
   .pdfv .pv-name{font-weight:700; flex:1; overflow:hidden; text-overflow:ellipsis;
     white-space:nowrap;}
   .pv-tools{display:flex; gap:4px; padding:0 8px 6px; overflow-x:auto; -webkit-overflow-scrolling:touch;}
@@ -1187,6 +1195,41 @@
   .pv-textbox{position:absolute; z-index:5; border:1px dashed var(--steel); background:rgba(255,255,255,.9);
     color:#111; font:14px/1.3 inherit; padding:3px 4px; min-width:80px; border-radius:4px;}
   .pv-msg{padding:24px 16px; text-align:center; color:var(--ink-soft); font-size:14px;}
+
+  /* Extract and Merge: a checklist inside the same edit-card shell every other
+     dialog in the app uses, rather than a new kind of chrome for two more
+     verbs. */
+  .pdf-pagepick{display:flex; flex-direction:column; max-height:44vh; overflow-y:auto;
+    -webkit-overflow-scrolling:touch; border:1px solid var(--line); border-radius:8px;}
+  .pdf-pagepick-row{display:flex; align-items:center; gap:10px; padding:10px 12px;
+    border-bottom:1px solid var(--line); font-size:14px; cursor:pointer;}
+  .pdf-pagepick-row:last-child{border-bottom:none;}
+  .pdf-pagepick-row input[type=checkbox]{width:18px; height:18px; flex:0 0 auto;}
+  .pdf-pagepick-row .pp-name{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .pdf-pagepick-row .pp-order{
+    flex:0 0 auto; min-width:20px; height:20px; border-radius:50%; background:var(--steel);
+    color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center;
+    justify-content:center; visibility:hidden;
+  }
+  .pdf-pagepick-row.checked .pp-order{visibility:visible;}
+  .pdf-pagepick-all{padding:8px 12px; font-size:12.5px; color:var(--steel); cursor:pointer;
+    text-align:right;}
+
+  @media (max-width:760px){
+    /* Five controls in one flex-wrap row hits the same ragged wrap as the
+       jobs toolbar once Merge PDFs joined Export CSV -- the search box
+       spans its own row, the two button pairs sit below it evenly. */
+    .note-bar{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+    .note-bar .note-search{grid-column:1 / -1; width:100%;}
+    .note-bar .btn{width:100%; justify-content:center;}
+    /* Save marked, Extract and Delete wrapped with Delete left alone on its
+       own line, empty space beside it -- the same shape of thing as the
+       jobs toolbar. Delete spans full width instead: deliberate, not ragged,
+       and set apart from the two constructive actions above it. */
+    .pdfv .pv-actions{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+    .pdfv .pv-actions .btn{width:100%; min-width:0;}
+    .pdfv .pv-actions #pdfDelBtn{grid-column:1 / -1;}
+  }
 </style>
 </head>
 <body>
@@ -1609,6 +1652,7 @@
       <input type="file" id="notePdfInput" accept="application/pdf,.pdf" style="display:none">
       <input type="search" class="note-search" id="noteSearch" placeholder="Search notes&hellip;">
       <button class="btn btn-ghost" id="noteExportBtn">Export CSV</button>
+      <button class="btn btn-ghost" id="noteMergeBtn">Merge PDFs</button>
     </div>
     <div class="note-list" id="noteListWrap"></div>
   </div>
@@ -1637,7 +1681,10 @@
     <div class="pv-head">
       <button class="btn btn-ghost" id="pdfBackBtn">&lsaquo; Notes</button>
       <div class="pv-name" id="pdfName"></div>
+    </div>
+    <div class="pv-actions">
       <button class="btn btn-ghost" id="pdfExportBtn" title="Write a marked copy">Save marked</button>
+      <button class="btn btn-ghost" id="pdfExtractBtn" title="Copy some pages into a new note">Extract</button>
       <button class="btn btn-ghost" id="pdfDelBtn">Delete</button>
     </div>
     <div class="pv-tools" id="pdfTools">
@@ -3685,6 +3732,50 @@
     return new Blob(chunks, { type: 'application/pdf' });
   }
 
+  // One page, flattened to a JPEG with its marks baked in -- the unit both
+  // Save marked and, below, Extract and Merge are built from. Scale 2 was
+  // Save marked's own choice, kept here so a page reads the same wherever it
+  // was flattened from.
+  function flattenPdfPage(doc, pageNum, marksArr){
+    return doc.getPage(pageNum).then(function(page){
+      var base = page.getViewport({ scale: 1 });
+      var vp = page.getViewport({ scale: 2 });
+      var cv = document.createElement('canvas');
+      cv.width = Math.floor(vp.width); cv.height = Math.floor(vp.height);
+      var ctx = cv.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+      return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function(){
+        (marksArr || []).forEach(function(m){ drawOneMark(ctx, m, vp.width, vp.height); });
+        return new Promise(function(res){
+          cv.toBlob(function(blob){
+            var fr = new FileReader();
+            fr.onload = function(e){
+              res({ w: base.width, h: base.height, jw: cv.width, jh: cv.height,
+                    jpeg: new Uint8Array(e.target.result) });
+            };
+            fr.readAsArrayBuffer(blob);
+          }, 'image/jpeg', 0.82);
+        });
+      });
+    });
+  }
+
+  // Pages in order, one at a time -- pdf.js's worker does not want several
+  // pages of the same document rendered at once, and this is never so many
+  // pages that serial is worth trading away for the risk of that.
+  function flattenPagesSerial(doc, pageNums, marksByPage, onProgress, cb){
+    var out = [], i = 0;
+    function step(){
+      if(i >= pageNums.length){ cb(out); return; }
+      var pn = pageNums[i];
+      if(onProgress) onProgress(i + 1, pageNums.length);
+      flattenPdfPage(doc, pn, (marksByPage || {})[pn] || [])
+        .then(function(pg){ out.push(pg); i++; setTimeout(step, 0); })
+        .catch(function(){ i++; setTimeout(step, 0); });   // one bad page, not the whole job
+    }
+    step();
+  }
+
   function pdfExportMarked(){
     var n = noteById(openNoteId);
     if(!n || !pdfDoc) return;
@@ -3693,44 +3784,246 @@
                 'Every mark is drawn into the page, so it reads the same anywhere. ' +
                 'The text in it stops being selectable.')) return;
     var name = (n.pdfName || 'document.pdf').replace(/\.pdf$/i, '');
-    var out = [], i = 1;
+    var pageNums = [];
+    for(var i = 1; i <= total; i++) pageNums.push(i);
     pdfMsg('Writing page 1 of ' + total + '…');
+    flattenPagesSerial(pdfDoc, pageNums, n.marks, function(done, of){
+      pdfMsg('Writing page ' + done + ' of ' + of + '…');
+    }, function(out){
+      pdfMsg('');
+      downloadBlob(name + ' marked.pdf', buildFlatPdf(out));
+    });
+  }
 
-    function step(){
-      if(i > total){
-        pdfMsg('');
-        downloadBlob(name + ' marked.pdf', buildFlatPdf(out));
-        return;
-      }
-      pdfMsg('Writing page ' + i + ' of ' + total + '…');
-      pdfDoc.getPage(i).then(function(page){
-        var base = page.getViewport({ scale: 1 });
-        var vp = page.getViewport({ scale: 2 });
-        var cv = document.createElement('canvas');
-        cv.width = Math.floor(vp.width); cv.height = Math.floor(vp.height);
-        var ctx = cv.getContext('2d');
-        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
-        return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function(){
-          ((n.marks || {})[i] || []).forEach(function(m){
-            drawOneMark(ctx, m, vp.width, vp.height);
-          });
-          return new Promise(function(res){
-            cv.toBlob(function(blob){
-              var fr = new FileReader();
-              fr.onload = function(e){
-                out.push({ w: base.width, h: base.height,
-                           jw: cv.width, jh: cv.height,
-                           jpeg: new Uint8Array(e.target.result) });
-                res();
-              };
-              fr.readAsArrayBuffer(blob);
-            }, 'image/jpeg', 0.82);
-          });
-        });
-      }).then(function(){ i++; setTimeout(step, 0); })
-        .catch(function(){ pdfMsg('Page ' + i + ' could not be written.'); });
+  // A run of consecutive page numbers reads as a range; anything else is
+  // listed. [1,2,3,5,7,8,9] -> "1-3, 5, 7-9".
+  function formatPageRanges(nums){
+    var sorted = nums.slice().sort(function(a, b){ return a - b; });
+    var out = [], start = sorted[0], prev = sorted[0];
+    function flush(end){ out.push(start === end ? String(start) : start + '-' + end); }
+    for(var i = 1; i <= sorted.length; i++){
+      var n = sorted[i];
+      if(n === prev + 1){ prev = n; continue; }
+      flush(prev);
+      start = prev = n;
     }
-    step();
+    return out.join(', ');
+  }
+
+  // Turns a finished flattened PDF into a new note, the same way an imported
+  // one is: stored whole in the file database, referenced from the note.
+  function savePdfBytesAsNote(blob, pdfName, cb){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      filePut(pdfName, 'application/pdf', e.target.result, function(ref){
+        if(!ref){ cb(null); return; }
+        var n = { id: uid(), kind: 'pdf', title: '', text: '', images: [],
+                  pdf: ref, pdfName: pdfName, pages: 0, marks: {}, pinned: false,
+                  createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        notes.push(n);
+        saveNotes();
+        cb(n);
+      });
+    };
+    reader.onerror = function(){ cb(null); };
+    reader.readAsArrayBuffer(blob);
+  }
+
+  // ---------- extract pages ----------
+  function openExtractDialog(){
+    var n = noteById(openNoteId);
+    if(!n || !pdfDoc) return;
+    var total = pdfDoc.numPages;
+    var bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    var rows = '';
+    for(var i = 1; i <= total; i++){
+      rows += '<label class="pdf-pagepick-row" data-pp-page="' + i + '">' +
+              '<input type="checkbox" data-pp-cb="' + i + '">' +
+              '<span class="pp-name">Page ' + i + '</span></label>';
+    }
+    bg.innerHTML =
+      '<div class="edit-card">' +
+        '<div class="ec-head"><h3>Extract pages</h3></div>' +
+        '<div class="ec-body">' +
+          '<div class="pa-note">Copies the pages you pick into a new note, marks and all. ' +
+          'The copy is flattened -- its text stops being selectable, the same trade a marked copy makes.</div>' +
+          '<div class="pdf-pagepick-all" id="ppAllToggle">Select all</div>' +
+          '<div class="pdf-pagepick" id="ppList">' + rows + '</div>' +
+        '</div>' +
+        '<div class="ec-actions">' +
+          '<button class="btn btn-ghost" id="ppCancelBtn">Cancel</button>' +
+          '<button class="btn btn-primary" id="ppGoBtn" disabled>Extract</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(bg);
+
+    function checkedPages(){
+      return [].map.call(bg.querySelectorAll('input[data-pp-cb]:checked'),
+                          function(cb){ return parseInt(cb.dataset.ppCb, 10); });
+    }
+    function refresh(){
+      var count = checkedPages().length;
+      var go = bg.querySelector('#ppGoBtn');
+      go.disabled = count === 0;
+      go.textContent = count ? 'Extract ' + count + ' page' + (count === 1 ? '' : 's') : 'Extract';
+    }
+    bg.querySelector('#ppList').addEventListener('change', function(e){
+      var row = e.target.closest('.pdf-pagepick-row');
+      if(row) row.classList.toggle('checked', e.target.checked);
+      refresh();
+    });
+    bg.querySelector('#ppAllToggle').addEventListener('click', function(){
+      var allChecked = checkedPages().length === total;
+      bg.querySelectorAll('input[data-pp-cb]').forEach(function(cb){
+        cb.checked = !allChecked;
+        cb.closest('.pdf-pagepick-row').classList.toggle('checked', !allChecked);
+      });
+      this.textContent = allChecked ? 'Select all' : 'Select none';
+      refresh();
+    });
+    bg.querySelector('#ppCancelBtn').addEventListener('click', function(){ bg.remove(); });
+    bg.querySelector('#ppGoBtn').addEventListener('click', function(){
+      var pages = checkedPages();
+      bg.remove();
+      runExtractPages(n, pages);
+    });
+  }
+
+  function runExtractPages(n, pages){
+    var base = (n.pdfName || 'document.pdf').replace(/\.pdf$/i, '');
+    var label = base + ' (p' + formatPageRanges(pages) + ').pdf';
+    pdfMsg('Extracting page 1 of ' + pages.length + '…');
+    flattenPagesSerial(pdfDoc, pages, n.marks, function(done, of){
+      pdfMsg('Extracting page ' + done + ' of ' + of + '…');
+    }, function(out){
+      pdfMsg('');
+      if(!out.length){ alert('Nothing could be read from those pages.'); return; }
+      savePdfBytesAsNote(buildFlatPdf(out), label, function(newNote){
+        if(!newNote){ alert('The extracted pages could not be saved.'); return; }
+        newNote.pages = out.length;
+        saveNotes();
+        renderNotes();
+        alert(pages.length + ' page' + (pages.length === 1 ? '' : 's') + ' copied into "' + label + '".');
+      });
+    });
+  }
+
+  // ---------- merge PDFs ----------
+  var mergeOrder = [];
+
+  function openMergeDialog(){
+    var pdfNotes = notes.filter(function(x){ return x.kind === 'pdf' && isFileRef(x.pdf); });
+    if(pdfNotes.length < 2){
+      alert('There are not two PDFs to merge yet. Add another PDF note first.');
+      return;
+    }
+    mergeOrder = [];
+    var bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    var rows = pdfNotes.map(function(x){
+      return '<label class="pdf-pagepick-row" data-pp-note="' + escapeHtml(x.id) + '">' +
+             '<input type="checkbox" data-pp-mid="' + escapeHtml(x.id) + '">' +
+             '<span class="pp-name">' + escapeHtml(x.pdfName || x.title || 'PDF') +
+             (x.pages ? ' · ' + x.pages + 'pp' : '') + '</span>' +
+             '<span class="pp-order"></span></label>';
+    }).join('');
+    bg.innerHTML =
+      '<div class="edit-card">' +
+        '<div class="ec-head"><h3>Merge PDFs</h3></div>' +
+        '<div class="ec-body">' +
+          '<div class="pa-note">Pick two or more, in the order they should read. Each is flattened ' +
+          'with its own marks baked in, into one new note.</div>' +
+          '<div class="pdf-pagepick" id="mgList">' + rows + '</div>' +
+        '</div>' +
+        '<div class="ec-actions">' +
+          '<button class="btn btn-ghost" id="mgCancelBtn">Cancel</button>' +
+          '<button class="btn btn-primary" id="mgGoBtn" disabled>Merge</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(bg);
+
+    function renderOrder(){
+      bg.querySelectorAll('.pdf-pagepick-row').forEach(function(row){
+        var id = row.dataset.ppNote;
+        var pos = mergeOrder.indexOf(id);
+        row.classList.toggle('checked', pos !== -1);
+        row.querySelector('.pp-order').textContent = pos === -1 ? '' : (pos + 1);
+      });
+      var go = bg.querySelector('#mgGoBtn');
+      go.disabled = mergeOrder.length < 2;
+      go.textContent = mergeOrder.length >= 2 ? 'Merge ' + mergeOrder.length : 'Merge';
+    }
+    bg.querySelector('#mgList').addEventListener('change', function(e){
+      var id = e.target.dataset.ppMid;
+      if(!id) return;
+      var pos = mergeOrder.indexOf(id);
+      if(e.target.checked && pos === -1) mergeOrder.push(id);
+      else if(!e.target.checked && pos !== -1) mergeOrder.splice(pos, 1);
+      renderOrder();
+    });
+    bg.querySelector('#mgCancelBtn').addEventListener('click', function(){ bg.remove(); });
+    bg.querySelector('#mgGoBtn').addEventListener('click', function(){
+      var order = mergeOrder.slice();
+      // The dialog stays up rather than closing onto nothing: nowhere else on
+      // the notes list is a place to say "reading 2 of 3" while it happens.
+      bg.querySelector('.ec-body').innerHTML = '<div class="pa-note" id="mgProgress">Starting…</div>';
+      bg.querySelector('.ec-actions').innerHTML = '';
+      runMergePdfs(order, bg);
+    });
+  }
+
+  function runMergePdfs(orderedIds, dialogBg){
+    var srcNotes = orderedIds.map(noteById).filter(Boolean);
+    var out = [], skipped = [];
+    function say(t){
+      var el = dialogBg && dialogBg.querySelector('#mgProgress');
+      if(el) el.textContent = t;
+    }
+
+    function nextSource(i){
+      if(i >= srcNotes.length){ finish(); return; }
+      var src = srcNotes[i];
+      say('Reading ' + (i + 1) + ' of ' + srcNotes.length + ': ' + (src.pdfName || 'PDF') + '…');
+      fileGet(src.pdf, function(rec){
+        if(!rec || !rec.buf){ skipped.push(src.pdfName || 'a PDF'); nextSource(i + 1); return; }
+        var bytes = new Uint8Array(rec.buf.slice(0));
+        window.pdfjsLib.getDocument({ data: bytes, useSystemFonts: true }).promise.then(function(doc){
+          var pageNums = [];
+          for(var p = 1; p <= doc.numPages; p++) pageNums.push(p);
+          flattenPagesSerial(doc, pageNums, src.marks, function(done, of){
+            say('Flattening ' + (src.pdfName || 'PDF') + ': page ' + done + ' of ' + of + '…');
+          }, function(pages){
+            out = out.concat(pages);
+            nextSource(i + 1);
+          });
+        }).catch(function(){ skipped.push(src.pdfName || 'a PDF'); nextSource(i + 1); });
+      });
+    }
+
+    function done(){ if(dialogBg) dialogBg.remove(); }
+
+    function finish(){
+      say('');
+      if(!out.length){ done(); alert('None of those PDFs could be read.'); return; }
+      var label = 'Merged ' + srcNotes.slice(0, 2).map(function(x){
+        return (x.pdfName || 'PDF').replace(/\.pdf$/i, '');
+      }).join(' + ') + (srcNotes.length > 2 ? ' + ' + (srcNotes.length - 2) + ' more' : '') + '.pdf';
+      savePdfBytesAsNote(buildFlatPdf(out), label, function(newNote){
+        done();
+        if(!newNote){ alert('The merged PDF could not be saved.'); return; }
+        newNote.pages = out.length;
+        saveNotes();
+        renderNotes();
+        var msg = 'Merged ' + srcNotes.length + ' PDFs, ' + out.length + ' pages, into "' + label + '".';
+        if(skipped.length) msg += '\n\nCould not be read: ' + skipped.join(', ');
+        alert(msg);
+      });
+    }
+    pdfLibReady(function(ok){
+      if(!ok){ done(); alert('The PDF reader could not start on this device.'); return; }
+      nextSource(0);
+    });
   }
 
   // ---------- wiring ----------
@@ -3748,6 +4041,7 @@
       addPdfNote(f);
     });
     document.getElementById('noteExportBtn').addEventListener('click', exportNotesCSV);
+    document.getElementById('noteMergeBtn').addEventListener('click', openMergeDialog);
     document.getElementById('noteSearch').addEventListener('input', function(e){
       noteFilter = e.target.value;
       renderNotes();
@@ -3821,6 +4115,7 @@
     });
     document.getElementById('pdfDelBtn').addEventListener('click', deleteNote);
     document.getElementById('pdfExportBtn').addEventListener('click', pdfExportMarked);
+    document.getElementById('pdfExtractBtn').addEventListener('click', openExtractDialog);
     document.getElementById('pdfUndoBtn').addEventListener('click', pdfUndo);
     document.getElementById('pdfTools').addEventListener('click', function(e){
       var b = e.target.closest('button[data-pdftool]');
