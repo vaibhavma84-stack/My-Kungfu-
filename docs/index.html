@@ -42,6 +42,7 @@
      navy as the chrome above; it is 0 anywhere there is no such strip. */
   :root{ --safe-top: env(safe-area-inset-top, 0px); }
   body{ border-top: var(--safe-top) solid var(--hull); }
+  html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -154,11 +155,11 @@
   .dot{width:6px; height:6px; border-radius:50%; background:currentColor; display:inline-block;}
 
   /* ---------- Top-level tabs ---------- */
-  .top-tabs{display:flex; background:var(--hull-2);}
+  .top-tabs{display:flex; background:var(--hull-2); overflow-x:auto; -webkit-overflow-scrolling:touch;}
   .top-tabs button{
-    flex:1; border:none; background:transparent; color:#A9BBC9; font-weight:700; font-size:12px;
+    flex:1; min-width:0; border:none; background:transparent; color:#A9BBC9; font-weight:700; font-size:12px;
     padding:12px 2px; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;
-    letter-spacing:.01em;
+    overflow:hidden; text-overflow:ellipsis; letter-spacing:.01em;
   }
   .top-tabs button.active{color:#fff; border-bottom-color:var(--important); background:rgba(255,255,255,.04);}
 
@@ -225,6 +226,14 @@
     font-family:ui-monospace,monospace;
   }
   .tank-section-label:first-child{margin-top:0;}
+  /* One column-header cell each, not a spanning label, so Port sits over the
+     left column and Stbd over the right -- the pairing the fields below are
+     already laid out for. */
+  .tank-subhead{
+    font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--ink-soft); margin-top:6px; padding-bottom:2px; border-bottom:1px solid var(--line);
+    font-family:ui-monospace,monospace; text-align:center;
+  }
 
   .cargo-table-scroll{overflow-x:auto; padding:14px 20px 100px; -webkit-overflow-scrolling:touch;}
   table.cargo-table{border-collapse:collapse; font-size:11px; font-family:ui-monospace,monospace; white-space:nowrap;}
@@ -249,7 +258,7 @@
     border-bottom:1px solid var(--line); flex-wrap:wrap; align-items:center;
     position:sticky; top:76px; z-index:20;
   }
-  select, .btn, input[type=text], input[type=date], textarea{
+  select, .btn, input[type=text], input[type=date], input[type=time], textarea{
     font-family:inherit; font-size:15px;
   }
   select.filter{
@@ -357,19 +366,30 @@
   .form-row .field.remarks-field{flex:2; min-width:160px;}
   .row-main{display:grid; grid-template-columns: minmax(0,2.2fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,2fr); gap:10px; align-items:end;}
   .row-main .field{min-width:0; flex:none;}
-  /* A date field is a control, not a text box: on iOS it sizes itself to its
-     own content and ignores width until the platform look is turned off. Left
-     alone it is wider than a narrow column, and the overflow rule below then
-     cuts its right-hand border away -- which on the phone reads as a box that
-     does not close, sitting half under the one beside it. */
-  .field input[type=date]{
+  /* A date or time field is a control, not a text box: on iOS it sizes itself
+     to its own content and ignores width until the platform look is turned
+     off. Left alone it is wider than a narrow column, and the overflow rule
+     below then cuts its right-hand border away -- which on the phone reads as
+     a box that does not close, sitting half under the one beside it. The same
+     control also renders shorter than its siblings until it is focused once --
+     WebKit lays out its empty state without the space its own placeholder
+     needs, and only fixes that up after the field has been touched. An
+     explicit height is not content the browser can lay out differently
+     before and after; picked to match the select boxes these fields sit
+     beside (measured, not guessed -- see layout-test.js). */
+  .field input[type=date], .field input[type=time]{
     width:100%; min-width:0; max-width:100%; box-sizing:border-box;
+    height:41px;
     -webkit-appearance:none; appearance:none;
     padding-left:8px; padding-right:8px; -webkit-min-logical-width:0;
   }
   .row-main .field{overflow:hidden;}
   .row-main select, .row-main input{min-width:0;}
-  .flags-row{gap:8px;}
+  /* form-row sets align-items:end, so a button whose label wraps to two lines
+     (RA SF-23, in a narrow flex:1 share) sits taller than the single-line
+     buttons beside it -- stretch makes every button in the row match the
+     tallest one instead. */
+  .form-row.flags-row{gap:8px; align-items:stretch;}
   .yn-toggle{
     flex:1; min-width:0; padding:10px 4px; border-radius:8px; border:1.5px solid var(--line);
     background:var(--paper); color:var(--ink-soft); font-weight:700; font-size:12.5px;
@@ -1085,6 +1105,14 @@
     #paAddBtn{width:100%;}
     #photoBtn{width:100%;}
     .toolbar{top:auto; position:static;}
+    /* Nine buttons and two selects in one flex-wrap row divide unevenly at
+       phone width -- whichever is left over on a line sits ragged against
+       the next. A fixed two-column grid means every row is either the
+       view-switch (its own row, full width) or a complete pair. */
+    .jobs-toolbar{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+    .jobs-toolbar .view-switch{grid-column:1 / -1;}
+    .jobs-toolbar .spacer{display:none;}
+    .jobs-toolbar select.filter, .jobs-toolbar .btn{width:100%; margin:0; justify-content:center;}
     header{position:static;}
   }
 
@@ -1291,7 +1319,7 @@
     <div id="paList"></div>
   </div>
 
-<div class="toolbar">
+<div class="toolbar jobs-toolbar">
   <div class="view-switch" id="viewSwitch">
     <button data-view="list" class="active">List</button>
     <button data-view="day">Day</button>
@@ -1750,6 +1778,10 @@
   </div>
 
   <div id="toolCalc" style="display:none;">
+  <div class="tool-head">
+    <button class="btn btn-ghost" id="calcBackBtn">&lsaquo; Tools</button>
+    <div class="tool-title">Calculator</div>
+  </div>
   <div class="calc-wrap">
     <div class="calc-modes">
       <button data-calcmode="basic" class="active">Plain</button>
@@ -2066,9 +2098,13 @@
 
   var TANK_FIELD_GROUPS = [
     {label:'Pressure & Dome', fields:['pressure','dome']},
-    {label:'Port Side Temps', fields:['portTop','portMid','portBot','portSump']},
-    {label:'Stbd Side Temps', fields:['stbdTop','stbdMid','stbdBot','stbdSump']},
-    {label:'Soundings', fields:['portSound','stbdSound']},
+    // Port and Stbd as two columns of one table -- Top/Mid/Btm/Sump/Sounding
+    // down each side -- rather than the whole port side stacked above the
+    // whole stbd side. subheads names the two columns; the grid is what
+    // actually pairs them, by laying the fields out already interleaved.
+    {subheads:['Port','Stbd'],
+     fields:['portTop','stbdTop','portMid','stbdMid','portBot','stbdBot',
+             'portSump','stbdSump','portSound','stbdSound']},
     {label:'Hold Space', fields:['holdTemp','holdPress']}
   ];
   var TANK_FIELD_META = {
@@ -5250,7 +5286,12 @@
     var data = cargoDraft[currentTankTab] || {};
     var html = '<div class="tank-fields-grid">';
     TANK_FIELD_GROUPS.forEach(function(g){
-      html += '<div class="tank-section-label">'+g.label+'</div>';
+      if(g.subheads){
+        html += '<div class="tank-subhead">'+g.subheads[0]+'</div>' +
+                '<div class="tank-subhead">'+g.subheads[1]+'</div>';
+      } else {
+        html += '<div class="tank-section-label">'+g.label+'</div>';
+      }
       g.fields.forEach(function(key){
         var meta = TANK_FIELD_META[key];
         var val = data[key] !== undefined ? data[key] : '';
@@ -9898,6 +9939,7 @@
     if(tile) showTool(tile.dataset.tool);
   });
   document.getElementById('toolBackBtn').addEventListener('click', function(){ showTool(null); });
+  document.getElementById('calcBackBtn').addEventListener('click', function(){ showTool(null); });
   document.getElementById('guideBackBtn').addEventListener('click', function(){ showTool(null); });
   // Coming back from the home screen is the usual way a tick arrives.
   document.addEventListener('visibilitychange', function(){
