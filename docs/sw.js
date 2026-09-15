@@ -6,10 +6,18 @@ const ASSETS = [
   './icon-192.png', './icon-512.png'
 ];
 
+// cache.addAll(urls) fetches each url the ordinary way, which on a phone
+// minutes after a fresh publish can be answered straight out of the
+// browser's own HTTP cache -- a stale index.html, with a correct new cache
+// name wrapped around it. { cache: 'reload' } forces the request past that,
+// the same way a hard refresh would, so what lands in this cache is what was
+// actually just published.
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE)
-      .then(cache => cache.addAll(ASSETS))
+      .then(cache => Promise.all(
+        ASSETS.map(u => fetch(u, { cache: 'reload' }).then(res => cache.put(u, res)))
+      ))
       .then(() => self.skipWaiting())
   );
 });
@@ -66,10 +74,13 @@ self.addEventListener('fetch', event => {
   }
 
   // Everything else: the cached copy first, so the app opens instantly at sea
-  // even when the radio is up but there is no usable link.
+  // even when the radio is up but there is no usable link. The background
+  // fetch that refreshes this cache for next time bypasses the HTTP cache for
+  // the same reason install does -- otherwise a stale response there just
+  // gets copied back in on every load, and the page never actually updates.
   event.respondWith(
     caches.match(req).then(hit => {
-      const net = fetch(req).then(res => {
+      const net = fetch(req, { cache: 'reload' }).then(res => {
         if (res && res.ok && res.type === 'basic') {
           caches.open(CACHE).then(c => c.put(req, res.clone()));
         }
