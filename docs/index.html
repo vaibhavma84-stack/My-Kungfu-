@@ -379,6 +379,17 @@
   .form-row .field.remarks-field{flex:2; min-width:160px;}
   .row-main{display:grid; grid-template-columns: minmax(0,2.2fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,2fr); gap:10px; align-items:end;}
   .row-main .field{min-width:0; flex:none;}
+  /* Add Job folds Priority and Interval into one grid cell (two boxes side
+     by side) instead of Interval taking a row of its own -- Remarks is
+     hidden (not removed) below, so the row is down to three cells. */
+  /* #addWrap .row-main's own ID beats the phone-width .row-main override on
+     specificity alone, media query or not -- so this only takes over above
+     the phone breakpoint, where that override does not apply anyway. */
+  @media (min-width:761px){
+    #addWrap .row-main{grid-template-columns: minmax(0,2.2fr) minmax(0,1.1fr) minmax(0,1.8fr);}
+  }
+  .pri-int-field{display:flex; gap:8px;}
+  .row-main .pri-int-field .field{flex:1; min-width:0;}
   /* A date or time field is a control, not a text box: on iOS it sizes itself
      to its own content and ignores width until the platform look is turned
      off. Left alone it is wider than a narrow column, and the overflow rule
@@ -1303,25 +1314,27 @@
         <label>Due Date</label>
         <input type="date" id="inDue">
       </div>
-      <div class="field">
-        <label>Priority</label>
-        <select id="inPriority">
-          <option value="normal">Normal</option>
-          <option value="important">Important</option>
-          <option value="urgent">Urgent</option>
-        </select>
+      <div class="field pri-int-field">
+        <div class="field">
+          <label>Priority</label>
+          <select id="inPriority">
+            <option value="normal">Normal</option>
+            <option value="important">Important</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Interval</label>
+          <select id="inRepeat"></select>
+        </div>
       </div>
-      <div class="field span-2">
-        <label>Interval</label>
-        <select id="inRepeat"></select>
-      </div>
-      <div class="field remarks-field">
+      <div class="field remarks-field" id="inRemarksField" style="display:none;">
         <label>Remarks</label>
         <input type="text" id="inRemarks" placeholder="Optional notes" maxlength="500">
       </div>
     </div>
     <div class="form-row flags-row">
-      <button type="button" class="yn-toggle" id="inWeekly" data-value="no">WR</button>
+      <button type="button" class="yn-toggle" id="inWeekly" data-value="no">WWR</button>
       <button type="button" class="yn-toggle" id="inAd34" data-value="no">AD 19</button>
       <button type="button" class="yn-toggle" id="inRA" data-value="no">RA</button>
       <button type="button" class="yn-toggle" id="inPTW" data-value="no">PTW</button>
@@ -1625,7 +1638,7 @@
 <div id="wwrSection" style="display:none;">
   <div id="wwrAddWrap">
     <div class="ship-note">
-      Everything ticked <b>WR</b> on the to do list lands here on its own. Add anything
+      Everything ticked <b>WWR</b> on the to do list lands here on its own. Add anything
       else that was done straight in below &mdash; it is saved as an ordinary completed
       job, so it also shows on the to do list as done, photos and all.
     </div>
@@ -4783,7 +4796,7 @@
     html += '      <div class="meta-row">';
     html += '        <span class="m-item">📅 Due: '+fmtDate(t.due)+(overdueFlag?' <span class="overdue-flag">— OVERDUE</span>':'')+'</span>';
     if(t.done){ html += '        <span class="m-item" data-action="editcompleted" data-id="'+t.id+'" style="cursor:pointer;text-decoration:underline dotted">✅ Completed: '+fmtDate(t.dateCompleted)+' — tap to change</span>'; }
-    if(t.weeklyReport==='yes'){ html += '        <span class="flag-tag">WR</span>'; }
+    if(t.weeklyReport==='yes'){ html += '        <span class="flag-tag">WWR</span>'; }
     if(t.ad34Planner==='yes'){ html += '        <span class="flag-tag flag-ad34">AD 19</span>'; }
     if(t.ra){ html += '        <span class="flag-tag flag-ra">RA</span>'; }
     if(t.ptw){ html += '        <span class="flag-tag flag-ptw">PTW'+(t.ptwType ? ': '+escapeHtml(t.ptwType) : '')+'</span>'; }
@@ -9066,7 +9079,7 @@
   function exportWrCSV(){
     var jobs = wrJobs();
     if(!jobs.length){
-      alert('No jobs are ticked WR yet.\n\nTick WR on a job to include it in the work done report.');
+      alert('No jobs are ticked WWR yet.\n\nTick WWR on a job to include it in the work done report.');
       return;
     }
     var rows = [];
@@ -9636,7 +9649,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v54';
+  var APP_BUILD = 'v55';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -9750,7 +9763,7 @@
           '</div>' +
           '<div class="field"><label>Remarks</label><input type="text" id="edRem" maxlength="500" value="' + escapeHtml(t.remarks || '') + '"></div>' +
           '<div class="ec-toggles">' +
-            tg('wr','WR', t.weeklyReport === 'yes') +
+            tg('wr','WWR', t.weeklyReport === 'yes') +
             tg('ad19','AD 19', t.ad34Planner === 'yes') +
             tg('ra','RA', !!t.ra) +
             tg('ptw','PTW', !!t.ptw) +
