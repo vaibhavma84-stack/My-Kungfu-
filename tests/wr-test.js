@@ -12,7 +12,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
 
   await p.click('#exportWrBtn');
   await p.waitForTimeout(200);
-  ok('warns when nothing is ticked WR', dialogs.some(d=>/No jobs are ticked WR/.test(d)));
+  ok('warns when nothing is ticked WWR', dialogs.some(d=>/No jobs are ticked WWR/.test(d)));
 
   // 06-Jul is a Monday; 12-Jul Sunday. 13-Jul starts the next week.
   const add = async (job, due, wr, opts={}) => {
@@ -20,8 +20,14 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
     if(wr) await p.click('#inWeekly');
     if(opts.ra) await p.click('#inRA');
     if(opts.ptw){ await p.click('#inPTW'); await p.selectOption('#inPtwType', opts.ptw); }
-    if(opts.rem) await p.fill('#inRemarks', opts.rem);
     await p.click('#addBtn');
+    if(opts.rem){
+      // Remarks is off the Add Job form now -- it still lives in the edit sheet.
+      await p.locator('.task', { hasText: job }).locator('[data-action="edit"]').click();
+      await p.fill('#edRem', opts.rem);
+      await p.click('[data-ed="save"]');
+      await p.waitForTimeout(200);
+    }
   };
   await add('Air hoses weekly inspection','2026-07-06', true, {rem:'All hoses in date'});
   await add('Scuppers weekly inspection','2026-07-10', true, {ra:true});

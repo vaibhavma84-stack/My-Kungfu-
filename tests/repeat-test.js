@@ -20,7 +20,12 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   const add = async (job, due, rep) => {
     await p.fill('#inJob',job); await p.fill('#inDue',due);
     await p.selectOption('#inRepeat',rep); await p.click('#inAd34'); await p.click('#inRA');
-    await p.fill('#inRemarks','carry me over'); await p.click('#addBtn');
+    await p.click('#addBtn');
+    // Remarks is off the Add Job form now -- it still lives in the edit sheet.
+    await p.locator('.task', { hasText: job }).locator('[data-action="edit"]').click();
+    await p.fill('#edRem','carry me over');
+    await p.click('[data-ed="save"]');
+    await p.waitForTimeout(200);
   };
   await add('Air hoses weekly inspection','2026-07-06','weekly');
   await add('Lifeboat 3-monthly service','2026-07-06','quarterly');
