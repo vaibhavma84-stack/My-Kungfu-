@@ -31,7 +31,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Default packages are "tools platform-tools" -- Google has stopped
+      # serving the legacy standalone "tools" package (sdkmanager now reports
+      # "Failed to find package 'tools'" and setup-android treats that as
+      # fatal), and Gradle never needed it: the Android Gradle Plugin fetches
+      # its own build-tools/platform via the SDK root this step sets up.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
 
       - uses: gradle/actions/setup-gradle@v4
 
