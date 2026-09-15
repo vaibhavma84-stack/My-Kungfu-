@@ -40,6 +40,8 @@ const ROWS = [
     const errs = []; p.on('pageerror', e => errs.push(String(e)));
     await p.goto('http://localhost:8791/');
     await p.waitForTimeout(800);
+    await p.click('#portCallToggle');   // collapsed by default; measure it open
+    await p.waitForTimeout(150);
 
     for(const theme of ['light', 'dark']){
       await p.evaluate(t => document.documentElement.setAttribute('data-theme', t), theme);

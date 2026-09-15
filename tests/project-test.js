@@ -65,8 +65,8 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   const sept = await p.evaluate(()=>{
     const out={};
     document.querySelectorAll('.month-cell[data-date]').forEach(c=>{
-      const n=c.querySelector('.cell-count');
-      if(n) out[c.dataset.date]=n.textContent;
+      const jobs=c.querySelectorAll('.cell-jobs .cell-job');
+      if(jobs.length) out[c.dataset.date]=[...jobs].map(j=>j.textContent).join(', ');
     });
     return out;
   });
@@ -81,7 +81,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   const oct = await p.evaluate(()=>{
     const out={};
     document.querySelectorAll('.month-cell[data-date]').forEach(c=>{
-      const n=c.querySelector('.cell-count'); if(n) out[c.dataset.date]=n.textContent;
+      const jobs=c.querySelectorAll('.cell-jobs .cell-job'); if(jobs.length) out[c.dataset.date]=[...jobs].map(j=>j.textContent).join(', ');
     });
     return out;
   });
@@ -119,7 +119,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   const oct2 = await p.evaluate(()=>{
     const out={};
     document.querySelectorAll('.month-cell[data-date]').forEach(c=>{
-      const n=c.querySelector('.cell-count'); if(n) out[c.dataset.date]=n.textContent;
+      const jobs=c.querySelectorAll('.cell-jobs .cell-job'); if(jobs.length) out[c.dataset.date]=[...jobs].map(j=>j.textContent).join(', ');
     });
     return out;
   });

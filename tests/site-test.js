@@ -95,6 +95,7 @@ function serve(){
 
     // the port-call panel still offers ports, which is what the list is for now
     await p.click('#topTabs button[data-tab="jobs"]');
+    await p.click('#portCallToggle');   // collapsed by default now
     await p.focus('#paPort');
     await p.waitForTimeout(600);
     ok('the pre-arrival port picker still offers every port',

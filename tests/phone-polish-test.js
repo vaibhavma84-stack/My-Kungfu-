@@ -161,6 +161,99 @@ function ok(name, cond, got){
     }
   }
 
+  // ---- the jobs tab reads Add Job, calendar, Port Call, then the buttons ---
+  // Port call is filled in occasionally; the calendar above it is what is
+  // actually wanted on opening the tab, which is the whole point of the
+  // reorder -- so the order itself is worth checking, not just that each
+  // piece still works wherever it ends up.
+  {
+    await p.click('#topTabs button[data-tab="jobs"]');
+    await p.waitForTimeout(200);
+    const order = await p.evaluate(() =>
+      [...document.getElementById('jobsSection').children]
+        .map(el => el.id).filter(Boolean));
+    ok('Add Job, the calendar, Port Call, then the toolbar, in that order',
+       JSON.stringify(order) ===
+       JSON.stringify(['addWrap', 'viewSwitch', 'dateNav', 'listWrap', 'portCallWrap', 'fabAdd']),
+       JSON.stringify(order));
+
+    ok('Port call is collapsed on a first visit',
+       await p.evaluate(() => document.getElementById('portCallWrap').classList.contains('collapsed')));
+    ok('so its fields are not the thing taking up the screen',
+       !(await p.locator('#paPort').isVisible()));
+
+    await p.click('#portCallToggle');
+    await p.waitForTimeout(150);
+    ok('tapping the header opens it', await p.locator('#paPort').isVisible());
+    // The glyph itself never changes -- CSS rotates the same triangle -- so
+    // check the rotation, not the character.
+    ok('and the chevron rotates to point down, open',
+       (await p.evaluate(() => getComputedStyle(document.getElementById('portCallChevron')).transform))
+         !== 'none');
+
+    await p.reload();
+    await p.waitForTimeout(700);
+    ok('the choice to leave it open is remembered after a reload',
+       !(await p.evaluate(() => document.getElementById('portCallWrap').classList.contains('collapsed'))));
+  }
+
+  // ---- Month view names jobs, rather than a dot for each one -------------
+  {
+    await p.evaluate(() => {
+      const iso = d => d.toISOString().slice(0, 10);
+      const t = new Date();
+      localStorage.setItem('gasplanet_todo_v1', JSON.stringify([
+        { id:'m1', serial:1, job:'Sound all cargo tanks', due:iso(t), priority:'urgent', done:false, photos:[], createdAt:iso(t) },
+        { id:'m2', serial:2, job:'Test emergency shutdown valves', due:iso(t), priority:'important', done:false, photos:[], createdAt:iso(t) },
+        { id:'m3', serial:3, job:'Check mooring winch brakes', due:iso(t), priority:'normal', done:false, photos:[], createdAt:iso(t) },
+        { id:'m4', serial:4, job:'Renew pilot ladder side ropes', due:iso(t), priority:'normal', done:false, photos:[], createdAt:iso(t) }
+      ]));
+    });
+    await p.reload();
+    await p.waitForTimeout(700);
+    await p.click('#topTabs button[data-tab="jobs"]');
+    await p.click('[data-view="month"]');
+    await p.waitForTimeout(300);
+    const today = await p.evaluate(() =>
+      document.querySelector('.month-cell.is-today'));
+    const cellText = await p.evaluate(() => {
+      const c = document.querySelector('.month-cell.is-today');
+      return c ? [...c.querySelectorAll('.cell-jobs .cell-job')].map(j => j.textContent) : null;
+    });
+    ok('today\'s cell names an actual job, not a dot',
+       cellText && cellText.some(t => t.indexOf('Sound') === 0), JSON.stringify(cellText));
+    ok('and it is capped rather than listing every one',
+       cellText && cellText.length === 3, cellText && cellText.length);
+    ok('with the rest counted, not silently dropped',
+       (await p.locator('.month-cell.is-today .cell-more').textContent()) === '+1 more');
+  }
+
+  // ---- Day/Week/Month are full screen: Add Job and Port Call step aside ----
+  {
+    await p.click('[data-view="list"]');
+    await p.waitForTimeout(200);
+    const before = await p.evaluate(() => ({
+      form: document.getElementById('addWrap').classList.contains('collapsed'),
+      port: document.getElementById('portCallWrap').classList.contains('collapsed')
+    }));
+    await p.click('[data-view="month"]');
+    await p.waitForTimeout(200);
+    const during = await p.evaluate(() => ({
+      form: document.getElementById('addWrap').classList.contains('collapsed'),
+      port: document.getElementById('portCallWrap').classList.contains('collapsed')
+    }));
+    ok('Add Job steps aside for a calendar view', during.form === true, JSON.stringify(during));
+    ok('so does Port Call', during.port === true, JSON.stringify(during));
+    await p.click('[data-view="list"]');
+    await p.waitForTimeout(200);
+    const after = await p.evaluate(() => ({
+      form: document.getElementById('addWrap').classList.contains('collapsed'),
+      port: document.getElementById('portCallWrap').classList.contains('collapsed')
+    }));
+    ok('and List view gets them back exactly as they were',
+       after.form === before.form && after.port === before.port, JSON.stringify({ before, after }));
+  }
+
   ok('no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
 
   await b.close();

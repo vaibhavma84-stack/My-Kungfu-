@@ -47,6 +47,11 @@ const WANT_DEP = [
   await p.click('#toggleFormBtn');
   await p.waitForTimeout(250);
 
+  // Port call is collapsed by default now -- open it once, and the choice is
+  // remembered across the reloads later in this file.
+  await p.click('#portCallToggle');
+  await p.waitForTimeout(200);
+
   await p.fill('#paPort', 'Singapore');
   await p.fill('#paDate', '2026-09-18');      // the day the paperwork is done
   await p.fill('#paArrDate', '2026-09-20');   // the day the ship gets there
