@@ -540,6 +540,15 @@
     font-size:9px; font-family:ui-monospace,monospace; border-radius:8px; padding:0 4px; line-height:14px;
   }
 
+  /* Daily Jobs: a plain list, not a stack of full task cards -- there is no
+     date and nothing else to say, so one row each is enough. */
+  .daily-list{display:flex; flex-direction:column;}
+  .daily-row{display:flex; align-items:center; gap:10px; padding:9px 2px; border-bottom:1px solid var(--line);}
+  .daily-row:last-child{border-bottom:none;}
+  .daily-row .tick{flex:0 0 auto;}
+  .daily-job-text{flex:1; min-width:0; font-size:14px; font-weight:600; color:var(--ink); cursor:pointer;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
   /* ---------- Ship's particulars ---------- */
   #shipPasteWrap,#extraAddWrap{padding:14px 20px; background:var(--card); border-bottom:1px solid var(--line);}
   #extraListWrap{padding:14px 20px 100px;}
@@ -4887,15 +4896,25 @@
   }
 
   // Daily-repeat jobs, kept off the list and every calendar view above --
-  // their one home now, alongside the day widget.
+  // their one home now, alongside the day widget. A plain compact row, not
+  // a full task card: there are usually several of these together and a
+  // full card each (date line, priority badge, flag chips, action column)
+  // read as too heavy for something with no date and nothing else to say.
   function renderDailyJobsList(wrap){
     var list = tasks.filter(function(t){ return !t.done && t.repeat === 'daily'; });
     if(list.length===0){
       wrap.innerHTML = '<div class="empty" style="padding:14px 12px;">No daily jobs.</div>';
       return;
     }
-    var html = '';
-    list.forEach(function(t){ html += renderTaskCard(t); });
+    var html = '<div class="daily-list">';
+    list.forEach(function(t){
+      html += '<div class="daily-row" data-id="'+t.id+'">' +
+                '<button class="tick" data-action="toggle" data-id="'+t.id+'"></button>' +
+                '<span class="daily-job-text" data-action="edit" data-id="'+t.id+'">'+escapeHtml(t.job)+'</span>' +
+                '<button class="icon-btn" data-action="delete" data-id="'+t.id+'" title="Delete">🗑</button>' +
+              '</div>';
+    });
+    html += '</div>';
     wrap.innerHTML = html;
   }
 
@@ -9703,7 +9722,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v56';
+  var APP_BUILD = 'v57';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
