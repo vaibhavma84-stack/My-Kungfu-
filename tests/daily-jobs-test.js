@@ -87,6 +87,41 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('back on Calendar, the raised occurrence shows once, not twice',
      (await p.locator('#dailyJobsListWrap .task', {hasText:'Check emergency fire pump'}).count())===1);
 
+  // ---- a missed daily job is not carried forward as a debt -----------------
+  // It just repeats the next day -- no "3 days overdue", no backlog. A
+  // daily job due days ago and never ticked should read as today's job,
+  // unticked, the moment the app is open to see it.
+  const threeDaysAgo = await p.evaluate(() => {
+    const d = new Date(); d.setDate(d.getDate()-3);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  });
+  const fiveDaysAhead = await p.evaluate(() => {
+    const d = new Date(); d.setDate(d.getDate()+5);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  });
+  await p.evaluate(({threeDaysAgo, fiveDaysAhead}) => {
+    localStorage.setItem('gasplanet_todo_v1', JSON.stringify([
+      { id:'stale', serial:1, job:'Stale daily job', due:threeDaysAgo, priority:'normal', repeat:'daily',
+        done:false, photos:[], createdAt:threeDaysAgo },
+      { id:'future', serial:2, job:'Future daily job', due:fiveDaysAhead, priority:'normal', repeat:'daily',
+        done:false, photos:[], createdAt:threeDaysAgo }
+    ]));
+  }, {threeDaysAgo, fiveDaysAhead});
+  await p.reload();
+  await p.waitForTimeout(600);
+
+  const rolled = await p.evaluate(() => JSON.parse(localStorage.getItem('gasplanet_todo_v1')));
+  const stale = rolled.find(t => t.id === 'stale');
+  const future = rolled.find(t => t.id === 'future');
+  ok('a stale, unticked daily job is bumped to today, not left overdue',
+     stale.due === today, JSON.stringify(stale));
+  ok('one not due yet is left alone', future.due === fiveDaysAhead, JSON.stringify(future));
+
+  await p.click('#topTabs button[data-tab="calendar"]');
+  await p.waitForTimeout(300);
+  ok('it shows in the Daily Jobs list as today\'s, not flagged overdue',
+     (await p.locator('#dailyJobsListWrap .task:not(.overdue)', {hasText:'Stale daily job'}).count())===1);
+
   ok('no JS errors', errs.length===0, errs.join(' | '));
   await b.close(); srv.close();
   console.log(fails===0?'\nALL PASS':'\n'+fails+' FAILED'); process.exit(fails?1:0);
