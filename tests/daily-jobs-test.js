@@ -38,10 +38,17 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('Day view shows the dated job', (await p.locator('#calWrap .task', {hasText:'Sound cargo tanks'}).count())===1);
   ok('Day view does not show the daily job', (await p.locator('#calWrap .task', {hasText:'Check emergency fire pump'}).count())===0);
 
-  ok('the Daily Jobs list shows it instead', (await p.locator('#dailyJobsListWrap .task', {hasText:'Check emergency fire pump'}).count())===1);
-  ok('and not the dated job', (await p.locator('#dailyJobsListWrap .task', {hasText:'Sound cargo tanks'}).count())===0);
-  ok('it is marked as repeating daily',
-     /Daily/.test(await p.locator('#dailyJobsListWrap .task', {hasText:'Check emergency fire pump'}).textContent()));
+  ok('the Daily Jobs list shows it instead', (await p.locator('#dailyJobsListWrap .daily-row', {hasText:'Check emergency fire pump'}).count())===1);
+  ok('and not the dated job', (await p.locator('#dailyJobsListWrap .daily-row', {hasText:'Sound cargo tanks'}).count())===0);
+  ok('it is a plain row -- tick, name, delete -- not a full task card',
+     await p.evaluate(() => {
+       const row = [...document.querySelectorAll('#dailyJobsListWrap .daily-row')]
+         .find(r => r.textContent.includes('Check emergency fire pump'));
+       return !!row && row.querySelectorAll('.tick').length===1 &&
+              row.querySelectorAll('.daily-job-text').length===1 &&
+              row.querySelectorAll('[data-action="delete"]').length===1 &&
+              row.querySelectorAll('.rep-chip, .pri-badge, .task-details').length===0;
+     }));
 
   // Week and Month must not show it either -- a daily job on every cell would
   // bury everything else, which is the one thing those views exist to show.
@@ -49,7 +56,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.waitForTimeout(200);
   ok('Week view does not show the daily job', (await p.locator('#calWrap .task', {hasText:'Check emergency fire pump'}).count())===0);
   ok('but the Daily Jobs list still does, underneath',
-     (await p.locator('#dailyJobsListWrap .task', {hasText:'Check emergency fire pump'}).count())===1);
+     (await p.locator('#dailyJobsListWrap .daily-row', {hasText:'Check emergency fire pump'}).count())===1);
 
   await p.click('[data-view="month"]');
   await p.waitForTimeout(200);
@@ -60,19 +67,19 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('the month grid carries no dot for the daily job',
      monthDots && !monthDots.includes('Check emergency fire pump'), JSON.stringify(monthDots));
   ok('the Daily Jobs list still shows it under the month grid',
-     (await p.locator('#dailyJobsListWrap .task', {hasText:'Check emergency fire pump'}).count())===1);
+     (await p.locator('#dailyJobsListWrap .daily-row', {hasText:'Check emergency fire pump'}).count())===1);
 
   // ---- ticking it there raises tomorrow's, the same as any repeat ----------
   const tomorrow = await p.evaluate(() => {
     const d = new Date(); d.setDate(d.getDate()+1);
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   });
-  await p.locator('#dailyJobsListWrap .task', {hasText:'Check emergency fire pump'}).locator('.tick').click();
+  await p.locator('#dailyJobsListWrap .daily-row', {hasText:'Check emergency fire pump'}).locator('.tick').click();
   await p.waitForSelector('.date-card');
   await p.fill('.dc-input', today); await p.click('[data-dc="ok"]');
   await p.waitForTimeout(250);
   ok('ticking it in the Daily Jobs list still shows one -- tomorrow\'s freshly raised',
-     (await p.locator('#dailyJobsListWrap .task', {hasText:'Check emergency fire pump'}).count())===1);
+     (await p.locator('#dailyJobsListWrap .daily-row', {hasText:'Check emergency fire pump'}).count())===1);
   const raised = await p.evaluate(() => JSON.parse(localStorage.getItem('gasplanet_todo_v1'))
     .filter(t => t.job === 'Check emergency fire pump'));
   ok('two records now: the completed one and tomorrow\'s', raised.length===2, JSON.stringify(raised.map(t=>[t.done,t.due])));
@@ -85,7 +92,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.click('#topTabs button[data-tab="calendar"]');
   await p.waitForTimeout(200);
   ok('back on Calendar, the raised occurrence shows once, not twice',
-     (await p.locator('#dailyJobsListWrap .task', {hasText:'Check emergency fire pump'}).count())===1);
+     (await p.locator('#dailyJobsListWrap .daily-row', {hasText:'Check emergency fire pump'}).count())===1);
 
   // ---- a missed daily job is not carried forward as a debt -----------------
   // It just repeats the next day -- no "3 days overdue", no backlog. A
@@ -120,7 +127,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   await p.click('#topTabs button[data-tab="calendar"]');
   await p.waitForTimeout(300);
   ok('it shows in the Daily Jobs list as today\'s, not flagged overdue',
-     (await p.locator('#dailyJobsListWrap .task:not(.overdue)', {hasText:'Stale daily job'}).count())===1);
+     (await p.locator('#dailyJobsListWrap .daily-row', {hasText:'Stale daily job'}).count())===1);
 
   ok('no JS errors', errs.length===0, errs.join(' | '));
   await b.close(); srv.close();
