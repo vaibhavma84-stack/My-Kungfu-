@@ -15,8 +15,8 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('seven tabs across the top', (await p.locator('#topTabs button').count())===7,
      await p.locator('#topTabs button').count());
   ok('and they are the expected seven',
-     (await p.evaluate(()=>[...document.querySelectorAll('#topTabs button')].map(b=>b.dataset.tab).join(','))) 
-       === 'jobs,forms,notes,tools,crew,cargo,ship',
+     (await p.evaluate(()=>[...document.querySelectorAll('#topTabs button')].map(b=>b.dataset.tab).join(',')))
+       === 'jobs,calendar,forms,notes,tools,cargo,ship',
      await p.evaluate(()=>[...document.querySelectorAll('#topTabs button')].map(b=>b.dataset.tab).join(',')));
   ok('AD-19 and WWR are no longer top tabs',
      (await p.locator('#topTabs button[data-tab="extra"]').count())===0 &&
@@ -25,6 +25,17 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('ship section shows', await p.isVisible('#shipSection'));
   ok('other sections hidden', !(await p.isVisible('#jobsSection')) && !(await p.isVisible('#cargoSection')));
   ok('header title switches', (await p.textContent('#pageTitle')).indexOf('Particulars')>-1, await p.textContent('#pageTitle'));
+
+  // Crew moved in behind Ship as a sub-tab, freeing a top-level slot for Calendar
+  ok('Ship opens on its own sub-tab by default', await p.isVisible('#shipMainSection'));
+  ok('with Crew put away', !(await p.isVisible('#crewSection')));
+  await p.click('#shipTabs button[data-ship="crew"]');
+  ok('Crew sub-tab shows the crew list', await p.isVisible('#crewSection'));
+  ok('and Ship\'s own content is put away', !(await p.isVisible('#shipMainSection')));
+  ok('header title switches to Crew List', (await p.textContent('#pageTitle'))==='Crew List',
+     await p.textContent('#pageTitle'));
+  await p.click('#shipTabs button[data-ship="ship"]');
+  ok('back to Ship', await p.isVisible('#shipMainSection') && !(await p.isVisible('#crewSection')));
 
   // prefilled from the PDF
   ok('vessel name prefilled', (await p.inputValue('input[data-ship="name"]')).indexOf('GAS PLANET')>-1,

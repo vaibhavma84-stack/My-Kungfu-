@@ -188,13 +188,14 @@ const ok = (name, cond, extra) => {
 
   // ---- birthdays reach the calendar (FIX 8 path, live) ----
   await page.evaluate(() => localStorage.setItem = Object.getPrototypeOf(localStorage).setItem.bind(localStorage));
-  await page.click('#topTabs button[data-tab="crew"]');
+  await page.click('#topTabs button[data-tab="ship"]');
+  await page.click('#shipTabs button[data-ship="crew"]');
   await page.fill('#crewName', 'J Leapling');
   await page.selectOption('#crewRank', 'Bosun');
   await page.fill('#crewDob', '2000-02-29');
   await page.click('#crewAddBtn');
   ok('crew member added', (await page.locator('.crew-row').count()) === 1);
-  await page.click('#topTabs button[data-tab="jobs"]');
+  await page.click('#topTabs button[data-tab="calendar"]');
   await page.click('#viewSwitch button[data-view="day"]');
   await page.evaluate(() => {
     document.querySelector('#navToday').click();

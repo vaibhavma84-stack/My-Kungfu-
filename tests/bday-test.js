@@ -28,7 +28,8 @@ function ok(name, cond, got){
     return (ag.days && ag.days[d] && ag.days[d].bdays) || [];
   }, iso);
 
-  await p.click('#topTabs button[data-tab="crew"]');
+  await p.click('#topTabs button[data-tab="ship"]');
+  await p.click('#shipTabs button[data-ship="crew"]');
   await p.waitForTimeout(200);
 
   // --- someone entered on the crew list is recorded automatically ----------
@@ -61,7 +62,8 @@ function ok(name, cond, got){
      JSON.stringify(await onDay('2026-08-12')));
 
   // --- a new crew list imported over the top adds, never removes -----------
-  await p.click('#topTabs button[data-tab="crew"]');
+  await p.click('#topTabs button[data-tab="ship"]');
+  await p.click('#shipTabs button[data-ship="crew"]');
   await p.fill('#crewName', 'R Kumar');
   await p.selectOption('#crewRank', 'Chief Officer');
   await p.fill('#crewShip', 'Gas Comet');

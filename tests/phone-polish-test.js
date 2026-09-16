@@ -161,20 +161,19 @@ function ok(name, cond, got){
     }
   }
 
-  // ---- the jobs tab reads Add Job, calendar, Port Call, then the buttons ---
-  // Port call is filled in occasionally; the calendar above it is what is
-  // actually wanted on opening the tab, which is the whole point of the
-  // reorder -- so the order itself is worth checking, not just that each
-  // piece still works wherever it ends up.
+  // ---- the jobs tab reads Add Job, the list, Port Call, then the buttons ---
+  // Day/Week/Month moved out to their own Calendar tab, so the To Do tab is
+  // just Add Job, the plain list and Port Call -- the order is still worth
+  // checking, not just that each piece still works wherever it ends up.
   {
     await p.click('#topTabs button[data-tab="jobs"]');
     await p.waitForTimeout(200);
     const order = await p.evaluate(() =>
       [...document.getElementById('jobsSection').children]
         .map(el => el.id).filter(Boolean));
-    ok('Add Job, the calendar, Port Call, then the toolbar, in that order',
+    ok('Add Job, the list, Port Call, then the toolbar, in that order',
        JSON.stringify(order) ===
-       JSON.stringify(['addWrap', 'viewSwitch', 'dateNav', 'listWrap', 'portCallWrap', 'fabAdd']),
+       JSON.stringify(['addWrap', 'listWrap', 'portCallWrap', 'fabAdd']),
        JSON.stringify(order));
 
     ok('Port call is collapsed on a first visit',
@@ -197,60 +196,75 @@ function ok(name, cond, got){
        !(await p.evaluate(() => document.getElementById('portCallWrap').classList.contains('collapsed'))));
   }
 
-  // ---- Month view names jobs, rather than a dot for each one -------------
+  // ---- Month view shows a dot per job, not the job's name -----------------
   {
     await p.evaluate(() => {
       const iso = d => d.toISOString().slice(0, 10);
       const t = new Date();
-      localStorage.setItem('gasplanet_todo_v1', JSON.stringify([
-        { id:'m1', serial:1, job:'Sound all cargo tanks', due:iso(t), priority:'urgent', done:false, photos:[], createdAt:iso(t) },
-        { id:'m2', serial:2, job:'Test emergency shutdown valves', due:iso(t), priority:'important', done:false, photos:[], createdAt:iso(t) },
-        { id:'m3', serial:3, job:'Check mooring winch brakes', due:iso(t), priority:'normal', done:false, photos:[], createdAt:iso(t) },
-        { id:'m4', serial:4, job:'Renew pilot ladder side ropes', due:iso(t), priority:'normal', done:false, photos:[], createdAt:iso(t) }
-      ]));
+      const names = ['Sound all cargo tanks','Test emergency shutdown valves','Check mooring winch brakes',
+        'Renew pilot ladder side ropes','Job five','Job six','Job seven','Job eight','Job nine','Job ten'];
+      const prio = ['urgent','important','normal','normal','normal','normal','normal','normal','normal','normal'];
+      localStorage.setItem('gasplanet_todo_v1', JSON.stringify(names.map((job, i) =>
+        ({ id:'m'+i, serial:i+1, job, due:iso(t), priority:prio[i], done:false, photos:[], createdAt:iso(t) }))));
     });
     await p.reload();
     await p.waitForTimeout(700);
-    await p.click('#topTabs button[data-tab="jobs"]');
+    await p.click('#topTabs button[data-tab="calendar"]');
     await p.click('[data-view="month"]');
     await p.waitForTimeout(300);
-    const today = await p.evaluate(() =>
-      document.querySelector('.month-cell.is-today'));
-    const cellText = await p.evaluate(() => {
+    const info = await p.evaluate(() => {
       const c = document.querySelector('.month-cell.is-today');
-      return c ? [...c.querySelectorAll('.cell-jobs .cell-job')].map(j => j.textContent) : null;
+      if(!c) return null;
+      const dots = [...c.querySelectorAll('.cell-dots .cell-dot')];
+      const more = c.querySelector('.cell-more');
+      return { count: dots.length, text: dots.map(d => d.textContent).join(''),
+               classes: dots.map(d => d.className), more: more ? more.textContent : null };
     });
-    ok('today\'s cell names an actual job, not a dot',
-       cellText && cellText.some(t => t.indexOf('Sound') === 0), JSON.stringify(cellText));
-    ok('and it is capped rather than listing every one',
-       cellText && cellText.length === 3, cellText && cellText.length);
+    ok('today\'s cell shows a dot per job, not the job\'s name',
+       info && info.text === '', JSON.stringify(info));
+    ok('capped at MONTH_CELL_DOT_CAP (8) rather than listing every one',
+       info && info.count === 8, info && info.count);
+    ok('dots coloured by priority',
+       info && info.classes.some(c => /pri-urgent/.test(c)) && info.classes.some(c => /pri-important/.test(c)),
+       JSON.stringify(info));
     ok('with the rest counted, not silently dropped',
-       (await p.locator('.month-cell.is-today .cell-more').textContent()) === '+1 more');
+       info && info.more === '+2', info && info.more);
+
+    await p.click('.month-cell.is-today');
+    await p.waitForTimeout(200);
+    ok('tapping the day opens Day view, where the names are readable in full',
+       await p.locator('#viewSwitch button[data-view="day"]').evaluate(b => b.classList.contains('active')));
+    ok('and the day\'s jobs are named there',
+       (await p.locator('#calWrap .task', { hasText: 'Sound all cargo tanks' }).count()) === 1);
   }
 
-  // ---- Day/Week/Month are full screen: Add Job and Port Call step aside ----
+  // ---- Calendar is its own tab: nothing left to step aside for -------------
+  // Day/Week/Month used to share the To Do tab with Add Job and Port Call and
+  // had to shove them out of the way to go full screen. Now they are simply
+  // not on that tab's markup at all, and visiting Calendar and coming back
+  // must not touch whatever state Add Job/Port Call were left in.
   {
-    await p.click('[data-view="list"]');
+    await p.click('#topTabs button[data-tab="jobs"]');
     await p.waitForTimeout(200);
     const before = await p.evaluate(() => ({
       form: document.getElementById('addWrap').classList.contains('collapsed'),
       port: document.getElementById('portCallWrap').classList.contains('collapsed')
     }));
-    await p.click('[data-view="month"]');
+    const inCalendar = await p.evaluate(() => {
+      const cal = document.getElementById('calendarSection');
+      return { form: !!cal.querySelector('#addWrap'), port: !!cal.querySelector('#portCallWrap') };
+    });
+    ok('Calendar tab\'s markup has no Add Job form', inCalendar.form === false, JSON.stringify(inCalendar));
+    ok('and no Port Call block', inCalendar.port === false, JSON.stringify(inCalendar));
+    await p.click('#topTabs button[data-tab="calendar"]');
     await p.waitForTimeout(200);
-    const during = await p.evaluate(() => ({
-      form: document.getElementById('addWrap').classList.contains('collapsed'),
-      port: document.getElementById('portCallWrap').classList.contains('collapsed')
-    }));
-    ok('Add Job steps aside for a calendar view', during.form === true, JSON.stringify(during));
-    ok('so does Port Call', during.port === true, JSON.stringify(during));
-    await p.click('[data-view="list"]');
+    await p.click('#topTabs button[data-tab="jobs"]');
     await p.waitForTimeout(200);
     const after = await p.evaluate(() => ({
       form: document.getElementById('addWrap').classList.contains('collapsed'),
       port: document.getElementById('portCallWrap').classList.contains('collapsed')
     }));
-    ok('and List view gets them back exactly as they were',
+    ok('and visiting Calendar and coming back leaves them exactly as they were',
        after.form === before.form && after.port === before.port, JSON.stringify({ before, after }));
   }
 

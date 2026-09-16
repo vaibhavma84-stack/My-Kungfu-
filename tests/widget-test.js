@@ -137,7 +137,8 @@ function ok(name, cond, got){
      JSON.stringify(ag.days[today].jobs.map(j => j.t)));
 
   // --- a birthday, in the form the widget shows -----------------------------
-  await p.click('#topTabs button[data-tab="crew"]');
+  await p.click('#topTabs button[data-tab="ship"]');
+  await p.click('#shipTabs button[data-ship="crew"]');
   await p.fill('#crewName','Karan Vir Bhatia');
   await p.selectOption('#crewRank','Master');
   await p.fill('#crewShip','Gas Planet');
@@ -202,17 +203,21 @@ function ok(name, cond, got){
   await p.waitForTimeout(200);
   const before = await p.evaluate(() => window.__published.length);
   ok('the harness is actually seeing pushes', before > 1, before);
+  await p.click('#topTabs button[data-tab="calendar"]');
+  await p.waitForTimeout(200);
   await p.click('#viewSwitch button[data-view="month"]');
   await p.waitForTimeout(200);
   await p.click('#viewSwitch button[data-view="week"]');
   await p.waitForTimeout(200);
-  await p.click('#viewSwitch button[data-view="list"]');
+  await p.click('#viewSwitch button[data-view="day"]');
   await p.waitForTimeout(250);
   ok('three re-renders that changed no data pushed nothing new',
      await p.evaluate(() => window.__published.length) === before,
      await p.evaluate(() => window.__published.length) + ' vs ' + before);
 
   // and a real change does push
+  await p.click('#topTabs button[data-tab="jobs"]');
+  await p.waitForTimeout(200);
   await p.fill('#inJob','Sound all tanks');
   await p.fill('#inDue', today);
   await p.click('#addBtn');

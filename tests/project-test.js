@@ -22,7 +22,8 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
      await p.locator('.task').count());
   ok('no projections in the list view', (await p.locator('.task.ghost').count())===0);
 
-  // month view, September
+  // month view, September -- Day/Week/Month live on their own tab now
+  await p.click('#topTabs button[data-tab="calendar"]');
   await p.click('#viewSwitch button[data-view="month"]');
   await p.evaluate(()=>{ document.querySelector('#navToday').click(); });
   await p.waitForTimeout(150);
@@ -65,8 +66,8 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   const sept = await p.evaluate(()=>{
     const out={};
     document.querySelectorAll('.month-cell[data-date]').forEach(c=>{
-      const jobs=c.querySelectorAll('.cell-jobs .cell-job');
-      if(jobs.length) out[c.dataset.date]=[...jobs].map(j=>j.textContent).join(', ');
+      const jobs=c.querySelectorAll('.cell-dots .cell-dot');
+      if(jobs.length) out[c.dataset.date]=[...jobs].map(j=>j.title).join(', ');
     });
     return out;
   });
@@ -81,7 +82,7 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   const oct = await p.evaluate(()=>{
     const out={};
     document.querySelectorAll('.month-cell[data-date]').forEach(c=>{
-      const jobs=c.querySelectorAll('.cell-jobs .cell-job'); if(jobs.length) out[c.dataset.date]=[...jobs].map(j=>j.textContent).join(', ');
+      const jobs=c.querySelectorAll('.cell-dots .cell-dot'); if(jobs.length) out[c.dataset.date]=[...jobs].map(j=>j.title).join(', ');
     });
     return out;
   });
@@ -108,18 +109,20 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
      (await p.locator('.task.ghost .tick').count())===0);
   ok('it names the job', (await p.textContent('.task.ghost')).indexOf('Air hoses')>-1);
 
-  // closing the real job moves the whole forecast
-  await p.click('#viewSwitch button[data-view="list"]');
+  // closing the real job moves the whole forecast -- the plain list is the
+  // To Do tab now, not a view-switch option
+  await p.click('#topTabs button[data-tab="jobs"]');
   await p.locator('.task:not(.done)',{hasText:'Air hoses'}).first().locator('.tick').click();
   await p.waitForSelector('.date-card');
   await p.fill('.dc-input','2026-09-03'); await p.click('[data-dc="ok"]');   // done 2 days late
   await p.waitForTimeout(300);
+  await p.click('#topTabs button[data-tab="calendar"]');
   await p.click('#viewSwitch button[data-view="month"]');
   await goTo('October 2026');
   const oct2 = await p.evaluate(()=>{
     const out={};
     document.querySelectorAll('.month-cell[data-date]').forEach(c=>{
-      const jobs=c.querySelectorAll('.cell-jobs .cell-job'); if(jobs.length) out[c.dataset.date]=[...jobs].map(j=>j.textContent).join(', ');
+      const jobs=c.querySelectorAll('.cell-dots .cell-dot'); if(jobs.length) out[c.dataset.date]=[...jobs].map(j=>j.title).join(', ');
     });
     return out;
   });

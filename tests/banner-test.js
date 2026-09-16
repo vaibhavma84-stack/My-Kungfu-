@@ -34,7 +34,8 @@ const daysAgo = n => { const d=new Date(); d.setDate(d.getDate()-n);
      await p.evaluate(()=>!!localStorage.getItem('gasplanet_lastBackup_jobs') && !localStorage.getItem('gasplanet_lastBackup_crew')));
 
   // adding crew re-raises it for that list alone
-  await p.click('#topTabs button[data-tab="crew"]');
+  await p.click('#topTabs button[data-tab="ship"]');
+  await p.click('#shipTabs button[data-ship="crew"]');
   await p.fill('#crewName','R Mahajan'); await p.fill('#crewDob','1984-11-30'); await p.click('#crewAddBtn');
   ok('banner returns for the newly-populated Crew List', await visible(p));
   ok('names only the Crew List, not the freshly-backed-up To Do List',

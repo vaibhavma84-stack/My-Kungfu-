@@ -130,7 +130,7 @@ const TYPES = { '.html':'text/html', '.js':'text/javascript', '.json':'applicati
   const tabs = await p.evaluate(() =>
     [...document.querySelectorAll('#topTabs button')].map(x => x.dataset.tab).join(','));
   ok('one reload is enough to land on the new build',
-     landed && tabs === 'jobs,forms,notes,tools,crew,cargo,ship', tabs);
+     landed && tabs === 'jobs,calendar,forms,notes,tools,cargo,ship', tabs);
   ok('and the August page is gone', (await p.locator('#marker').count()) === 0);
 
   // ---- and it does not reload over something half typed ------------------
