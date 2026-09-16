@@ -319,20 +319,18 @@
 
   /* ---------- Month view ---------- */
   .month-grid{padding:14px 20px 100px;}
-  .daily-note{
-    font-size:11.5px; color:var(--ink-soft); text-align:center;
-    padding:10px 14px 2px; line-height:1.45;
-  }
   .month-weekdays{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:6px;}
   .month-weekdays span{text-align:center; font-size:10.5px; font-weight:700; color:var(--ink-soft); font-family:ui-monospace,monospace;}
   .month-cells{display:grid; grid-template-columns:repeat(7,1fr); grid-auto-rows:1fr; gap:4px;}
-  /* A square with a dot per job told you how many; it never said what any of
-     them were, which is the one thing a widget on Android already did. Full
-     screen and a job's actual name in its own square, however many that
-     takes, is the whole point of this view now. */
+  /* A job's name in its own square, however many rows that took, read as
+     "Che...", "We...", "ISM ..." on a phone -- a seventh of a row is not
+     wide enough to name a whole day's work. Back to a dot per job, coloured
+     by priority: it says how many and how urgent at a glance across the
+     whole month, and a tap opens Day view, which has the room to say what
+     they are in full. */
   .month-cell{
-    min-height:64px; background:var(--card); border:1px solid var(--line); border-radius:8px; cursor:pointer;
-    display:flex; flex-direction:column; align-items:stretch; gap:2px; padding:3px 3px 4px;
+    min-height:44px; background:var(--card); border:1px solid var(--line); border-radius:8px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:stretch; gap:3px; padding:3px 4px 4px;
     position:relative; overflow:hidden;
   }
   .month-cell.blank{background:transparent; border:none; cursor:default;}
@@ -340,20 +338,15 @@
   .month-cell .cell-top{display:flex; align-items:center; justify-content:space-between; flex:0 0 auto;}
   .month-cell .cell-num{font-size:12.5px; font-weight:700; font-family:ui-monospace,monospace; color:var(--ink);}
   .month-cell .cell-cake{font-size:10px;}
-  .month-cell .cell-jobs{display:flex; flex-direction:column; gap:2px; overflow:hidden; flex:1 1 auto;}
-  .month-cell .cell-job{
-    font-size:10px; line-height:1.3; padding:1px 3px 1px 5px; border-radius:3px;
-    background:var(--paper-2); color:var(--ink); white-space:nowrap; overflow:hidden;
-    text-overflow:ellipsis; border-left:2.5px solid var(--steel);
+  .month-cell .cell-dots{display:flex; flex-wrap:wrap; align-content:flex-start; gap:3px; flex:1 1 auto;}
+  .month-cell .cell-dot{
+    width:7px; height:7px; border-radius:50%; flex:0 0 auto; background:var(--steel);
   }
-  .month-cell .cell-job.pri-urgent{border-left-color:var(--urgent);}
-  .month-cell .cell-job.pri-important{border-left-color:var(--important);}
-  .month-cell .cell-job.pri-normal{border-left-color:var(--steel);}
-  .month-cell .cell-job.cell-job-ghost{border-left-style:dashed; opacity:.7; font-style:italic;}
-  .month-cell .cell-more{font-size:9.5px; color:var(--ink-soft); font-family:ui-monospace,monospace; flex:0 0 auto;}
-  @media (max-width:480px){
-    .month-cell .cell-job{font-size:9px;}
-  }
+  .month-cell .cell-dot.pri-urgent{background:var(--urgent);}
+  .month-cell .cell-dot.pri-important{background:var(--important);}
+  .month-cell .cell-dot.pri-normal{background:var(--steel);}
+  .month-cell .cell-dot.cell-dot-ghost{background:transparent; border:1.3px dashed var(--ink-soft);}
+  .month-cell .cell-more{font-size:9px; color:var(--ink-soft); font-family:ui-monospace,monospace; flex:0 0 auto; align-self:flex-end;}
 
   /* ---------- Add form ---------- */
   /* FIX 5: max-height only constrains the COLLAPSED state. Previously a flat
@@ -1288,10 +1281,10 @@
 
 <div class="top-tabs" id="topTabs">
   <button data-tab="jobs" class="active">To Do</button>
+  <button data-tab="calendar">Cal</button>
   <button data-tab="forms">Forms</button>
   <button data-tab="notes">Notes</button>
   <button data-tab="tools">Tools</button>
-  <button data-tab="crew">Crew</button>
   <button data-tab="cargo">Cargo</button>
   <button data-tab="ship">Ship</button>
 </div>
@@ -1363,20 +1356,6 @@
 
 </div>
 
-<div class="view-switch" id="viewSwitch">
-  <button data-view="list" class="active">List</button>
-  <button data-view="day">Day</button>
-  <button data-view="week">Week</button>
-  <button data-view="month">Month</button>
-</div>
-
-<div class="date-nav" id="dateNav" style="display:none;">
-  <button class="nav-btn" id="navPrev">‹</button>
-  <div class="nav-label" id="navLabel"></div>
-  <button class="today-btn" id="navToday">Today</button>
-  <button class="nav-btn" id="navNext">›</button>
-</div>
-
 <div id="listWrap"></div>
 
   <div class="pa-block" id="portCallWrap">
@@ -1441,110 +1420,30 @@
 <button class="fab" id="fabAdd" title="Show job entry">+</button>
 </div><!-- /jobsSection -->
 
-<div id="crewSection" style="display:none;">
-  <div id="crewAddWrap">
-    <div class="addForm">
-      <div class="form-row">
-        <div class="field">
-          <label>Name</label>
-          <input type="text" id="crewName" placeholder="Full name" maxlength="100">
-        </div>
-        <div class="field">
-          <label>Rank</label>
-          <select id="crewRank">
-            <option>Master</option>
-            <option>Chief Officer</option>
-            <option>2nd Officer</option>
-            <option>3rd Officer</option>
-            <option>Chief Engineer</option>
-            <option>2nd Engineer</option>
-            <option>3rd Engineer</option>
-            <option>4th Engineer</option>
-            <option>Gas Engineer</option>
-            <option>ETO</option>
-            <option>Bosun</option>
-            <option>AB</option>
-            <option>OS</option>
-            <option>Pumpman</option>
-            <option>Fitter</option>
-            <option>Oiler</option>
-            <option>Cook</option>
-            <option>Steward</option>
-            <option>Deck Cadet</option>
-            <option>Eng Cadet</option>
-            <option>Other</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Ship</label>
-          <input type="text" id="crewShip" placeholder="Gas Planet" maxlength="60">
-        </div>
-        <div class="field">
-          <label>DOB</label>
-          <input type="date" id="crewDob">
-        </div>
-        <div class="field">
-          <label>&nbsp;</label>
-          <button id="crewAddBtn" class="btn btn-primary">+ Add Crew</button>
-        </div>
-      </div>
-    </div>
+<div id="calendarSection" style="display:none;">
+  <div class="view-switch" id="viewSwitch">
+    <button data-view="day" class="active">Day</button>
+    <button data-view="week">Week</button>
+    <button data-view="month">Month</button>
   </div>
-  <div class="toolbar crew-toolbar">
-    <div class="spacer"></div>
-    <button class="btn btn-ghost" id="crewExportBtn">Export CSV</button>
-    <button class="btn btn-ghost" id="crewImportBtn">Import CSV</button>
-    <input type="file" id="crewImportInput" accept=".csv,text/csv" style="display:none">
-  </div>
-  <div id="crewListWrap"></div>
 
-  <div class="pa-block" id="bdayWrap">
-    <div class="pa-head">Birthdays</div>
+  <div class="date-nav" id="dateNav">
+    <button class="nav-btn" id="navPrev">‹</button>
+    <div class="nav-label" id="navLabel"></div>
+    <button class="today-btn" id="navToday">Today</button>
+    <button class="nav-btn" id="navNext">›</button>
+  </div>
+
+  <div id="calWrap"></div>
+
+  <div class="pa-block" id="dailyJobsWrap">
+    <div class="pa-head">Daily Jobs</div>
     <div class="pa-note">
-      Kept permanently, whatever happens to the crew list. Signing off, importing a new
-      list over the old one or changing ship does not remove anyone &mdash; only Remove here does.
-      Everyone added to the crew list with a date of birth is recorded automatically.
+      Done every day, not tied to one date &mdash; kept off the list and every
+      calendar view above so they don't bury what's actually due. Ticking one
+      here raises tomorrow's the same way any repeat does.
     </div>
-    <div class="addForm">
-      <div class="form-row">
-        <div class="field">
-          <label>Name</label>
-          <input type="text" id="bdName" placeholder="Full name" maxlength="100">
-        </div>
-        <div class="field">
-          <label>Relation</label>
-          <select id="bdKind">
-            <option value="ship">Ship</option>
-            <option value="family">Family</option>
-            <option value="friend">Friend</option>
-          </select>
-        </div>
-        <div class="field" id="bdRankField">
-          <label>Rank</label>
-          <select id="bdRank"></select>
-        </div>
-        <div class="field" id="bdShipField">
-          <label>Ship</label>
-          <input type="text" id="bdShip" placeholder="Gas Planet" maxlength="60">
-        </div>
-        <div class="field">
-          <label>Date of birth</label>
-          <input type="date" id="bdDob">
-        </div>
-        <div class="field">
-          <label>&nbsp;</label>
-          <button id="bdAddBtn" class="btn btn-primary">+ Add birthday</button>
-        </div>
-      </div>
-    </div>
-    <div class="pa-note" id="bdNote"></div>
-    <div class="bd-filters" id="bdFilters">
-      <button data-bdfilter="all" class="active">All</button>
-      <button data-bdfilter="ship">Ship</button>
-      <button data-bdfilter="family">Family</button>
-      <button data-bdfilter="friend">Friends</button>
-    </div>
-    <div id="bdListWrap"></div>
+    <div id="dailyJobsListWrap"></div>
   </div>
 </div>
 
@@ -2068,6 +1967,12 @@
 </div>
 
 <div id="shipSection" style="display:none;">
+  <div class="form-tabs" id="shipTabs">
+    <button data-ship="ship" class="active">Ship</button>
+    <button data-ship="crew">Crew</button>
+  </div>
+
+  <div id="shipMainSection">
   <div id="shipPasteWrap">
     <div class="ship-note">
       <b>From a photo of the particulars:</b> open the photo in Photos, press and hold the text,
@@ -2101,7 +2006,115 @@
     <div class="pa-head" style="margin-top:14px;">Ships signed off</div>
     <div id="archiveList"></div>
   </div>
-</div>
+  </div><!-- /shipMainSection -->
+
+  <div id="crewSection" style="display:none;">
+    <div id="crewAddWrap">
+      <div class="addForm">
+        <div class="form-row">
+          <div class="field">
+            <label>Name</label>
+            <input type="text" id="crewName" placeholder="Full name" maxlength="100">
+          </div>
+          <div class="field">
+            <label>Rank</label>
+            <select id="crewRank">
+              <option>Master</option>
+              <option>Chief Officer</option>
+              <option>2nd Officer</option>
+              <option>3rd Officer</option>
+              <option>Chief Engineer</option>
+              <option>2nd Engineer</option>
+              <option>3rd Engineer</option>
+              <option>4th Engineer</option>
+              <option>Gas Engineer</option>
+              <option>ETO</option>
+              <option>Bosun</option>
+              <option>AB</option>
+              <option>OS</option>
+              <option>Pumpman</option>
+              <option>Fitter</option>
+              <option>Oiler</option>
+              <option>Cook</option>
+              <option>Steward</option>
+              <option>Deck Cadet</option>
+              <option>Eng Cadet</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Ship</label>
+            <input type="text" id="crewShip" placeholder="Gas Planet" maxlength="60">
+          </div>
+          <div class="field">
+            <label>DOB</label>
+            <input type="date" id="crewDob">
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <button id="crewAddBtn" class="btn btn-primary">+ Add Crew</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="toolbar crew-toolbar">
+      <div class="spacer"></div>
+      <button class="btn btn-ghost" id="crewExportBtn">Export CSV</button>
+      <button class="btn btn-ghost" id="crewImportBtn">Import CSV</button>
+      <input type="file" id="crewImportInput" accept=".csv,text/csv" style="display:none">
+    </div>
+    <div id="crewListWrap"></div>
+
+    <div class="pa-block" id="bdayWrap">
+      <div class="pa-head">Birthdays</div>
+      <div class="pa-note">
+        Kept permanently, whatever happens to the crew list. Signing off, importing a new
+        list over the old one or changing ship does not remove anyone &mdash; only Remove here does.
+        Everyone added to the crew list with a date of birth is recorded automatically.
+      </div>
+      <div class="addForm">
+        <div class="form-row">
+          <div class="field">
+            <label>Name</label>
+            <input type="text" id="bdName" placeholder="Full name" maxlength="100">
+          </div>
+          <div class="field">
+            <label>Relation</label>
+            <select id="bdKind">
+              <option value="ship">Ship</option>
+              <option value="family">Family</option>
+              <option value="friend">Friend</option>
+            </select>
+          </div>
+          <div class="field" id="bdRankField">
+            <label>Rank</label>
+            <select id="bdRank"></select>
+          </div>
+          <div class="field" id="bdShipField">
+            <label>Ship</label>
+            <input type="text" id="bdShip" placeholder="Gas Planet" maxlength="60">
+          </div>
+          <div class="field">
+            <label>Date of birth</label>
+            <input type="date" id="bdDob">
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <button id="bdAddBtn" class="btn btn-primary">+ Add birthday</button>
+          </div>
+        </div>
+      </div>
+      <div class="pa-note" id="bdNote"></div>
+      <div class="bd-filters" id="bdFilters">
+        <button data-bdfilter="all" class="active">All</button>
+        <button data-bdfilter="ship">Ship</button>
+        <button data-bdfilter="family">Family</button>
+        <button data-bdfilter="friend">Friends</button>
+      </div>
+      <div id="bdListWrap"></div>
+    </div>
+  </div>
+</div><!-- /shipSection -->
 
 <div id="reportView"></div>
 
@@ -2169,17 +2182,24 @@
   var pendingPhotos = []; // photos attached to the in-progress "add" form
   var storageWorks = true;
   var expandedIds = new Set();
-  var currentView = 'list';
-  // How many job names a month cell shows before falling back to "+N more" --
-  // a phone is not wide enough to name a whole day's work in a seventh of a
-  // row, so this is a compromise, not a design goal.
-  var MONTH_CELL_JOB_CAP = 3;
+  var currentView = 'day'; // which Calendar sub-view -- Day/Week/Month, no List anymore
+  // How many dots a month cell shows before falling back to "+N" -- a phone
+  // is not wide enough to name a whole day's work in a seventh of a row, so
+  // the cell says how many and how urgent; the name is one tap away in Day
+  // view, which has the room to show it in full.
+  var MONTH_CELL_DOT_CAP = 8;
   var activeTab = 'jobs';
   // Which form was last open. Remembered, because a ship works one of these at
   // a time for days and being dropped back on the other one every visit grates.
   var activeForm = (function(){
     try{ var v = localStorage.getItem('gasplanet_form_v1'); return v === 'wwr' ? 'wwr' : 'extra'; }
     catch(e){ return 'extra'; }
+  })();
+  // Ship and Crew share one tab now, as sub-views -- same remembered-choice
+  // pattern as Forms above.
+  var activeShip = (function(){
+    try{ var v = localStorage.getItem('gasplanet_ship_subtab_v1'); return v === 'crew' ? 'crew' : 'ship'; }
+    catch(e){ return 'ship'; }
   })();
   var currentTankTab = '1';
   var cargoDraft = {'1':{},'2':{},'3':{},'4':{}};
@@ -4587,18 +4607,13 @@
     return Math.round((db - da) / 86400000);
   }
 
-  // Says so, rather than letting a job quietly go missing from a view.
-  function dailyHiddenNote(){
-    var n = tasks.filter(function(t){ return !t.done && t.repeat === 'daily'; }).length;
-    if(!n) return '';
-    return '<div class="daily-note">' + n + ' daily job' + (n === 1 ? '' : 's') +
-           ' not shown here &mdash; see the Day view or the list.</div>';
-  }
 
-  // Week and month pass skipDaily. A daily job lands on every single cell,
-  // and twenty of them would bury everything else in the view -- which is the
-  // one thing those views exist to show. They stay in the day view, the list
-  // and the Today widget, where they are the point rather than the noise.
+  // Day, week and month all pass skipDaily now -- a daily job lands on every
+  // single cell, and twenty of them would bury everything else in the view.
+  // getVisibleTasks() already keeps daily-repeat jobs out of every calendar
+  // view and the List outright, so this only matters for agendaForDay below,
+  // which still wants them: the day widget is where they actually live now,
+  // alongside the Calendar tab's own Daily Jobs list.
   function projectedOn(iso, skipDaily){
     var out = [];
     tasks.forEach(function(t){
@@ -4748,6 +4763,10 @@
     var status = document.getElementById('filterStatus').value;
     var pri = document.getElementById('filterPriority').value;
     var list = tasks.filter(function(t){
+      // Daily-repeat jobs have their own dedicated list on the Calendar tab
+      // now, not mixed into the List or any calendar view -- one home, not
+      // several.
+      if(t.repeat === 'daily') return false;
       if(status==='open' && t.done) return false;
       if(status==='done' && !t.done) return false;
       if(pri!=='all' && t.priority!==pri) return false;
@@ -4820,29 +4839,64 @@
     return html;
   }
 
+  // A daily job is done every day, not carried forward as a debt when it
+  // isn't -- it just repeats the next day. Left alone it would sit at
+  // whatever date it was last due and read as "N days overdue" instead of
+  // simply being today's, unticked -- so a still-pending one gets its due
+  // date bumped to today rather than left in the past. A future-dated one
+  // (due > today) is untouched; it has not started yet.
+  function rollDailyJobsForward(){
+    var today = todayISO();
+    var changed = false;
+    tasks.forEach(function(t){
+      if(t.repeat === 'daily' && !t.done && t.due && t.due < today){
+        t.due = today;
+        changed = true;
+      }
+    });
+    if(changed) saveTasks();
+  }
+
   function render(){
+    rollDailyJobsForward();
     renderWwr();
     renderPortCalls();
     publishAgenda();     // the home-screen widgets read from this
     var pendingCount = tasks.filter(function(t){return !t.done;}).length;
     document.getElementById('countBadge').textContent = pendingCount + ' pending / ' + tasks.length + ' total';
 
-    var dateNav = document.getElementById('dateNav');
-    var listWrap = document.getElementById('listWrap');
+    // To Do always shows the plain list now; Calendar (Day/Week/Month) only
+    // renders while its own tab is the one showing -- rendering both always
+    // would leave two copies of the same job's card in the DOM at once
+    // (List does not filter by date, so a job due today sits in both),
+    // which is exactly the kind of thing a bare .task lookup trips over.
+    renderListView(document.getElementById('listWrap'));
+    if(activeTab === 'calendar') renderCalendarView();
+  }
 
-    if(currentView === 'list'){
-      dateNav.style.display = 'none';
-      renderListView(listWrap);
-    } else if(currentView === 'day'){
-      dateNav.style.display = 'flex';
-      renderDayView(listWrap);
+  function renderCalendarView(){
+    var calWrap = document.getElementById('calWrap');
+    if(currentView === 'day'){
+      renderDayView(calWrap);
     } else if(currentView === 'week'){
-      dateNav.style.display = 'flex';
-      renderWeekView(listWrap);
+      renderWeekView(calWrap);
     } else if(currentView === 'month'){
-      dateNav.style.display = 'flex';
-      renderMonthView(listWrap);
+      renderMonthView(calWrap);
     }
+    renderDailyJobsList(document.getElementById('dailyJobsListWrap'));
+  }
+
+  // Daily-repeat jobs, kept off the list and every calendar view above --
+  // their one home now, alongside the day widget.
+  function renderDailyJobsList(wrap){
+    var list = tasks.filter(function(t){ return !t.done && t.repeat === 'daily'; });
+    if(list.length===0){
+      wrap.innerHTML = '<div class="empty" style="padding:14px 12px;">No daily jobs.</div>';
+      return;
+    }
+    var html = '';
+    list.forEach(function(t){ html += renderTaskCard(t); });
+    wrap.innerHTML = html;
   }
 
   function renderListView(wrap){
@@ -4861,7 +4915,7 @@
     var visible = getVisibleTasks();
     var dayTasks = visible.filter(function(t){ return t.due === viewAnchor; });
     var bdays = birthdaysOnDate(viewAnchor);
-    var ghosts = projectedOn(viewAnchor);
+    var ghosts = projectedOn(viewAnchor, true);
     if(dayTasks.length===0 && bdays.length===0 && ghosts.length===0){
       wrap.innerHTML = '<div class="empty"><div class="big">⚓</div>No jobs due on this day.</div>';
       return;
@@ -4882,7 +4936,7 @@
     var html = '';
     for(var i=0;i<7;i++){
       var d = addDaysISO(monday, i);
-      var dayTasks = visible.filter(function(t){ return t.due === d && t.repeat !== 'daily'; });
+      var dayTasks = visible.filter(function(t){ return t.due === d; });
       var bdays = birthdaysOnDate(d);
       var ghosts = projectedOn(d, true);
       var isToday = d === todayISO();
@@ -4903,7 +4957,7 @@
       html += '  </div>';
       html += '</div>';
     }
-    wrap.innerHTML = '<div class="week-grid">'+html+'</div>' + dailyHiddenNote();
+    wrap.innerHTML = '<div class="week-grid">'+html+'</div>';
   }
 
   function renderMonthView(wrap){
@@ -4923,7 +4977,7 @@
     for(var i=0;i<startOffset;i++){ html += '<div class="month-cell blank"></div>'; }
     for(var day=1; day<=daysInMonth; day++){
       var iso = y+'-'+String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-      var dayTasks = visible.filter(function(t){ return t.due === iso && t.repeat !== 'daily'; });
+      var dayTasks = visible.filter(function(t){ return t.due === iso; });
       var ghosts = projectedOn(iso, true);
       var bdays = birthdaysOnDate(iso);
       var isToday = iso === today;
@@ -4932,28 +4986,28 @@
               (bdays.length ? '<span class="cell-cake" title="Birthday">🎂</span>' : '') + '</span>';
       var total = dayTasks.length + ghosts.length;
       if(total){
-        // A job's name, not a dot for it -- a dot said how many, never what.
-        // Real jobs first; a repeat's preview only if there is still room.
-        html += '  <span class="cell-jobs">';
-        var shown = MONTH_CELL_JOB_CAP;
+        // A dot per job: how many and how urgent, at a glance across the
+        // whole month. What they are is a tap away, in Day view.
+        html += '  <span class="cell-dots">';
+        var shown = MONTH_CELL_DOT_CAP;
         dayTasks.slice(0, shown).forEach(function(t){
-          html += '<span class="cell-job pri-'+t.priority+'">'+escapeHtml(t.job)+'</span>';
+          html += '<span class="cell-dot pri-'+t.priority+'" title="'+escapeHtml(t.job)+'"></span>';
         });
         shown -= dayTasks.length;
         if(shown > 0){
           ghosts.slice(0, shown).forEach(function(t){
-            html += '<span class="cell-job cell-job-ghost">'+escapeHtml(t.job)+'</span>';
+            html += '<span class="cell-dot cell-dot-ghost" title="'+escapeHtml(t.job)+'"></span>';
           });
         }
         html += '  </span>';
-        if(total > MONTH_CELL_JOB_CAP){
-          html += '  <span class="cell-more">+'+(total - MONTH_CELL_JOB_CAP)+' more</span>';
+        if(total > MONTH_CELL_DOT_CAP){
+          html += '  <span class="cell-more">+'+(total - MONTH_CELL_DOT_CAP)+'</span>';
         }
       }
       html += '</div>';
     }
     html += '</div>';
-    wrap.innerHTML = '<div class="month-grid">'+html+'</div>' + dailyHiddenNote();
+    wrap.innerHTML = '<div class="month-grid">'+html+'</div>';
   }
 
   // ---------- crew list ----------
@@ -9649,7 +9703,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v55';
+  var APP_BUILD = 'v56';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -9931,30 +9985,13 @@
   document.getElementById('filterStatus').addEventListener('change', render);
   document.getElementById('filterPriority').addEventListener('change', render);
 
-  // The calendar is the point of Day/Week/Month, so Add Job and Port Call are
-  // put away automatically the moment one is picked -- full screen, whichever
-  // of the three it is -- and brought back exactly as they were on returning
-  // to List. The fab still opens Add Job from inside a calendar view; nothing
-  // here is persisted, so it never overwrites the List-mode preference either
-  // of them actually has.
-  var formHiddenBeforeCalendar = null, portCallHiddenBeforeCalendar = null;
+  // Day/Week/Month live on their own tab now, away from Add Job and Port
+  // Call, so there is no longer anything to put away when picking one.
   document.getElementById('viewSwitch').addEventListener('click', function(e){
     var btn = e.target.closest('button[data-view]');
     if(!btn) return;
-    var wasList = currentView === 'list';
     currentView = btn.dataset.view;
-    var isList = currentView === 'list';
     document.querySelectorAll('#viewSwitch button').forEach(function(b){ b.classList.toggle('active', b===btn); });
-    if(wasList && !isList){
-      formHiddenBeforeCalendar = document.getElementById('addWrap').classList.contains('collapsed');
-      portCallHiddenBeforeCalendar = document.getElementById('portCallWrap').classList.contains('collapsed');
-      setFormHidden(true);
-      setPortCallHidden(true);
-    } else if(!wasList && isList){
-      if(formHiddenBeforeCalendar !== null) setFormHidden(formHiddenBeforeCalendar);
-      if(portCallHiddenBeforeCalendar !== null) setPortCallHidden(portCallHiddenBeforeCalendar);
-      formHiddenBeforeCalendar = null; portCallHiddenBeforeCalendar = null;
-    }
     render();
   });
 
@@ -10097,7 +10134,10 @@
   // FIX 8: the toggleRA / togglePTW branches were dead — nothing has ever
   // rendered those buttons (the card shows read-only flag tags), so the
   // handlers and their toggleFlag() helper have been removed.
-  document.getElementById('listWrap').addEventListener('click', function(e){
+  // Shared by the To Do tab's list and the Calendar tab's Day/Week/Month --
+  // task ticks, edit, photos and picking a day off the month grid all need
+  // the same handling wherever the card renders.
+  function onTaskAreaClick(e){
     var toggleBtn = e.target.closest('[data-action="toggle"]');
     if(toggleBtn){ toggleDone(toggleBtn.dataset.id); return; }
     var cdBtn = e.target.closest('[data-action="editcompleted"]');
@@ -10132,7 +10172,10 @@
       render();
       return;
     }
-  });
+  }
+  document.getElementById('listWrap').addEventListener('click', onTaskAreaClick);
+  document.getElementById('calWrap').addEventListener('click', onTaskAreaClick);
+  document.getElementById('dailyJobsListWrap').addEventListener('click', onTaskAreaClick);
 
   // ---------- init ----------
   function setDateLine(){
@@ -10183,6 +10226,7 @@
   // the fields that can hold a negative, wherever they already exist
   attachSignButtons(document);
   showForm(activeForm);
+  showShip(activeShip);
   loadReportOrder();
   renderNotes();
   openFileDB(function(fdb){
@@ -10880,9 +10924,10 @@
     if(delBtn){ deleteCargoEntry(delBtn.dataset.id); }
   });
 
-  var tabTitles = { jobs:'To Do List', forms:'Forms', notes:'Notes',
-                    tools:'Tools', crew:'Crew List', cargo:'Cargo Log', ship:"Ship's Particulars" };
+  var tabTitles = { jobs:'To Do List', calendar:'Calendar', forms:'Forms', notes:'Notes',
+                    tools:'Tools', cargo:'Cargo Log' };
   var formTitles = { extra:'Additional AD-19 Jobs', wwr:'Weekly Work Done' };
+  var shipTitles = { ship:"Ship's Particulars", crew:'Crew List' };
 
   function showForm(which){
     activeForm = (which === 'wwr') ? 'wwr' : 'extra';
@@ -10899,13 +10944,42 @@
     if(b) showForm(b.dataset.form);
   });
 
+  // Ship and Crew, one tab, same sub-tab pattern as Forms above.
+  function showShip(which){
+    activeShip = (which === 'crew') ? 'crew' : 'ship';
+    try{ localStorage.setItem('gasplanet_ship_subtab_v1', activeShip); }catch(e){}
+    document.getElementById('shipMainSection').style.display = activeShip === 'ship' ? '' : 'none';
+    document.getElementById('crewSection').style.display     = activeShip === 'crew' ? '' : 'none';
+    document.querySelectorAll('#shipTabs button').forEach(function(b){
+      b.classList.toggle('active', b.dataset.ship === activeShip);
+    });
+    if(activeTab === 'ship') document.getElementById('pageTitle').textContent = shipTitles[activeShip];
+  }
+  document.getElementById('shipTabs').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-ship]');
+    if(b) showShip(b.dataset.ship);
+  });
+
   document.getElementById('topTabs').addEventListener('click', function(e){
     var btn = e.target.closest('button[data-tab]');
     if(!btn) return;
     activeTab = btn.dataset.tab;
     document.querySelectorAll('#topTabs button').forEach(function(b){ b.classList.toggle('active', b===btn); });
     document.getElementById('jobsSection').style.display = activeTab==='jobs' ? '' : 'none';
-    document.getElementById('crewSection').style.display = activeTab==='crew' ? '' : 'none';
+    document.getElementById('calendarSection').style.display = activeTab==='calendar' ? '' : 'none';
+    // render() skips the calendar wrap while this tab isn't the one showing,
+    // so it needs a render of its own on the way in -- otherwise it can show
+    // whatever was last true rather than the current data. Leaving clears it,
+    // the same way leaving Notes lets go of the PDF reader: a job due today
+    // sits in both a List card and a Day-view card while Calendar is open,
+    // which is fine on screen since only one tab shows -- but a hidden,
+    // never-cleared #calWrap would leave that second card sitting in the DOM
+    // for good, for any later .task lookup to trip over.
+    if(activeTab === 'calendar') renderCalendarView();
+    else {
+      document.getElementById('calWrap').innerHTML = '';
+      document.getElementById('dailyJobsListWrap').innerHTML = '';
+    }
     document.getElementById('cargoSection').style.display = activeTab==='cargo' ? '' : 'none';
     document.getElementById('shipSection').style.display = activeTab==='ship' ? '' : 'none';
     document.getElementById('formsSection').style.display = activeTab==='forms' ? '' : 'none';
@@ -10917,7 +10991,8 @@
     // leaving the tab and coming back lands on the launcher, not the last tool
     if(activeTab !== 'tools') showTool(null);
     document.getElementById('pageTitle').textContent =
-      activeTab === 'forms' ? formTitles[activeForm] : tabTitles[activeTab];
+      activeTab === 'forms' ? formTitles[activeForm] :
+      activeTab === 'ship' ? shipTitles[activeShip] : tabTitles[activeTab];
     document.getElementById('fabAdd').style.display = activeTab==='jobs' ? '' : 'none';
   });
 })();
