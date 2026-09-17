@@ -1114,6 +1114,11 @@
     display:flex; align-items:center; justify-content:center; padding:20px;
   }
   .modal-bg img{max-width:100%; max-height:85vh; border-radius:8px;}
+  /* Pinch/pan is handled in JS via a transform on the image itself, so the
+     browser's own touch scrolling and double-tap zoom have to be switched
+     off or they fight the pointer handlers. */
+  .modal-bg.photo-viewer{touch-action:none; overflow:hidden;}
+  .modal-bg.photo-viewer img{touch-action:none; -webkit-user-select:none; user-select:none; transform-origin:center center;}
   .modal-close{
     position:absolute; top:18px; right:18px; background:var(--card); border:none; width:36px; height:36px;
     border-radius:50%; font-size:18px; cursor:pointer;
@@ -1691,6 +1696,26 @@
         Converter
         <span class="tsub">Pressure, temperature, energy and more</span>
       </button>
+      <button class="tool-tile" data-tool="formulas">
+        <span class="ti">
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round" d="M6 4h12M8 4l8 16M8 20h8M5 12h6"/>
+          </svg>
+        </span>
+        Formulas
+        <span class="tsub">Volume, area and celestial azimuth</span>
+      </button>
+      <button class="tool-tile" data-tool="stars">
+        <span class="ti">
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"
+                  d="M12 3.5 14.5 9.5 21 10.3 16.2 14.6 17.6 21 12 17.6 6.4 21 7.8 14.6 3 10.3 9.5 9.5Z"/>
+          </svg>
+        </span>
+        Stars
+        <span class="tsub">Navigation stars, and how to find them</span>
+      </button>
       <button class="tool-tile" data-tool="calc">
         <span class="ti">
           <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
@@ -1768,6 +1793,25 @@
     <div class="conv-note" id="convNote"></div>
     <div id="convOut"></div>
     <div class="conv-hint">Tap a line to copy it.</div>
+  </div>
+
+  <div id="toolFormulas" style="display:none;">
+    <div class="tool-head">
+      <button class="btn btn-ghost" id="formulasBackBtn">&lsaquo; Tools</button>
+      <div class="tool-title">Formulas</div>
+    </div>
+    <div class="conv-cats" id="formulaCats"></div>
+    <div class="conv-note" id="formulaIntro"></div>
+    <div id="formulaOut"></div>
+  </div>
+
+  <div id="toolStars" style="display:none;">
+    <div class="tool-head">
+      <button class="btn btn-ghost" id="starsBackBtn">&lsaquo; Tools</button>
+      <div class="tool-title">Stars</div>
+    </div>
+    <div class="conv-note" id="starsIntro"></div>
+    <div id="starsOut"></div>
   </div>
 
   <div id="toolCalc" style="display:none;">
@@ -3212,10 +3256,13 @@
     return t;
   }
 
+  function noteDisplayTitle(n){
+    return n.title || (n.kind === 'pdf' ? (n.pdfName || 'PDF') : 'Untitled');
+  }
   function notesSorted(){
     return notes.slice().sort(function(a, b){
       if(!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
-      return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+      return noteDisplayTitle(a).localeCompare(noteDisplayTitle(b), undefined, { sensitivity: 'base' });
     });
   }
 
@@ -3257,7 +3304,7 @@
       }).join('');
       return '<div class="note-card' + (n.pinned ? ' pinned' : '') + '" data-note="' + escapeHtml(n.id) + '">' +
              '<div class="nc-top"><div class="nc-title">' +
-               escapeHtml(n.title || (n.kind === 'pdf' ? (n.pdfName || 'PDF') : 'Untitled')) +
+               escapeHtml(noteDisplayTitle(n)) +
              '</div><div class="nc-when">' + escapeHtml(fmtDateShort((n.updatedAt || '').slice(0, 10))) + '</div></div>' +
              (n.text ? '<div class="nc-snip">' + escapeHtml(n.text.slice(0, 300)) + '</div>' : '') +
              (thumbs ? '<div class="nc-thumbs">' + thumbs + '</div>' : '') +
@@ -4415,7 +4462,8 @@
         ['Aft and Fwd. ETA condition. Greasing. Test the light. ETA max deployment time. Poster ship specific'],
         ['Pilot ladders actual manufacturing dates'],
         ['Pending requisitions. Requisitions to be raised?'],
-        ['Lifting equipment inventory. Slings. D shackles. Harness. Double lanyards. Fall preventer equipment']
+        ['Lifting equipment inventory. Slings. D shackles. Harness. Double lanyards. Fall preventer equipment'],
+        ['Wires and ropes inventory and checklist']
       ]
     }
   };
@@ -6244,6 +6292,18 @@
         ['fath', 'fathom',             1.8288, 'fathom'],
         ['nm', 'nautical mile',      1852, 'NM'],
         ['mi', 'statute mile',       1609.344, 'mile']
+      ] },
+    { key:'area', name:'Area', base:'m2',
+      units:[
+        ['m2', 'square metre (m²)',   1, 'm²'],
+        ['cm2', 'square centimetre (cm²)', 0.0001, 'cm²'],
+        ['mm2', 'square millimetre (mm²)', 0.000001, 'mm²'],
+        ['km2', 'square kilometre (km²)', 1000000, 'km²'],
+        ['in2', 'square inch (in²)',   0.00064516, 'in²'],
+        ['ft2', 'square foot (ft²)',   0.09290304, 'ft²'],
+        ['yd2', 'square yard (yd²)',   0.83612736, 'yd²'],
+        ['acre', 'acre',                4046.8564224, 'acre'],
+        ['ha', 'hectare (ha)',          10000, 'ha']
       ] },
     { key:'density', name:'Density', base:'kg/m3',
       units:[
@@ -8374,9 +8434,9 @@
   // entries are keyed to exactly the same unit keys the converter uses;
   // tests/guide-check.py asserts the two lists stay in step and that no entry
   // anywhere is left without a note.
-  var CAT_NOTES = {"pressure": "Pressure is force spread over an area, so most of these units are some force divided by some area. Three of them are not: mercury and water columns state pressure as the height of liquid it will hold up, which is how pressure was first measured and why it is still the natural way to think about a sounding.", "temperature": "Temperature is the one quantity here that is not a simple count of something, so its scales were each anchored to whatever their inventor could reproduce reliably in a workshop. Two of them start at an arbitrary point and two start at absolute zero.", "energy": "Every unit here measures the same thing, and most exist because heat and mechanical work were studied separately for a century before anyone proved they were the same. The calorie and the BTU come from the heat side, the joule and the foot-pound from the work side.", "volume": "The metric units are all decimal steps from the cubic metre. The others are survivals of a time when every trade had its own cask, and the ones that lasted did so because a large industry standardised on them.", "mass": "Mass is what cargo is actually bought and sold in, being the one quantity that does not change with temperature. The three tons in this list are all different sizes, which is why a figure quoted as 'tons' and nothing else is worth querying.", "length": "The metric units descend from a single attempt to measure the Earth. The others are body measurements and Roman road-building units that were standardised centuries later, which is why their sizes look arbitrary and their definitions are now exact conversions to the metre.", "density": "Density ties volume to mass, which is the calculation most of cargo work turns on. It changes with temperature, so a density figure without the temperature it was measured at cannot be used. Relative density, or specific gravity, is this figure divided by the density of water, and so has no units at all.", "flow": "Flow units are simply a volume unit and a time unit put together. Which pairing is used depends on the industry a pump was built for rather than on anything about the pump.", "speed": "Distance over time. The knot is the odd one out and the one that matters at sea, because it is built from the nautical mile and so agrees with a chart."};
+  var CAT_NOTES = {"pressure": "Pressure is force spread over an area, so most of these units are some force divided by some area. Three of them are not: mercury and water columns state pressure as the height of liquid it will hold up, which is how pressure was first measured and why it is still the natural way to think about a sounding.", "temperature": "Temperature is the one quantity here that is not a simple count of something, so its scales were each anchored to whatever their inventor could reproduce reliably in a workshop. Two of them start at an arbitrary point and two start at absolute zero.", "energy": "Every unit here measures the same thing, and most exist because heat and mechanical work were studied separately for a century before anyone proved they were the same. The calorie and the BTU come from the heat side, the joule and the foot-pound from the work side.", "volume": "The metric units are all decimal steps from the cubic metre. The others are survivals of a time when every trade had its own cask, and the ones that lasted did so because a large industry standardised on them.", "mass": "Mass is what cargo is actually bought and sold in, being the one quantity that does not change with temperature. The three tons in this list are all different sizes, which is why a figure quoted as 'tons' and nothing else is worth querying.", "length": "The metric units descend from a single attempt to measure the Earth. The others are body measurements and Roman road-building units that were standardised centuries later, which is why their sizes look arbitrary and their definitions are now exact conversions to the metre.", "density": "Density ties volume to mass, which is the calculation most of cargo work turns on. It changes with temperature, so a density figure without the temperature it was measured at cannot be used. Relative density, or specific gravity, is this figure divided by the density of water, and so has no units at all.", "flow": "Flow units are simply a volume unit and a time unit put together. Which pairing is used depends on the industry a pump was built for rather than on anything about the pump.", "speed": "Distance over time. The knot is the odd one out and the one that matters at sea, because it is built from the nautical mile and so agrees with a chart.", "area": "Area conversions are the same idea as length, squared: every factor here is the length factor multiplied by itself. The exceptions are the two land-measurement units, the acre and the hectare, each fixed by usage rather than by squaring a length unit."};
 
-  var UNIT_NOTES = {"pressure": {"bar": "One bar is 100 000 pascals, a size chosen deliberately to sit within about one percent of the air pressure at sea level. The Norwegian meteorologist Vilhelm Bjerknes, who put weather forecasting on a mathematical footing, introduced it early in the twentieth century and took the name from the Greek baros, meaning weight. It is not an SI unit but is accepted alongside them. It survives at sea for a practical reason: one bar is very nearly the pressure of ten metres of water, so a sounding and a pressure gauge can be compared in your head.", "mbar": "A thousandth of a bar, and the unit barometric pressure was reported in for most of the twentieth century. It is exactly the same size as the hectopascal, which is why the changeover to SI naming in weather reporting changed nothing on the chart: 1013 millibars simply became 1013 hectopascals, the same number under a new name.", "hPa": "A hundred pascals, which is exactly the same size as the millibar. When meteorology moved to SI units it chose this particular multiple on purpose, because it left every published pressure unchanged. A barometer marked in millibars is already reading hectopascals.", "Pa": "The SI unit: one newton of force spread over one square metre. It is named for Blaise Pascal, who in 1648 had his brother-in-law carry a barometer up the Puy de Dome and showed that the mercury fell as he climbed, proving that air has weight and that the atmosphere does not go on forever. The unit itself was adopted in 1971. One pascal is very small, roughly the pressure of a sheet of paper lying on a desk, so it is almost never used without a prefix.", "kPa": "A thousand pascals, and the everyday working size of the SI pressure unit. One bar is exactly 100 kPa, which makes moving between the two easy enough to do in your head.", "MPa": "A million pascals, or ten bar. Used wherever pressures are high: hydraulic systems, pressure vessel design, class rules and most modern engineering drawings.", "kgcm2": "A kilogram of force pressing on a square centimetre, from the older metric-technical system that built itself on force rather than mass. Its real usefulness is an accident of arithmetic: it works out at 0.98 bar, so a gauge marked in kg/cm2 can be read as bar for rough work with about two percent in hand. Common on older machinery and on Japanese-built equipment. Superseded by the bar and the pascal, but still found in plenty of engine rooms.", "psi": "Pounds of force on a square inch, the pressure unit of British and American engineering. It survived the American metric changeover and remains standard throughout the United States oil and gas industry, which is why it still appears on cargo documents, imported machinery and charterers' paperwork long after most of the world moved on.", "atm": "The standard atmosphere, fixed by international agreement in 1954 at exactly 101 325 pascals. It began as an attempt to write down the average air pressure at sea level. Real sea-level pressure wanders either side of it, so the number is now a definition rather than a measurement.", "mmHg": "The height of a column of mercury that the pressure will hold up. It comes directly from Evangelista Torricelli, a pupil of Galileo, who in 1643 filled a glass tube with mercury, upended it in a dish and found the column settled at about 760 mm with an empty space above it. That space was the first man-made vacuum and the tube was the first barometer. Mercury was used because it is dense: the same experiment with water needs a tube over ten metres tall. The unit is also called the torr, after him.", "inHg": "Torricelli's mercury column measured in inches rather than millimetres. A standard atmosphere is 29.92 inHg, a number every pilot knows because American aviation sets altimeters in it, and it remains the pressure quoted in United States weather reports.", "mmH2O": "The height of a column of water, used where pressures are far too small for a mercury scale to resolve: draught in a funnel or a duct, ventilation systems, filter differentials and tank gauging. Being water, it is directly intuitive, because the pressure is simply how deep you are.", "mH2O": "Metres of water column, and probably the most intuitive pressure unit on a ship, because it is a depth rather than an abstraction. Ten metres of water is almost exactly one bar, so a sounding converts to a pressure with no arithmetic worth writing down.", "inH2O": "A water column measured in inches, used in American practice for the same very low pressures as the millimetre of water: ventilation, furnace draught and filter differentials."}, "temperature": {"C": "Anders Celsius, a Swedish astronomer, proposed a hundred-step scale between the freezing and boiling points of water in 1742, but he put zero at boiling and a hundred at freezing. It was turned the right way up within a few years of his death, and exactly who did it is still argued over. The scale was called centigrade until 1948, when it was renamed after him, partly because centigrade already meant a unit of angle in several languages.", "F": "Daniel Gabriel Fahrenheit was an instrument maker, and his scale exists because he was the first to build thermometers accurate and repeatable enough for fixed points to be worth arguing about. Around 1724 he set zero at the coldest temperature he could reach reliably, a mixture of ice, water and salt, and put roughly body temperature near 96. Water freezing at 32 and boiling at 212 fell out of those two choices rather than being chosen themselves.", "K": "The absolute scale, counting up from the point where there is no thermal energy left to remove. William Thomson, later Lord Kelvin, worked out in 1848 that such a point had to exist and where it lay. A kelvin is the same size as a degree Celsius, so the two differ only by a shift of 273.15, and it is written K with no degree sign because it is not a degree of anything. Since 2019 it has been defined by fixing a constant of nature rather than by the properties of water.", "R": "An absolute scale like the kelvin, but built from Fahrenheit-sized degrees, proposed by the Scottish engineer William Rankine in 1859. Zero is absolute zero and water freezes at 491.67. It survives in parts of American thermodynamic and engineering practice, where it allows absolute-temperature calculations without leaving Fahrenheit."}, "energy": {"J": "The SI unit of energy, named for James Prescott Joule, a Manchester brewer who ran some of the most careful experiments of the nineteenth century in his spare time. By stirring water with a paddle wheel driven by falling weights, he showed that a fixed amount of mechanical work always produced the same amount of heat, and so that work and heat are two forms of one thing. One joule is small: roughly the energy of dropping an apple one metre.", "kJ": "A thousand joules. The size most everyday energy quantities land in, which is why it appears far more often than the bare joule.", "MJ": "A million joules. The usual size for fuel calorific values, which is why bunker specifications are often quoted in MJ per kilogram.", "GJ": "A thousand million joules. Used for cargo-scale quantities of energy, particularly in the gas trade where it competes with the MMBTU.", "kWh": "One kilowatt drawn for one hour. It is not really an SI unit, it is a billing unit, and it survives because it maps onto how people actually buy and use electrical power. In SI terms it is 3.6 megajoules.", "MWh": "A thousand kilowatt-hours. The size used for generating plant output and for larger electrical accounts.", "cal": "The heat needed to warm one gram of water by one degree Celsius. It was the natural unit while heat was still believed to be a substance in its own right, and it lost its place once Joule showed that heat was simply energy. It is now defined as exactly 4.184 joules and survives mainly in nutrition, where the Calorie written with a capital C confusingly means a thousand of these.", "kcal": "A thousand calories. This is what is meant by a food Calorie, and it is also the unit older heat-transfer and refrigeration tables were written in.", "BTU": "The British thermal unit is the heat needed to warm one pound of water by one degree Fahrenheit, which is the calorie's idea in imperial clothing. Despite the name it is now used far more in the United States than in Britain, and it is the unit the gas trade runs on.", "MMBTU": "A million BTU, and the unit LNG and natural gas cargoes are priced in. The abbreviation is a trap worth knowing. The MM here is old commercial notation in which M means a thousand, so MM is a thousand thousand. It does not follow the SI convention where M means mega. An MMBTU is a million BTU, not a million million.", "therm": "A hundred thousand BTU, used for billing gas. It is a convenient size for an invoice rather than a scientific quantity.", "ftlbf": "The work done in raising one pound through one foot, the imperial counterpart to the joule. Still met in torque figures and in older engineering tables."}, "volume": {"m3": "The SI unit and the working unit of cargo. A cubic metre holds a tonne of fresh water, which is exactly what makes it convenient: volume and mass line up whenever density is close to one.", "L": "Originally defined as the volume of one kilogram of water, which tied it to a measurement rather than to a definition and made it very slightly wrong. It was cut loose in 1964 and made exactly one cubic decimetre, a thousandth of a cubic metre.", "mL": "A thousandth of a litre, and the same thing as a cubic centimetre. Laboratory and dosing quantities rather than cargo ones.", "ft3": "The cubic foot. Still the working unit for gas volumes in American practice, where standard cubic feet are used to state quantities of natural gas.", "in3": "The cubic inch. Rarely used for volume in its own right, but it matters because the US gallon is defined as exactly 231 of them.", "galUS": "Exactly 231 cubic inches, because it is the English wine gallon of Queen Anne's day, fixed by statute in 1707. When the United States separated it kept that gallon, and Britain later replaced it with something else. Neither side has changed back, which is why the two gallons still differ by about a fifth.", "galUK": "Defined in 1824 as the volume of ten pounds of water, which is where its awkward size comes from. It replaced the older wine, ale and corn gallons that Britain had been using side by side for centuries. It is about twenty percent larger than the US gallon, a difference that has caught out more than one bunkering calculation.", "bbl": "Forty-two US gallons, and the unit the entire oil trade counts in. The size was settled in the Pennsylvania oil fields in the 1860s, when producers agreed on a common measure so that buyers knew what they were paying for. Forty-two gallons matched a cask size already in use in other trades. The abbreviation bbl rather than bl is old and its origin is genuinely disputed; the frequently repeated blue barrel explanation is not well evidenced. No physical barrel has been involved for well over a century. Oil moves in tanks, and the barrel is now purely a unit of account."}, "mass": {"kg": "The SI base unit of mass, and the last of them to be defined by a physical object. From 1889 the kilogram was one particular cylinder of platinum and iridium kept outside Paris, and every kilogram in the world was ultimately a copy of it. Since 2019 it has been defined by fixing the Planck constant instead, so that cylinder is now simply an object whose mass is very well known.", "g": "A thousandth of a kilogram. The odd position of the gram, being a subdivision of the base unit rather than the base unit itself, is a leftover from the original metric system, where the gram came first and proved too small to be practical as a standard.", "t": "A thousand kilograms, also called the metric ton or MT to distinguish it from the long and short tons it sits between. It is the unit cargo is bought and sold in.", "lb": "The pound has been defined since 1959 as exactly 0.45359237 kilograms, under an agreement between the English-speaking countries that finally made the American and British pounds identical after centuries of them differing slightly. The abbreviation lb comes from libra, a Roman unit of weight.", "oz": "A sixteenth of a pound. This is the avoirdupois ounce used for ordinary weight, and it is not the same as the troy ounce used for precious metals, which is heavier.", "tonLong": "2240 pounds, being twenty hundredweight of 112 pounds each. The traditional British ton, and the reason a ship's deadweight was quoted in long tons for most of the history of merchant shipping. It is larger than a tonne by about 1.6 percent.", "tonShort": "2000 pounds, the ton used in the United States. Its existence alongside the long ton is exactly why a cargo figure should always say which ton is meant."}, "length": {"m": "Defined in 1791 as one ten-millionth of the distance from the equator to the North Pole along the meridian through Paris, an attempt to base measurement on the Earth itself rather than on the length of some king's arm. Surveying that distance took years and the answer came out very slightly wrong. The metre is now defined by fixing the speed of light: it is the distance light travels in one 299 792 458th of a second.", "mm": "A thousandth of a metre, and the working unit of engineering drawing and machining almost everywhere outside the United States.", "cm": "A hundredth of a metre. Common in everyday use but deliberately avoided in engineering, where millimetres and metres leave less room for a misplaced decimal point.", "km": "A thousand metres. Distance over land; at sea the nautical mile does the same job and agrees with the chart.", "in": "Exactly 25.4 millimetres since the 1959 agreement. Before that the British and American inches differed very slightly, which mattered in surveying and in precision manufacture.", "ft": "Exactly 0.3048 metres. One of the oldest units in use anywhere, being originally a human foot, and standardised into an exact fraction of the metre only in 1959.", "yd": "Three feet, and exactly 0.9144 metres since 1959. That single agreement fixed the foot and the inch as well, since both are defined from it.", "fath": "Six feet, and the traditional unit of sounding depth. The word comes from the Old English for the span of a man's outstretched arms, which is exactly how a lead line was hauled in and counted: arm span by arm span, in the dark, by feel.", "nm": "One minute of arc of latitude, which is what makes it the natural unit at sea. A distance can be stepped off the latitude scale at the side of the chart with dividers and needs no conversion at all. Because the Earth is not a perfect sphere that minute varies slightly with latitude, so it was fixed by international agreement in 1929 at exactly 1852 metres.", "mi": "The statute mile is 5280 feet, a number that looks arbitrary because it is a compromise. The Romans left England a mile of a thousand paces and English farming left it the furlong, and the two did not divide evenly. Parliament settled the argument in 1593 by making the mile eight furlongs, and the odd figure has stood ever since."}, "density": {"kgm3": "The SI unit. Awkward for liquids, because everything of interest lands in the hundreds, which is why cargo work usually shifts to tonnes per cubic metre or kilograms per litre instead.", "kgL": "Kilograms per litre, numerically the same as tonnes per cubic metre and as grams per cubic centimetre, since all three are a thousand times the SI unit. Fresh water is very close to 1, which is what makes this the easy scale to think in.", "gcm3": "Grams per cubic centimetre. The same number as kilograms per litre and as tonnes per cubic metre. Common in laboratory work and in reference tables.", "tm3": "Tonnes per cubic metre, the form density is usually quoted in for cargo work, because it turns a volume straight into a weight. Density changes with temperature, so a cargo density figure is meaningless without the temperature it was measured at.", "lbft3": "Pounds per cubic foot, the density unit of American engineering practice. Water is about 62.4 in these units.", "lbgal": "Pounds per US gallon, used in the American oil industry and in drilling work, where mud weight is quoted this way."}, "flow": {"m3h": "Cubic metres per hour, the standard rating for cargo, ballast and fire pumps, and the unit a discharge rate is agreed in.", "m3min": "Cubic metres per minute. A convenient size for fast-moving bulk transfers and for air handling.", "m3s": "Cubic metres per second, the SI form. Large enough that it is mostly seen in hydraulics theory and in river and channel work rather than aboard.", "Lmin": "Litres per minute. The usual size for lubricating oil, fresh water and hydraulic circuits, where cubic metres per hour would be an unhelpfully large number.", "Ls": "Litres per second. Common in fire-fighting and pumping calculations, particularly in European practice.", "gpm": "US gallons per minute, the rating on American-built pumps. Worth noting that a pump rated in imperial gallons per minute delivers about twenty percent more than the same number in US gallons.", "ft3h": "Cubic feet per hour, used for gas flows in American practice, particularly in burner and boiler ratings.", "bblh": "Barrels per hour, the discharge rate the oil trade states, being simply the trade's volume unit divided by an hour."}, "speed": {"kn": "One nautical mile in an hour, and the only unit in this list named after a piece of equipment. Speed used to be measured with a chip log: a weighted board thrown over the stern on a line with knots tied at set intervals, and a sandglass to time it. You counted the knots that ran out before the glass emptied, and that was your speed. It is why a ship makes knots and never knots per hour, because the per hour is already inside the word.", "ms": "Metres per second, the SI unit. Wind speed in meteorological reports is usually given this way, which is worth remembering when comparing it against a wind speed in knots.", "kmh": "Kilometres per hour. Speed over land almost everywhere outside the United States and the United Kingdom.", "mph": "Miles per hour, using the statute mile. Road speed in the United States and Britain, and not to be confused with knots, which are about fifteen percent larger.", "fts": "Feet per second. Used in American engineering for flow velocity in pipes, where a rule of thumb limit is usually stated in these units."}};
+  var UNIT_NOTES = {"pressure": {"bar": "One bar is 100 000 pascals, a size chosen deliberately to sit within about one percent of the air pressure at sea level. The Norwegian meteorologist Vilhelm Bjerknes, who put weather forecasting on a mathematical footing, introduced it early in the twentieth century and took the name from the Greek baros, meaning weight. It is not an SI unit but is accepted alongside them. It survives at sea for a practical reason: one bar is very nearly the pressure of ten metres of water, so a sounding and a pressure gauge can be compared in your head.", "mbar": "A thousandth of a bar, and the unit barometric pressure was reported in for most of the twentieth century. It is exactly the same size as the hectopascal, which is why the changeover to SI naming in weather reporting changed nothing on the chart: 1013 millibars simply became 1013 hectopascals, the same number under a new name.", "hPa": "A hundred pascals, which is exactly the same size as the millibar. When meteorology moved to SI units it chose this particular multiple on purpose, because it left every published pressure unchanged. A barometer marked in millibars is already reading hectopascals.", "Pa": "The SI unit: one newton of force spread over one square metre. It is named for Blaise Pascal, who in 1648 had his brother-in-law carry a barometer up the Puy de Dome and showed that the mercury fell as he climbed, proving that air has weight and that the atmosphere does not go on forever. The unit itself was adopted in 1971. One pascal is very small, roughly the pressure of a sheet of paper lying on a desk, so it is almost never used without a prefix.", "kPa": "A thousand pascals, and the everyday working size of the SI pressure unit. One bar is exactly 100 kPa, which makes moving between the two easy enough to do in your head.", "MPa": "A million pascals, or ten bar. Used wherever pressures are high: hydraulic systems, pressure vessel design, class rules and most modern engineering drawings.", "kgcm2": "A kilogram of force pressing on a square centimetre, from the older metric-technical system that built itself on force rather than mass. Its real usefulness is an accident of arithmetic: it works out at 0.98 bar, so a gauge marked in kg/cm2 can be read as bar for rough work with about two percent in hand. Common on older machinery and on Japanese-built equipment. Superseded by the bar and the pascal, but still found in plenty of engine rooms.", "psi": "Pounds of force on a square inch, the pressure unit of British and American engineering. It survived the American metric changeover and remains standard throughout the United States oil and gas industry, which is why it still appears on cargo documents, imported machinery and charterers' paperwork long after most of the world moved on.", "atm": "The standard atmosphere, fixed by international agreement in 1954 at exactly 101 325 pascals. It began as an attempt to write down the average air pressure at sea level. Real sea-level pressure wanders either side of it, so the number is now a definition rather than a measurement.", "mmHg": "The height of a column of mercury that the pressure will hold up. It comes directly from Evangelista Torricelli, a pupil of Galileo, who in 1643 filled a glass tube with mercury, upended it in a dish and found the column settled at about 760 mm with an empty space above it. That space was the first man-made vacuum and the tube was the first barometer. Mercury was used because it is dense: the same experiment with water needs a tube over ten metres tall. The unit is also called the torr, after him.", "inHg": "Torricelli's mercury column measured in inches rather than millimetres. A standard atmosphere is 29.92 inHg, a number every pilot knows because American aviation sets altimeters in it, and it remains the pressure quoted in United States weather reports.", "mmH2O": "The height of a column of water, used where pressures are far too small for a mercury scale to resolve: draught in a funnel or a duct, ventilation systems, filter differentials and tank gauging. Being water, it is directly intuitive, because the pressure is simply how deep you are.", "mH2O": "Metres of water column, and probably the most intuitive pressure unit on a ship, because it is a depth rather than an abstraction. Ten metres of water is almost exactly one bar, so a sounding converts to a pressure with no arithmetic worth writing down.", "inH2O": "A water column measured in inches, used in American practice for the same very low pressures as the millimetre of water: ventilation, furnace draught and filter differentials."}, "temperature": {"C": "Anders Celsius, a Swedish astronomer, proposed a hundred-step scale between the freezing and boiling points of water in 1742, but he put zero at boiling and a hundred at freezing. It was turned the right way up within a few years of his death, and exactly who did it is still argued over. The scale was called centigrade until 1948, when it was renamed after him, partly because centigrade already meant a unit of angle in several languages.", "F": "Daniel Gabriel Fahrenheit was an instrument maker, and his scale exists because he was the first to build thermometers accurate and repeatable enough for fixed points to be worth arguing about. Around 1724 he set zero at the coldest temperature he could reach reliably, a mixture of ice, water and salt, and put roughly body temperature near 96. Water freezing at 32 and boiling at 212 fell out of those two choices rather than being chosen themselves.", "K": "The absolute scale, counting up from the point where there is no thermal energy left to remove. William Thomson, later Lord Kelvin, worked out in 1848 that such a point had to exist and where it lay. A kelvin is the same size as a degree Celsius, so the two differ only by a shift of 273.15, and it is written K with no degree sign because it is not a degree of anything. Since 2019 it has been defined by fixing a constant of nature rather than by the properties of water.", "R": "An absolute scale like the kelvin, but built from Fahrenheit-sized degrees, proposed by the Scottish engineer William Rankine in 1859. Zero is absolute zero and water freezes at 491.67. It survives in parts of American thermodynamic and engineering practice, where it allows absolute-temperature calculations without leaving Fahrenheit."}, "energy": {"J": "The SI unit of energy, named for James Prescott Joule, a Manchester brewer who ran some of the most careful experiments of the nineteenth century in his spare time. By stirring water with a paddle wheel driven by falling weights, he showed that a fixed amount of mechanical work always produced the same amount of heat, and so that work and heat are two forms of one thing. One joule is small: roughly the energy of dropping an apple one metre.", "kJ": "A thousand joules. The size most everyday energy quantities land in, which is why it appears far more often than the bare joule.", "MJ": "A million joules. The usual size for fuel calorific values, which is why bunker specifications are often quoted in MJ per kilogram.", "GJ": "A thousand million joules. Used for cargo-scale quantities of energy, particularly in the gas trade where it competes with the MMBTU.", "kWh": "One kilowatt drawn for one hour. It is not really an SI unit, it is a billing unit, and it survives because it maps onto how people actually buy and use electrical power. In SI terms it is 3.6 megajoules.", "MWh": "A thousand kilowatt-hours. The size used for generating plant output and for larger electrical accounts.", "cal": "The heat needed to warm one gram of water by one degree Celsius. It was the natural unit while heat was still believed to be a substance in its own right, and it lost its place once Joule showed that heat was simply energy. It is now defined as exactly 4.184 joules and survives mainly in nutrition, where the Calorie written with a capital C confusingly means a thousand of these.", "kcal": "A thousand calories. This is what is meant by a food Calorie, and it is also the unit older heat-transfer and refrigeration tables were written in.", "BTU": "The British thermal unit is the heat needed to warm one pound of water by one degree Fahrenheit, which is the calorie's idea in imperial clothing. Despite the name it is now used far more in the United States than in Britain, and it is the unit the gas trade runs on.", "MMBTU": "A million BTU, and the unit LNG and natural gas cargoes are priced in. The abbreviation is a trap worth knowing. The MM here is old commercial notation in which M means a thousand, so MM is a thousand thousand. It does not follow the SI convention where M means mega. An MMBTU is a million BTU, not a million million.", "therm": "A hundred thousand BTU, used for billing gas. It is a convenient size for an invoice rather than a scientific quantity.", "ftlbf": "The work done in raising one pound through one foot, the imperial counterpart to the joule. Still met in torque figures and in older engineering tables."}, "volume": {"m3": "The SI unit and the working unit of cargo. A cubic metre holds a tonne of fresh water, which is exactly what makes it convenient: volume and mass line up whenever density is close to one.", "L": "Originally defined as the volume of one kilogram of water, which tied it to a measurement rather than to a definition and made it very slightly wrong. It was cut loose in 1964 and made exactly one cubic decimetre, a thousandth of a cubic metre.", "mL": "A thousandth of a litre, and the same thing as a cubic centimetre. Laboratory and dosing quantities rather than cargo ones.", "ft3": "The cubic foot. Still the working unit for gas volumes in American practice, where standard cubic feet are used to state quantities of natural gas.", "in3": "The cubic inch. Rarely used for volume in its own right, but it matters because the US gallon is defined as exactly 231 of them.", "galUS": "Exactly 231 cubic inches, because it is the English wine gallon of Queen Anne's day, fixed by statute in 1707. When the United States separated it kept that gallon, and Britain later replaced it with something else. Neither side has changed back, which is why the two gallons still differ by about a fifth.", "galUK": "Defined in 1824 as the volume of ten pounds of water, which is where its awkward size comes from. It replaced the older wine, ale and corn gallons that Britain had been using side by side for centuries. It is about twenty percent larger than the US gallon, a difference that has caught out more than one bunkering calculation.", "bbl": "Forty-two US gallons, and the unit the entire oil trade counts in. The size was settled in the Pennsylvania oil fields in the 1860s, when producers agreed on a common measure so that buyers knew what they were paying for. Forty-two gallons matched a cask size already in use in other trades. The abbreviation bbl rather than bl is old and its origin is genuinely disputed; the frequently repeated blue barrel explanation is not well evidenced. No physical barrel has been involved for well over a century. Oil moves in tanks, and the barrel is now purely a unit of account."}, "mass": {"kg": "The SI base unit of mass, and the last of them to be defined by a physical object. From 1889 the kilogram was one particular cylinder of platinum and iridium kept outside Paris, and every kilogram in the world was ultimately a copy of it. Since 2019 it has been defined by fixing the Planck constant instead, so that cylinder is now simply an object whose mass is very well known.", "g": "A thousandth of a kilogram. The odd position of the gram, being a subdivision of the base unit rather than the base unit itself, is a leftover from the original metric system, where the gram came first and proved too small to be practical as a standard.", "t": "A thousand kilograms, also called the metric ton or MT to distinguish it from the long and short tons it sits between. It is the unit cargo is bought and sold in.", "lb": "The pound has been defined since 1959 as exactly 0.45359237 kilograms, under an agreement between the English-speaking countries that finally made the American and British pounds identical after centuries of them differing slightly. The abbreviation lb comes from libra, a Roman unit of weight.", "oz": "A sixteenth of a pound. This is the avoirdupois ounce used for ordinary weight, and it is not the same as the troy ounce used for precious metals, which is heavier.", "tonLong": "2240 pounds, being twenty hundredweight of 112 pounds each. The traditional British ton, and the reason a ship's deadweight was quoted in long tons for most of the history of merchant shipping. It is larger than a tonne by about 1.6 percent.", "tonShort": "2000 pounds, the ton used in the United States. Its existence alongside the long ton is exactly why a cargo figure should always say which ton is meant."}, "length": {"m": "Defined in 1791 as one ten-millionth of the distance from the equator to the North Pole along the meridian through Paris, an attempt to base measurement on the Earth itself rather than on the length of some king's arm. Surveying that distance took years and the answer came out very slightly wrong. The metre is now defined by fixing the speed of light: it is the distance light travels in one 299 792 458th of a second.", "mm": "A thousandth of a metre, and the working unit of engineering drawing and machining almost everywhere outside the United States.", "cm": "A hundredth of a metre. Common in everyday use but deliberately avoided in engineering, where millimetres and metres leave less room for a misplaced decimal point.", "km": "A thousand metres. Distance over land; at sea the nautical mile does the same job and agrees with the chart.", "in": "Exactly 25.4 millimetres since the 1959 agreement. Before that the British and American inches differed very slightly, which mattered in surveying and in precision manufacture.", "ft": "Exactly 0.3048 metres. One of the oldest units in use anywhere, being originally a human foot, and standardised into an exact fraction of the metre only in 1959.", "yd": "Three feet, and exactly 0.9144 metres since 1959. That single agreement fixed the foot and the inch as well, since both are defined from it.", "fath": "Six feet, and the traditional unit of sounding depth. The word comes from the Old English for the span of a man's outstretched arms, which is exactly how a lead line was hauled in and counted: arm span by arm span, in the dark, by feel.", "nm": "One minute of arc of latitude, which is what makes it the natural unit at sea. A distance can be stepped off the latitude scale at the side of the chart with dividers and needs no conversion at all. Because the Earth is not a perfect sphere that minute varies slightly with latitude, so it was fixed by international agreement in 1929 at exactly 1852 metres.", "mi": "The statute mile is 5280 feet, a number that looks arbitrary because it is a compromise. The Romans left England a mile of a thousand paces and English farming left it the furlong, and the two did not divide evenly. Parliament settled the argument in 1593 by making the mile eight furlongs, and the odd figure has stood ever since."}, "density": {"kgm3": "The SI unit. Awkward for liquids, because everything of interest lands in the hundreds, which is why cargo work usually shifts to tonnes per cubic metre or kilograms per litre instead.", "kgL": "Kilograms per litre, numerically the same as tonnes per cubic metre and as grams per cubic centimetre, since all three are a thousand times the SI unit. Fresh water is very close to 1, which is what makes this the easy scale to think in.", "gcm3": "Grams per cubic centimetre. The same number as kilograms per litre and as tonnes per cubic metre. Common in laboratory work and in reference tables.", "tm3": "Tonnes per cubic metre, the form density is usually quoted in for cargo work, because it turns a volume straight into a weight. Density changes with temperature, so a cargo density figure is meaningless without the temperature it was measured at.", "lbft3": "Pounds per cubic foot, the density unit of American engineering practice. Water is about 62.4 in these units.", "lbgal": "Pounds per US gallon, used in the American oil industry and in drilling work, where mud weight is quoted this way."}, "flow": {"m3h": "Cubic metres per hour, the standard rating for cargo, ballast and fire pumps, and the unit a discharge rate is agreed in.", "m3min": "Cubic metres per minute. A convenient size for fast-moving bulk transfers and for air handling.", "m3s": "Cubic metres per second, the SI form. Large enough that it is mostly seen in hydraulics theory and in river and channel work rather than aboard.", "Lmin": "Litres per minute. The usual size for lubricating oil, fresh water and hydraulic circuits, where cubic metres per hour would be an unhelpfully large number.", "Ls": "Litres per second. Common in fire-fighting and pumping calculations, particularly in European practice.", "gpm": "US gallons per minute, the rating on American-built pumps. Worth noting that a pump rated in imperial gallons per minute delivers about twenty percent more than the same number in US gallons.", "ft3h": "Cubic feet per hour, used for gas flows in American practice, particularly in burner and boiler ratings.", "bblh": "Barrels per hour, the discharge rate the oil trade states, being simply the trade's volume unit divided by an hour."}, "speed": {"kn": "One nautical mile in an hour, and the only unit in this list named after a piece of equipment. Speed used to be measured with a chip log: a weighted board thrown over the stern on a line with knots tied at set intervals, and a sandglass to time it. You counted the knots that ran out before the glass emptied, and that was your speed. It is why a ship makes knots and never knots per hour, because the per hour is already inside the word.", "ms": "Metres per second, the SI unit. Wind speed in meteorological reports is usually given this way, which is worth remembering when comparing it against a wind speed in knots.", "kmh": "Kilometres per hour. Speed over land almost everywhere outside the United States and the United Kingdom.", "mph": "Miles per hour, using the statute mile. Road speed in the United States and Britain, and not to be confused with knots, which are about fifteen percent larger.", "fts": "Feet per second. Used in American engineering for flow velocity in pipes, where a rule of thumb limit is usually stated in these units."}, "area": {"m2": "The SI unit of area, one metre squared. Every other entry here converts to it, and it is the unit plans and drawings are dimensioned in almost everywhere outside the United States.", "cm2": "A hundredth of a metre squared, squared again -- 0.0001 m². Used for small cross-sections: a pipe bore, a gasket, a coupon of steel.", "mm2": "A thousandth of a metre squared, squared -- one millionth of a square metre. The unit steel-section and wire-gauge tables are drawn in.", "km2": "A million square metres. Used for anything measured off a chart rather than a drawing: an anchorage, a search area, a field.", "in2": "A square inch, exactly 0.00064516 m² since the inch itself was fixed in 1959. Used wherever the inch already governs the drawing -- American piping and pressure-vessel practice in particular.", "ft2": "A square foot, exactly 0.09290304 m². Deck areas and tank plans in older or American-built tonnage are still sometimes given in it.", "yd2": "A square yard, exactly 0.83612736 m², and mostly seen today only inside the definition of the acre below it.", "acre": "4840 square yards, a size that goes back to medieval ploughing: roughly the area a team of oxen could plough in a day before needing to turn. Fixed in 1959, along with the yard it is built from, at exactly 4046.8564224 m².", "ha": "Ten thousand square metres, a hundred metres on a side. The metric world's working unit for land area, a round number in the same spirit as the litre and the tonne."}};
 
   // The Information tool also carries subjects that are not units. They are
   // kept separate from CONV_CATS so the converter is not affected by them, and
@@ -8470,9 +8530,227 @@
     }).join('');
   }
 
+  // ---------- Tools: formulas ----------
+  // Geometry that comes up often enough at sea to be worth having offline --
+  // tank soundings, cross-sections -- plus the spherical trigonometry behind
+  // a compass or gyro check. The azimuth entries give the METHOD only: GHA
+  // and declination change every day and live in the ship's own Nautical
+  // Almanac, never reproduced here, the same reasoning that keeps ASTM and
+  // IMPA data out of this app.
+  var FORMULA_CATS = [
+    { key:'volume', name:'Volume', units:[
+        ['box', 'Rectangular tank', 0, 'V = LWH'],
+        ['vcyl', 'Vertical cylinder', 0, 'V = \u03c0r\u00b2h'],
+        ['hcylfull', 'Horizontal cylinder, full', 0, 'V = \u03c0r\u00b2L'],
+        ['hcylpart', 'Horizontal cylinder, partly full', 0, 'segment'],
+        ['sphere', 'Sphere', 0, 'V = \u2074\u2044\u2083\u03c0r\u00b3'],
+        ['cap', 'Spherical cap', 0, 'segment'],
+        ['cone', 'Cone', 0, 'V = \u2153\u03c0r\u00b2h'],
+        ['frustum', 'Frustum of a cone', 0, 'tapered'],
+        ['trapprism', 'Trapezoidal prism', 0, 'wing tank'],
+        ['triprism', 'Triangular prism', 0, 'wedge tank']
+    ] },
+    { key:'area', name:'Area', units:[
+        ['rect', 'Rectangle', 0, 'A = LW'],
+        ['tri', 'Triangle', 0, 'A = \u00bdbh'],
+        ['circ', 'Circle', 0, 'A = \u03c0r\u00b2'],
+        ['trap', 'Trapezoid', 0, 'A = \u00bd(a+b)h'],
+        ['ellipse', 'Ellipse', 0, 'A = \u03c0ab'],
+        ['sphsurf', 'Sphere, surface', 0, 'A = 4\u03c0r\u00b2'],
+        ['cylsurf', 'Cylinder, total surface', 0, 'A = 2\u03c0rh+2\u03c0r\u00b2'],
+        ['conesurf', 'Cone, lateral surface', 0, 'A = \u03c0rl']
+    ] },
+    { key:'azimuth', name:'Azimuth', units:[
+        ['why', 'What azimuth is, and why it is taken', 0, ''],
+        ['lha', 'Local Hour Angle', 0, 'LHA'],
+        ['formula', 'The azimuth formula', 0, 'tan Z'],
+        ['quadrant', 'Naming the angle, and turning it into a bearing', 0, 'N/S, E/W'],
+        ['error', 'Comparing to the compass', 0, 'error'],
+        ['bodies', 'Sun, star or moon \u2014 what differs', 0, '']
+    ] }
+  ];
+  var FORMULA_CAT_NOTES = {
+    "volume": "Every one of these is a cross-section multiplied along a length, or a standard solid taken whole -- the same handful of ideas cover most tanks actually found aboard. The one genuinely awkward case, a horizontal cylinder sounded part-way, is worked through in full below rather than left as a table to trust blind.",
+    "area": "Plain areas, the kind a shell plate, a deck opening or a tank cross-section actually needs. Each one reduces to length times width in some form -- a triangle and a trapezoid are both a rectangle with a correction for the missing corners.",
+    "azimuth": "The method behind checking a compass or a gyro against the sun, a star or the moon. It is the same spherical triangle -- pole, zenith, body -- that every celestial sight uses, solved here for the angle at the zenith instead of for altitude. What it needs from the almanac (GHA and declination) is not reproduced here, since those change daily and the ship's own copy is the licensed source for them."
+  };
+  var FORMULA_NOTES = {
+    "volume": {
+      "box": "V = L \u00d7 W \u00d7 H. Length, width and height (or depth of liquid) all in the same unit; the answer comes out in that unit cubed. The everyday check for a rectangular tank once the depth of liquid is known.",
+      "vcyl": "V = \u03c0 \u00d7 r\u00b2 \u00d7 h, r the radius and h the height of liquid, or of the whole tank for its full capacity. Diameter is twice the radius -- halve it before squaring, the easiest place to slip.",
+      "hcylfull": "A cylinder lying on its side, completely full, holds exactly the same volume as standing up: V = \u03c0 \u00d7 r\u00b2 \u00d7 L, now with L the length of the cylinder rather than its height. It is only the partly-full case, next, that needs anything more than this.",
+      "hcylpart": "A horizontal cylindrical tank sounded to a liquid depth h (measured from the bottom of the shell, r the tank's radius) is not a simple fraction of the full volume, because the liquid's cross-section is a circular segment, not a rectangle:\n\n\u03b8 = 2 \u00d7 arccos[(r \u2212 h) \u00f7 r]   (\u03b8 in radians)\nsegment area = r\u00b2 \u00d7 (\u03b8 \u2212 sin\u03b8) \u00f7 2\nV = segment area \u00d7 L\n\n\u03b8 is the angle the liquid surface's two ends subtend at the centre. Half full (h = r) gives \u03b8 = \u03c0 and the segment collapses to exactly half the circle, as it should -- worth checking with real numbers before trusting a sounding table built on it.",
+      "sphere": "V = (4 \u00f7 3) \u00d7 \u03c0 \u00d7 r\u00b3. The full capacity of a spherical tank, or of any other sphere.",
+      "cap": "A spherical tank sounded to a liquid depth h (r the sphere's radius) holds a spherical cap, not a simple fraction of the sphere:\n\nV = (\u03c0 \u00d7 h\u00b2 \u00f7 3) \u00d7 (3r \u2212 h)\n\nCheck it at h = r (half full): it returns exactly half the full sphere volume, as symmetry demands, and at h = 2r (completely full) it returns the full sphere volume too.",
+      "cone": "V = (1 \u00f7 3) \u00d7 \u03c0 \u00d7 r\u00b2 \u00d7 h, r the base radius and h the height from base to apex -- a third of the cylinder that would contain it.",
+      "frustum": "A cone with the tip cut off -- a tapered tank or a hopper -- R the larger radius, r the smaller, h the height between them:\n\nV = (\u03c0 \u00d7 h \u00f7 3) \u00d7 (R\u00b2 + R\u00d7r + r\u00b2)\n\nSet r to zero and it reduces to the plain cone formula above, a quick way to check it is remembered right.",
+      "trapprism": "A tank whose cross-section is a trapezoid -- a wing tank or a sloped hopper bottom, constant along its length L, parallel sides a and b, depth h between them:\n\nV = [(a + b) \u00f7 2] \u00d7 h \u00d7 L\n\nThe bracket is the cross-sectional area; multiplying by length is all a prism of any constant cross-section ever needs.",
+      "triprism": "A wedge-shaped tank, cross-section a triangle of base b and height h, constant along a length L:\n\nV = (\u00bd \u00d7 b \u00d7 h) \u00d7 L\n\nThe trapezoidal prism above with one parallel side shrunk to nothing."
+    },
+    "area": {
+      "rect": "A = L \u00d7 W. Length by width, in matching units.",
+      "tri": "A = \u00bd \u00d7 base \u00d7 height, height measured perpendicular to the chosen base, not along one of the other sides.",
+      "circ": "A = \u03c0 \u00d7 r\u00b2. Radius, not diameter -- the most common slip in this one.",
+      "trap": "A = \u00bd \u00d7 (a + b) \u00d7 h, a and b the two parallel sides and h the perpendicular distance between them.",
+      "ellipse": "A = \u03c0 \u00d7 a \u00d7 b, a and b the semi-major and semi-minor axes -- half the long and short diameters, not the full ones. Set a = b = r and it is exactly the circle formula above.",
+      "sphsurf": "A = 4 \u00d7 \u03c0 \u00d7 r\u00b2 -- exactly four times the area of a great circle through the sphere's centre, a result Archimedes considered his best piece of work.",
+      "cylsurf": "The total outer surface of a cylinder, curved side plus both flat ends:\n\nA = (2 \u00d7 \u03c0 \u00d7 r \u00d7 h) + (2 \u00d7 \u03c0 \u00d7 r\u00b2)\n\nr the radius, h the height. Drop the end term for an open-topped tank or a pipe with no caps.",
+      "conesurf": "The curved (lateral) surface only, not the base: A = \u03c0 \u00d7 r \u00d7 l, l the slant height -- the distance from the apex down the side to the rim, not the vertical height. Slant height relates to vertical height h by l = \u221a(r\u00b2 + h\u00b2)."
+    },
+    "azimuth": {
+      "why": "A compass or a gyro is checked by comparing what it shows for a heavenly body against what the body's true bearing actually is at that instant -- the difference is the instrument's error. Any body will do: sun, star, planet or moon, provided its position in the sky is known, which is exactly what a Nautical Almanac gives for any moment of any day.",
+      "lha": "The Local Hour Angle is the body's Greenwich Hour Angle, from the almanac for the moment of the sight, corrected onto the observer's own meridian:\n\nLHA = GHA \u2212 west longitude\nLHA = GHA + east longitude\n\nkept in the range 0\u00b0 to 360\u00b0. GHA itself comes from the almanac's daily pages for the hour, advanced for the minutes and seconds from the increments and corrections table at the back of it -- figures that change every day and are never held in this app.",
+      "formula": "With Local Hour Angle (LHA), the body's declination (Dec, also from the almanac) and the observer's latitude (Lat), the azimuth angle Z follows from:\n\ntan Z = sin(LHA) \u00f7 [cos(LHA) \u00d7 sin(Lat) \u2212 tan(Dec) \u00d7 cos(Lat)]\n\nthe same pole-zenith-body triangle every celestial sight uses, solved here for the angle at the zenith instead of for altitude. A sight already worked for a position line has LHA and Dec in hand; azimuth costs nothing extra once they are.",
+      "quadrant": "Z from the formula is an angle, not yet a bearing, and its sign alone does not fix the quadrant -- the numerator and denominator's signs, taken separately, do. The numerator's sign gives the E/W half (positive, LHA 0\u00b0-180\u00b0, body west of the meridian; negative, LHA 180\u00b0-360\u00b0, body east); the denominator's sign gives the N/S half. Name Z accordingly and it converts straight to a 0\u00b0-360\u00b0 true bearing:\n\nN Z E \u2192 true bearing = Z\nN Z W \u2192 true bearing = 360\u00b0 \u2212 Z\nS Z E \u2192 true bearing = 180\u00b0 \u2212 Z\nS Z W \u2192 true bearing = 180\u00b0 + Z\n\nThe same naming convention as an ABC-table or calculator azimuth -- unfamiliar only the first few times.",
+      "error": "Compass or gyro error is the true azimuth just found minus the azimuth read off the compass or gyro repeater at the same instant, using an azimuth ring, a pelorus, or the gyro's own bearing repeater sighted on the body:\n\nerror = true azimuth \u2212 compass azimuth\n\nnamed EAST if the compass reads low and WEST if it reads high, exactly the same naming as a compass error found any other way, and corrected the same way afterwards: compass + easterly error = true; compass \u2212 westerly error = true.",
+      "bodies": "The method is identical for the sun, a star, a planet or the moon -- only where GHA and Dec come from differs. The sun and planets are tabulated directly against Greenwich time. Stars are tabulated as a Sidereal Hour Angle (SHA) against the First Point of Aries, so GHA star = GHA Aries + SHA. The moon moves fastest of the four and needs its almanac page read with more care, but nothing different in the formula itself. None of these figures belong in this app -- they change daily and the ship's own Nautical Almanac is the licensed source for them."
+    }
+  };
+  var formulaCat  = FORMULA_CATS[0];
+  var formulaOpen = {};
+  function formulaCatByKey(k){
+    for(var i=0; i<FORMULA_CATS.length; i++) if(FORMULA_CATS[i].key === k) return FORMULA_CATS[i];
+    return FORMULA_CATS[0];
+  }
+  function renderFormulaCats(){
+    document.getElementById('formulaCats').innerHTML = FORMULA_CATS.map(function(c){
+      return '<button data-fcat="' + c.key + '"' + (c.key === formulaCat.key ? ' class="active"' : '') +
+             '>' + escapeHtml(c.name) + '</button>';
+    }).join('');
+  }
+  function renderFormulas(){
+    document.getElementById('formulaIntro').textContent = FORMULA_CAT_NOTES[formulaCat.key] || '';
+    document.getElementById('formulaOut').innerHTML = formulaCat.units.map(function(u){
+      var text = (FORMULA_NOTES[formulaCat.key] || {})[u[0]] || '';
+      var id = formulaCat.key + ':' + u[0];
+      return '<div class="ug-item' + (formulaOpen[id] ? ' open' : '') + '" data-ug="' + escapeHtml(id) + '">' +
+               '<div class="ug-head">' +
+                 '<span class="ug-name">' + escapeHtml(u[1]) + '</span>' +
+                 '<span class="ug-sym">' + escapeHtml(u[3]) + '</span>' +
+                 CHEVRON +
+               '</div>' +
+               '<div class="ug-body">' + escapeHtml(text) + '</div>' +
+             '</div>';
+    }).join('');
+  }
+
+  // ---------- Tools: stars ----------
+  // Which constellation each of the stars traditionally selected for
+  // navigation sits in, and one reliable way to pick it out by eye -- not the
+  // GHA/Dec/SHA figures that make it usable for an actual sight, which belong
+  // to the almanac the same way every other daily figure in this app does
+  // not. One flat list rather than categories: there is only the one subject.
+  var STAR_LIST = [
+    ['achernar', 'Achernar', 0, 'Eri'], ['acamar', 'Acamar', 0, 'Eri'],
+    ['acrux', 'Acrux', 0, 'Cru'], ['adhara', 'Adhara', 0, 'CMa'],
+    ['alnair', "Al Na'ir", 0, 'Gru'], ['aldebaran', 'Aldebaran', 0, 'Tau'],
+    ['alioth', 'Alioth', 0, 'UMa'], ['alkaid', 'Alkaid', 0, 'UMa'],
+    ['alnilam', 'Alnilam', 0, 'Ori'], ['alphard', 'Alphard', 0, 'Hya'],
+    ['alphecca', 'Alphecca', 0, 'CrB'], ['alpheratz', 'Alpheratz', 0, 'And'],
+    ['altair', 'Altair', 0, 'Aql'], ['ankaa', 'Ankaa', 0, 'Phe'],
+    ['antares', 'Antares', 0, 'Sco'], ['arcturus', 'Arcturus', 0, 'Boo'],
+    ['atria', 'Atria', 0, 'TrA'], ['avior', 'Avior', 0, 'Car'],
+    ['bellatrix', 'Bellatrix', 0, 'Ori'], ['betelgeuse', 'Betelgeuse', 0, 'Ori'],
+    ['canopus', 'Canopus', 0, 'Car'], ['capella', 'Capella', 0, 'Aur'],
+    ['deneb', 'Deneb', 0, 'Cyg'], ['denebola', 'Denebola', 0, 'Leo'],
+    ['diphda', 'Diphda', 0, 'Cet'], ['dubhe', 'Dubhe', 0, 'UMa'],
+    ['elnath', 'Elnath', 0, 'Tau'], ['eltanin', 'Eltanin', 0, 'Dra'],
+    ['enif', 'Enif', 0, 'Peg'], ['fomalhaut', 'Fomalhaut', 0, 'PsA'],
+    ['gacrux', 'Gacrux', 0, 'Cru'], ['gienah', 'Gienah', 0, 'Crv'],
+    ['hadar', 'Hadar', 0, 'Cen'], ['hamal', 'Hamal', 0, 'Ari'],
+    ['kausaustralis', 'Kaus Australis', 0, 'Sgr'], ['kochab', 'Kochab', 0, 'UMi'],
+    ['markab', 'Markab', 0, 'Peg'], ['menkar', 'Menkar', 0, 'Cet'],
+    ['menkent', 'Menkent', 0, 'Cen'], ['miaplacidus', 'Miaplacidus', 0, 'Car'],
+    ['mirfak', 'Mirfak', 0, 'Per'], ['nunki', 'Nunki', 0, 'Sgr'],
+    ['peacock', 'Peacock', 0, 'Pav'], ['polaris', 'Polaris', 0, 'UMi'],
+    ['pollux', 'Pollux', 0, 'Gem'], ['procyon', 'Procyon', 0, 'CMi'],
+    ['rasalhague', 'Rasalhague', 0, 'Oph'], ['regulus', 'Regulus', 0, 'Leo'],
+    ['rigel', 'Rigel', 0, 'Ori'], ['rigilkent', 'Rigil Kentaurus', 0, 'Cen'],
+    ['sabik', 'Sabik', 0, 'Oph'], ['schedar', 'Schedar', 0, 'Cas'],
+    ['shaula', 'Shaula', 0, 'Sco'], ['sirius', 'Sirius', 0, 'CMa'],
+    ['spica', 'Spica', 0, 'Vir'], ['suhail', 'Suhail', 0, 'Vel'],
+    ['vega', 'Vega', 0, 'Lyr'], ['zubenelgenubi', 'Zubenelgenubi', 0, 'Lib']
+  ];
+  var STAR_NOTES = {
+    "achernar": "Eridanus. Marks the river's southern end, far enough south of the celestial equator that it barely clears the horizon, or does not rise at all, from most of the northern hemisphere. From southern latitudes it is easy: a bright, isolated star roughly a third of the way from the Southern Cross to Canopus, with nothing else nearby to confuse it for.",
+    "acamar": "Eridanus. A fainter marker partway along the river's long, winding line, between Achernar at the southern end and Rigel where the river's course begins near Orion. Found by tracing that faint curve outward from Achernar.",
+    "acrux": "Crux. The foot of the Southern Cross, the southernmost of its four main stars. The cross's long axis, extended about four and a half times its own length beyond Acrux, points close to the south celestial pole.",
+    "adhara": "Canis Major. The second-brightest star in the Great Dog, south and slightly west of Sirius -- part of the triangle of stars below Sirius that forms the dog's hindquarters.",
+    "alnair": "Grus. The brightest star of the Crane, a compact southern constellation below Piscis Austrinus and Fomalhaut; the crane's body-and-neck line of stars points almost straight at it.",
+    "aldebaran": "Taurus. The bull's fiery orange eye, at the tip of the V-shaped Hyades cluster. Following the three stars of Orion's belt upward and to the right leads straight to it.",
+    "alioth": "Ursa Major. The Big Dipper handle star nearest the bowl -- the first of the three handle stars and the brightest of the seven, useful as a magnitude reference for the rest.",
+    "alkaid": "Ursa Major. The star at the very tip of the Big Dipper's handle. The handle's curve, extended, leads on toward Arcturus and then Spica: arc to Arcturus, speed on to Spica.",
+    "alnilam": "Orion. The middle of the three belt stars, evenly spaced between Mintaka and Alnitak -- the belt as a whole is one of the most recognisable short lines of stars in the sky.",
+    "alphard": "Hydra. The one bright star in the long, faint Water Snake, south of the sickle of Leo with nothing of similar brightness anywhere near it -- its isolation is the identification.",
+    "alphecca": "Corona Borealis. The one bright gem in the small, distinctive semicircle of the Northern Crown, found by following the line from Arcturus toward Hercules.",
+    "alpheratz": "Andromeda. Marks the northeast corner of the Great Square of Pegasus, though it belongs to Andromeda rather than Pegasus. The Square's other three corners are Scheat, Markab and Algenib.",
+    "altair": "Aquila. The brightest star of the Eagle, the southern point of the Summer Triangle with Vega and Deneb, and flanked closely by two fainter stars, one on each side -- the surest way to pick it from its neighbours.",
+    "ankaa": "Phoenix. The brightest star of a faint southern constellation with no strong pattern of its own, found roughly between Achernar and Fomalhaut, closer to Achernar.",
+    "antares": "Scorpius. The scorpion's red heart, distinctly orange and close in brightness to Mars, which is exactly why the Greeks named it rival of Ares. The scorpion's curving tail leads away from it toward Shaula.",
+    "arcturus": "Bo\u00f6tes. Found by following the arc of the Big Dipper's handle away from the bowl -- arc to Arcturus -- the brightest star north of the celestial equator, and distinctly orange.",
+    "atria": "Triangulum Australe. The brightest star of the Southern Triangle, a small, sharp triangle east of the Southern Cross and Beta Centauri -- the triangle's own shape is the identification.",
+    "avior": "Carina. A star inside the keel of the old constellation Argo Navis, between Canopus and the Southern Cross, in a rich part of the Milky Way with no single obvious pointer to it beyond that position.",
+    "bellatrix": "Orion. The hunter's left shoulder, noticeably fainter than Betelgeuse on the opposite shoulder -- the two shoulders and two feet frame the belt in the middle.",
+    "betelgeuse": "Orion. The hunter's right shoulder, a red supergiant with an unmistakable orange colour, sitting above and to one side of the three-star belt.",
+    "canopus": "Carina. The second-brightest star in the sky after Sirius, far enough south that it never rises for most of the northern hemisphere. Where visible, its sheer brightness alone identifies it, well below and south of Sirius.",
+    "capella": "Auriga. A bright, slightly yellow star high in the northern sky, forming a small, distinct triangle with two fainter stars nearby known as the Kids.",
+    "deneb": "Cygnus. The tail of the Swan, the top of the Summer Triangle above Vega and Altair, and also the star at the head of the Northern Cross formed by Cygnus's main stars.",
+    "denebola": "Leo. The lion's tail, at the opposite end of the constellation from Regulus and the sickle-shaped head that, with Denebola, frames the lion's body.",
+    "diphda": "Cetus. The brightest star in the Whale, sitting alone in a sparse patch of sky south of the Great Square of Pegasus and well below Alpheratz. Also called Deneb Kaitos.",
+    "dubhe": "Ursa Major. The outer star of the Big Dipper's bowl, forming the classic pointer with Merak below it: a line through the two, extended about five times their separation, lands close to Polaris.",
+    "elnath": "Taurus. Marks the tip of the bull's northern horn, historically shared with neighbouring Auriga as one of its corner stars too. Sits between Aldebaran and Capella.",
+    "eltanin": "Draco. The brightest star in the Dragon's head, a small quadrilateral lying between Hercules and Cygnus, roughly overhead from mid-northern latitudes in summer.",
+    "enif": "Pegasus. The horse's nose, well separated from the Great Square at the end of a short line of stars extending from the Square's Markab corner.",
+    "fomalhaut": "Piscis Austrinus. A bright, isolated star low in the southern autumn sky for northern observers, found by extending the line down through the western side of the Great Square of Pegasus.",
+    "gacrux": "Crux. The top star of the Southern Cross, opposite Acrux at the foot. The cross's long axis, extended about four and a half times its own length through Acrux, points close to the south celestial pole.",
+    "gienah": "Corvus. One of four stars forming the small, tight, kite-shaped quadrilateral of the Crow, south of Spica and easily picked out by that compact shape.",
+    "hadar": "Centaurus. Also called Beta Centauri, the fainter of the two Pointers beside Rigil Kentaurus that aim at the Southern Cross -- the pair and the Cross together are one of the surest patterns in the southern sky.",
+    "hamal": "Aries. The Ram's brightest star, in a short, faint, bent line of three stars east of the Great Square of Pegasus and northeast of Diphda in Cetus.",
+    "kausaustralis": "Sagittarius. The star at the base of the spout of the Teapot asterism, in the archer's bow -- the Teapot's whole outline, low in the southern sky, is the easiest way in.",
+    "kochab": "Ursa Minor. One of the two Guardians of the Pole, in the bowl of the Little Dipper at the end furthest from Polaris, which sits at the tip of the handle.",
+    "markab": "Pegasus. One corner of the Great Square of Pegasus, on the southwest side opposite Alpheratz. The Square's four corners are the surest way into the whole region.",
+    "menkar": "Cetus. The whale's head, a modest star forming a loose triangle with Diphda in the same constellation and Hamal in Aries to the north.",
+    "menkent": "Centaurus. A fainter star between the bright pair Rigil Kentaurus and Hadar and the constellation's northern boundary -- most useful as a check star once the two brighter Centaurus stars are already identified.",
+    "miaplacidus": "Carina. The second-brightest star in the Keel, south and slightly west of Canopus, in the same dense stretch of Milky Way as Avior and Suhail.",
+    "mirfak": "Perseus. The brightest star of Perseus, inside a loose scattering of stars between Capella and Cassiopeia's distinctive W -- Cassiopeia's shape is usually found first, and Mirfak lies off one arm of it.",
+    "nunki": "Sagittarius. Marks the top of the Teapot's handle, opposite Kaus Australis at the spout.",
+    "peacock": "Pavo. The brightest star in a faint southern constellation, roughly midway between Al Na'ir and Atria with nothing bright of its own nearby to compete with it.",
+    "polaris": "Ursa Minor. The pole star, within about three-quarters of a degree of the north celestial pole and so barely moving through the night. Found by extending a line through the Big Dipper's two pointer stars, Dubhe and Merak, about five times their separation.",
+    "pollux": "Gemini. The head of one Twin, paired with the slightly fainter Castor beside it -- the two heads, side by side and similarly bright, are the whole identification.",
+    "procyon": "Canis Minor. The Little Dog's one bright star, forming the Winter Triangle with Sirius and Betelgeuse, roughly equidistant from both and noticeably isolated.",
+    "rasalhague": "Ophiuchus. The Serpent Bearer's head, north of Antares and Scorpius, at the peak of a large, faint constellation with few other bright stars to compete with it.",
+    "regulus": "Leo. The heart of the Lion, at the base of the backwards-question-mark Sickle that forms the lion's head and mane -- the Sickle shape is the identification.",
+    "rigel": "Orion. The hunter's left foot, a bright blue-white star diagonally opposite Betelgeuse across the belt -- the four corner stars box the three-star belt on all sides.",
+    "rigilkent": "Centaurus. Alpha Centauri, the nearer and brighter of the two Pointers beside Hadar that aim directly at the Southern Cross, and the nearest star system to the sun.",
+    "sabik": "Ophiuchus. A moderately bright star in the Serpent Bearer's lower body, south and slightly west of Rasalhague, in the large constellation that straddles the ecliptic between Scorpius and Sagittarius.",
+    "schedar": "Cassiopeia. One corner of the distinctive W (or M, depending on the season) of five stars that makes Cassiopeia the easiest northern constellation to spot on sight -- opposite the Big Dipper across Polaris.",
+    "shaula": "Scorpius. The sting in the scorpion's curled tail, at the end of the long curve of stars running away from Antares at the heart.",
+    "sirius": "Canis Major. The brightest star in the entire night sky, found by extending the line of Orion's three-star belt down and to the left -- nothing else is mistaken for it once that line is drawn.",
+    "spica": "Virgo. Found by continuing the arc from the Big Dipper's handle through Arcturus and on -- arc to Arcturus, speed on to Spica -- the brightest star in a large, otherwise faint constellation.",
+    "suhail": "Vela. A bright star in the Sails, part of the old ship Argo Navis along with Carina and Puppis, sitting between Canopus and Regulus in a stretch of sky with few other bright competitors.",
+    "vega": "Lyra. One of the brightest stars in the sky, the northern point of the Summer Triangle with Deneb and Altair, sitting beside a small, distinctive parallelogram of fainter stars that marks the rest of the Lyre.",
+    "zubenelgenubi": "Libra. The Scales' southern claw -- literally what the name means in Arabic, a reminder that Libra's two brightest stars were once considered part of Scorpius's claws before the Scales were separated out. Found roughly between Spica and Antares."
+  };
+  var STARS_INTRO = "Stars traditionally selected for navigation: bright, well spread across the sky, and each easy to pick out once you know where to look. What each one needs to actually work a sight -- SHA, declination -- comes from the ship's own Nautical Almanac and is not reproduced here; this is the part that does not change from one day to the next: which constellation it belongs to, and one reliable way to find it.";
+  var starsOpen = {};
+  function renderStars(){
+    document.getElementById('starsIntro').textContent = STARS_INTRO;
+    document.getElementById('starsOut').innerHTML = STAR_LIST.map(function(u){
+      var text = STAR_NOTES[u[0]] || '';
+      return '<div class="ug-item' + (starsOpen[u[0]] ? ' open' : '') + '" data-ug="' + escapeHtml(u[0]) + '">' +
+               '<div class="ug-head">' +
+                 '<span class="ug-name">' + escapeHtml(u[1]) + '</span>' +
+                 '<span class="ug-sym">' + escapeHtml(u[3]) + '</span>' +
+                 CHEVRON +
+               '</div>' +
+               '<div class="ug-body">' + escapeHtml(text) + '</div>' +
+             '</div>';
+    }).join('');
+  }
+
   var TOOL_TITLES = { convert:'Converter', guide:'Information', eta:'ETA',
                       instr:'Instruments', moll:'Mollier', map:'World map',
-                      calc:'Calculator' };
+                      calc:'Calculator', formulas:'Formulas', stars:'Stars' };
 
   function showTool(name){
     document.getElementById('toolsHome').style.display   = name ? 'none' : '';
@@ -8483,12 +8761,16 @@
     document.getElementById('toolMoll').style.display    = name === 'moll' ? '' : 'none';
     document.getElementById('toolMap').style.display     = name === 'map' ? '' : 'none';
     document.getElementById('toolCalc').style.display    = name === 'calc' ? '' : 'none';
+    document.getElementById('toolFormulas').style.display= name === 'formulas' ? '' : 'none';
+    document.getElementById('toolStars').style.display   = name === 'stars' ? '' : 'none';
     document.getElementById('pageTitle').textContent = TOOL_TITLES[name] || 'Tools';
     if(name === 'guide') renderGuide();
     if(name === 'eta')   renderEta();
     if(name === 'instr') showInstrList();
     if(name === 'moll')  renderMoll();
     if(name === 'calc')  renderCalc();
+    if(name === 'formulas'){ renderFormulaCats(); renderFormulas(); }
+    if(name === 'stars') renderStars();
     if(name === 'map')   renderMap();
     else if(mapWatch !== null){          // do not hold the GPS open off-screen
       navigator.geolocation.clearWatch(mapWatch); mapWatch = null;
@@ -9756,7 +10038,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v59';
+  var APP_BUILD = 'v60';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -9996,11 +10278,77 @@
   }
 
   // ---------- photo viewer ----------
+  // A photo -- a diagram, a nameplate, a P&ID -- opens as large as the screen
+  // allows and can then be pinch-zoomed (or double-tapped, or wheel-zoomed on
+  // a mouse) to read detail the fit-to-screen size can't show. Panning only
+  // engages once zoomed in; a single finger otherwise just closes on the
+  // background as before.
+  var VIEWER_MIN_ZOOM = 1, VIEWER_MAX_ZOOM = 6;
   function openViewer(src){
     var bg = document.createElement('div');
-    bg.className = 'modal-bg';
-    bg.innerHTML = '<button class="modal-close">×</button><img ' + photoAttrs(src) + '>';
-    bg.addEventListener('click', function(e){ if(e.target===bg || e.target.className==='modal-close') bg.remove(); });
+    bg.className = 'modal-bg photo-viewer';
+    bg.innerHTML = '<button class="modal-close">×</button><img class="pv-zoom-img" ' + photoAttrs(src) + '>';
+    var img = bg.querySelector('.pv-zoom-img');
+    var scale = 1, tx = 0, ty = 0;
+    function apply(smooth){
+      img.style.transition = smooth ? 'transform .15s ease-out' : 'none';
+      img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+      img.style.cursor = scale > 1 ? 'grab' : 'zoom-in';
+    }
+    function resetZoom(smooth){ scale = 1; tx = 0; ty = 0; apply(smooth); }
+
+    var pts = new Map(), pinchDist = 0, pinchScale = 1, panFrom = null, moved = 0, lastTap = 0;
+    img.addEventListener('pointerdown', function(e){
+      img.setPointerCapture(e.pointerId);
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      moved = 0;
+      if(pts.size === 2){
+        var p = Array.from(pts.values());
+        pinchDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+        pinchScale = scale;
+      } else if(pts.size === 1){
+        panFrom = { x: e.clientX, y: e.clientY };
+      }
+    });
+    img.addEventListener('pointermove', function(e){
+      if(!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      moved++;
+      if(pts.size === 2 && pinchDist > 0){
+        var p = Array.from(pts.values());
+        var d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+        scale = Math.min(VIEWER_MAX_ZOOM, Math.max(VIEWER_MIN_ZOOM, pinchScale * (d / pinchDist)));
+        apply(false);
+      } else if(pts.size === 1 && scale > 1 && panFrom){
+        tx += e.clientX - panFrom.x;
+        ty += e.clientY - panFrom.y;
+        panFrom = { x: e.clientX, y: e.clientY };
+        apply(false);
+      }
+    });
+    function pointerUp(e){
+      pts.delete(e.pointerId);
+      if(pts.size < 2) pinchDist = 0;
+      if(pts.size === 0){
+        panFrom = null;
+        if(moved < 3){                      // a tap, not a drag or pinch
+          var now = Date.now();
+          if(now - lastTap < 350){ scale > 1 ? resetZoom(true) : (scale = 2.5, tx = 0, ty = 0, apply(true)); lastTap = 0; }
+          else lastTap = now;
+        }
+      }
+    }
+    img.addEventListener('pointerup', pointerUp);
+    img.addEventListener('pointercancel', pointerUp);
+    img.addEventListener('wheel', function(e){
+      e.preventDefault();
+      scale = Math.min(VIEWER_MAX_ZOOM, Math.max(VIEWER_MIN_ZOOM, scale * Math.exp(-e.deltaY * 0.0015)));
+      apply(false);
+    }, { passive: false });
+
+    bg.addEventListener('click', function(e){
+      if(e.target === bg || e.target.className === 'modal-close') bg.remove();
+    });
     document.body.appendChild(bg);
   }
 
@@ -10861,6 +11209,29 @@
     var id = item.dataset.ug;
     guideOpen[id] = !guideOpen[id];
     item.classList.toggle('open', guideOpen[id]);
+  });
+  document.getElementById('formulasBackBtn').addEventListener('click', function(){ showTool(null); });
+  document.getElementById('formulaCats').addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-fcat]');
+    if(!btn) return;
+    formulaCat = formulaCatByKey(btn.dataset.fcat);
+    renderFormulaCats();
+    renderFormulas();
+  });
+  document.getElementById('formulaOut').addEventListener('click', function(e){
+    var item = e.target.closest('[data-ug]');
+    if(!item) return;
+    var id = item.dataset.ug;
+    formulaOpen[id] = !formulaOpen[id];
+    item.classList.toggle('open', formulaOpen[id]);
+  });
+  document.getElementById('starsBackBtn').addEventListener('click', function(){ showTool(null); });
+  document.getElementById('starsOut').addEventListener('click', function(e){
+    var item = e.target.closest('[data-ug]');
+    if(!item) return;
+    var id = item.dataset.ug;
+    starsOpen[id] = !starsOpen[id];
+    item.classList.toggle('open', starsOpen[id]);
   });
   document.getElementById('convCats').addEventListener('click', function(e){
     var btn = e.target.closest('button[data-cat]');
