@@ -277,6 +277,28 @@ const TYPES = { '.pdf':'application/pdf', '.jpg':'image/jpeg', '.html':'text/htm
   ok('the archived photographs all survive a slow archive index',
      survived === archived.length, survived + ' of ' + archived.length);
 
+  // ---- notes list alphabetical, pinned still first -------------------------
+  await p.evaluate(() => {
+    const mk = (title, pinned) => ({
+      id: title, kind: 'text', title, text: '', images: [], pinned: !!pinned,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    });
+    localStorage.setItem('gasplanet_notes_v1', JSON.stringify([
+      mk('Wires inventory'), mk('Vent mast fire fighting operating system'),
+      mk('Emergency Shower Heating System'), mk('Admin password'), mk('ballast pump seal', true)
+    ]));
+  });
+  await p.reload();
+  await p.waitForTimeout(900);
+  await p.click('#topTabs button[data-tab="notes"]');
+  await p.waitForTimeout(200);
+  const order = await p.evaluate(() => [...document.querySelectorAll('#noteListWrap .nc-title')].map(e => e.textContent.trim()));
+  ok('the pinned note stays first', order[0] === 'ballast pump seal', JSON.stringify(order));
+  ok('the rest are alphabetical, case-insensitive',
+     JSON.stringify(order.slice(1)) === JSON.stringify(
+       ['Admin password', 'Emergency Shower Heating System', 'Vent mast fire fighting operating system', 'Wires inventory']),
+     JSON.stringify(order));
+
   ok('no JS errors anywhere', errs.length === 0, errs.slice(0, 3).join(' | '));
 
   await b.close();

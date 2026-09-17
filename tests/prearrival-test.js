@@ -341,7 +341,8 @@ const WANT_DEP = [
     'Aft and Fwd. ETA condition. Greasing. Test the light. ETA max deployment time. Poster ship specific',
     'Pilot ladders actual manufacturing dates',
     'Pending requisitions. Requisitions to be raised?',
-    'Lifting equipment inventory. Slings. D shackles. Harness. Double lanyards. Fall preventer equipment'
+    'Lifting equipment inventory. Slings. D shackles. Harness. Double lanyards. Fall preventer equipment',
+    'Wires and ropes inventory and checklist'
   ];
   await p.selectOption('#paKind', 'takingover');
   await p.fill('#paPort', '');
