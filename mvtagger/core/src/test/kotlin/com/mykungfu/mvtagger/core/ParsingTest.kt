@@ -635,3 +635,63 @@ class PipeAsLetterTest {
         assertEquals("Kesariya", parsed.title)
     }
 }
+
+/**
+ * The other way round: the channel's own name first, then the song.
+ *
+ * From a real report where this shape scored the right song tenth, at 63%,
+ * behind an unrelated record by the same singer whose runtime happened to be
+ * one second from this file's.
+ */
+class ArtistFirstTest {
+
+    private val name =
+        "Guru_Randhawa__Nachle_Na_Video___DIL_JUUNGLEE___Neeti_M___Taapsee_P_Saqib_Saleem.mp4"
+
+    @Test
+    fun `the song is the segment with the marker on it`() {
+        val parsed = FilenameParser.parse(name)
+        assertEquals("Nachle Na", parsed.title)
+        assertEquals("Guru Randhawa", parsed.artist)
+    }
+
+    @Test
+    fun `and the search asks for both together`() {
+        val parsed = FilenameParser.parse(name)
+        assertTrue(
+            parsed.queries.toString(),
+            parsed.queries.any { it.contains("Nachle Na") && it.contains("Guru Randhawa") },
+        )
+    }
+
+    @Test
+    fun `the song-first convention is untouched`() {
+        val parsed = FilenameParser.parse("Kesariya___Brahmastra___Arijit_Singh.mp4")
+        assertEquals("Kesariya", parsed.title)
+    }
+
+    /**
+     * The scoring half of the same fault: the right answer has to come first.
+     *
+     * Built from the candidates in the report, with their real runtimes -- the
+     * album cut of the song runs seventy-two seconds longer than the video,
+     * which is ordinary and must not be allowed to decide anything.
+     */
+    @Test
+    fun `the song that matches the name beats a stranger with the right length`() {
+        val parsed = FilenameParser.parse(name)
+        val azul = Candidate(
+            source = "iTunes", id = "1", title = "AZUL",
+            artist = "Guru Randhawa, Gurjit Gill & Lavish Dhiman",
+            durationMs = 149_000, kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val right = Candidate(
+            source = "iTunes", id = "2", title = "Nachle Na (From \"Dil Juunglee\")",
+            artist = "Guru Randhawa, Neeti Mohan & Rajat Nagpal",
+            album = "Nachle Na (From \"Dil Juunglee\") - Single",
+            durationMs = 220_000, kind = "song", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val ranked = Matching.rank(listOf(azul, right), parsed, durationMs = 148_000)
+        assertEquals(ranked.map { it.candidate.title }.toString(), "Nachle Na (From \"Dil Juunglee\")", ranked.first().candidate.title)
+    }
+}

@@ -138,6 +138,21 @@ object Matching {
     private const val NUMBER_ODD_LENGTH = 0.7
     private const val NUMBER_WRONG_LENGTH = 0.3
 
+    /**
+     * A segment with the uploader's habit taken off the end.
+     *
+     * "Nachle Na Video" is the song plus a word that is in no catalogue
+     * anywhere. Comparing with it attached costs a third of the overlap and
+     * turns an exact match into a partial one.
+     */
+    private fun stripMarker(text: String): String =
+        TRAILING_MARKER.replace(text, "").trim().ifBlank { text }
+
+    private val TRAILING_MARKER = Regex(
+        """\s+((official|full|hd|4k)\s+)*(video|audio|lyrical|lyrics|song)\s*$""",
+        RegexOption.IGNORE_CASE,
+    )
+
     private fun minutes(ms: Int): String {
         val total = ms / 1000
         return (total / 60).toString() + ":" + (total % 60).toString().padStart(2, '0')
@@ -168,11 +183,27 @@ object Matching {
         score += whole * 0.35
         if (whole >= 0.75) reasons += "filename matches artist and title"
 
+        /*
+           The title, against every part of the name that could be one.
+
+           Artist and album have always been tried against the segments after
+           the pipes; the title was not, and that asymmetry was the whole fault
+           in a real report. A file called
+
+             Guru Randhawa | Nachle Na Video | DIL JUUNGLEE | Neeti M | ...
+
+           scored "AZUL by Guru Randhawa" at 73% -- artist right, title
+           matching nothing at all, runtime a coincidence -- and the actual
+           song, "Nachle Na (From Dil Juunglee)", tenth at 63%, because the
+           only place the words "Nachle Na" appeared was in a segment the title
+           check never looked at.
+        */
         val titleHit = maxOf(
             tokenOverlap(parsed.title, c.title),
             // The film convention puts the song first, so the parser's "artist"
             // may in fact be the title. Try it both ways.
             tokenOverlap(parsed.artist, c.title),
+            parsed.extras.maxOfOrNull { tokenOverlap(stripMarker(it), c.title) } ?: 0.0,
         )
         score += titleHit * 0.30
         if (titleHit >= 0.99) reasons += "title matches exactly"

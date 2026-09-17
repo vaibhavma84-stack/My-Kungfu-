@@ -109,6 +109,27 @@ object FilenameParser {
         RegexOption.IGNORE_CASE,
     )
 
+    /**
+     * The words an uploader hangs on the end of the song and nobody else uses.
+     *
+     * `Nachle Na Video`, `Kesariya Full Video Song`, `Tera Hua Lyrical`. None
+     * of them is part of a title and all of them wreck a search, because the
+     * catalogue has the song under its own name and nothing else.
+     */
+    private val TRAILING_MARKER = Regex(
+        """\s+((official|full|hd|4k)\s+)*(video|audio|lyrical|lyrics|song)\s*$""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Whether this segment is the song rather than a name.
+     *
+     * The marker is the tell. An uploader writes `Nachle Na Video` for the
+     * song and `Neeti M` for the singer, never the other way round.
+     */
+    private fun looksLikeTheSong(part: String): Boolean =
+        TRAILING_MARKER.containsMatchIn(part)
+
     fun parse(fileName: String): ParsedName {
         val base = stripExtension(fileName)
         // Non-breaking spaces survive many download tools and break matching.
@@ -263,6 +284,36 @@ object FilenameParser {
                 // stripped here, inside the film convention, where it is a
                 // reliable habit rather than a guess: an English song really
                 // can be called "Song 2".
+                /*
+                   Which way round this one is.
+
+                   Two conventions share the pipe and they are opposites:
+
+                     Kesariya | Brahmastra | Arijit Singh      song first
+                     Guru Randhawa | Nachle Na Video | DIL ... artist first
+
+                   The second is what a channel uploads under its own name, and
+                   it read as a song called "Guru Randhawa" -- which no
+                   catalogue has, so the search found his other records and
+                   scored the right one tenth.
+
+                   The marker word is what tells them apart. "Nachle Na Video"
+                   is the song with the uploader's habit on the end of it;
+                   "Guru Randhawa" is a person. So when the first segment
+                   carries no marker and the second does, they swap.
+                */
+                val artistFirst = parts.size >= 2 &&
+                        !looksLikeTheSong(parts[0]) && looksLikeTheSong(parts[1])
+                if (artistFirst) {
+                    val song = TRAILING_MARKER.replace(parts[1], "").trim()
+                    return Split(
+                        artist = parts[0].trim().ifBlank { null },
+                        title = song.ifBlank { null } ?: parts[1],
+                        album = null,
+                        extras = parts.drop(2),
+                    )
+                }
+
                 val head = TRAILING_SONG.replace(parts[0], "").trim()
                 var song = head
                 var film: String? = null
