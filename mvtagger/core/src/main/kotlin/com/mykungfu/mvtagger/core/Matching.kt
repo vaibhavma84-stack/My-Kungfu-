@@ -218,6 +218,31 @@ object Matching {
         score += artistHit * 0.20
         if (artistHit >= 0.75) reasons += "artist matches"
 
+        /*
+           A title that matches and an artist that matches nothing.
+
+           "Obsession" is a song title thirty-seven records share. When the
+           filename names an artist and the candidate's has nothing to do with
+           it, the title alone is not evidence -- it is a coincidence, and
+           without this the top of the list is whichever stranger the shop
+           happened to return first.
+        */
+        val artistNamed = !parsed.artist.isNullOrBlank()
+        /*
+           Unless the field called "artist" was the title all along.
+
+           "Kesariya - Brahmastra" parses as artist Kesariya, title Brahmastra,
+           and the song is the other way round -- so an artist field that
+           matched the candidate's *title* is evidence the parse was inverted,
+           not evidence of a wrong artist. Penalising it broke a test that has
+           guarded that case since the beginning, which is what tests are for.
+        */
+        val artistWasReallyTheTitle = tokenOverlap(parsed.artist, c.title) >= 0.6
+        if (artistNamed && !artistWasReallyTheTitle && titleHit >= 0.6 && artistHit < 0.2) {
+            score -= 0.12
+            reasons += "but nothing in the name matches this artist"
+        }
+
         val albumHit = maxOf(
             tokenOverlap(parsed.album, c.album),
             parsed.extras.maxOfOrNull { tokenOverlap(it, c.album) } ?: 0.0,

@@ -695,3 +695,62 @@ class ArtistFirstTest {
         assertEquals(ranked.map { it.candidate.title }.toString(), "Nachle Na (From \"Dil Juunglee\")", ranked.first().candidate.title)
     }
 }
+
+/**
+ * A record filed under the headliner, and a title thirty-seven records share.
+ *
+ * From a report for "The Weeknd ft. Dua Lipa - Obsession": every request
+ * answered, the artist-and-title search came back empty three times over, and
+ * the bare title returned thirty-seven strangers, all of which scored the same
+ * 47% on the title alone.
+ */
+class FeaturedArtistTest {
+
+    private val name = "The_Weeknd_ft._Dua_Lipa_-_Obsession__Official_Lyric_Video_(1080p).mp4"
+
+    @Test
+    fun `the name is read correctly to begin with`() {
+        val parsed = FilenameParser.parse(name)
+        assertEquals("Obsession", parsed.title)
+        assertEquals("The Weeknd ft. Dua Lipa", parsed.artist)
+    }
+
+    @Test
+    fun `the headliner alone is one of the things asked`() {
+        val parsed = FilenameParser.parse(name)
+        assertTrue(
+            parsed.queries.toString(),
+            parsed.queries.any { it == "The Weeknd Obsession" },
+        )
+    }
+
+    @Test
+    fun `an artist with no guests adds no second query for itself`() {
+        val parsed = FilenameParser.parse("Arijit_Singh_-_Kesariya.mp4")
+        assertEquals(
+            parsed.queries.toString(),
+            parsed.queries.count { it.startsWith("Arijit Singh Kesariya") },
+            1,
+        )
+    }
+
+    @Test
+    fun `a stranger with the same title does not top the list`() {
+        val parsed = FilenameParser.parse(name)
+        val stranger = Candidate(
+            source = "iTunes", id = "1", title = "Obsession", artist = "EXO",
+            album = "OBSESSION - The 6th Album", durationMs = 203_000,
+            kind = "song", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val right = Candidate(
+            source = "iTunes", id = "2", title = "Obsession", artist = "The Weeknd",
+            durationMs = 285_000, kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val ranked = Matching.rank(listOf(stranger, right), parsed, durationMs = 285_000)
+        assertEquals(ranked.toString(), "The Weeknd", ranked.first().candidate.artist)
+        assertTrue(
+            ranked.toString(),
+            ranked.first().score > ranked.last().score + 0.1,
+        )
+    }
+}

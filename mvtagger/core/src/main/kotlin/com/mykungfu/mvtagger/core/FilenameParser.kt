@@ -187,6 +187,13 @@ object FilenameParser {
         // which of the two is even in the name.
         val queries = listOfNotNull(
             listOfNotNull(artist, title).joinToString(" ").trim().ifBlank { null },
+            // The same thing without whoever was featured on it. A shop files
+            // a record under the artist it was released by, and the guest is
+            // often only in the subtitle or not there at all -- so "The Weeknd
+            // ft. Dua Lipa Obsession" can find nothing where "The Weeknd
+            // Obsession" finds it at once.
+            listOfNotNull(headliner(artist), title).joinToString(" ").trim()
+                .ifBlank { null },
             listOfNotNull(title, album).joinToString(" ").trim().ifBlank { null },
             extras.firstOrNull()?.let { listOfNotNull(title, it).joinToString(" ").trim() },
             title?.trim(),
@@ -269,6 +276,26 @@ object FilenameParser {
         if (standalone.findAll(work).count() < 2) return work
         return standalone.replace(work, "|")
     }
+
+    /**
+     * The artist a record is filed under, without the guests.
+     *
+     * "The Weeknd ft. Dua Lipa" is filed as The Weeknd everywhere that sells
+     * anything; the feature is a credit, not part of the name. Returns null
+     * when there is nothing to take off, so the caller does not end up with
+     * the same query twice.
+     */
+    private fun headliner(artist: String?): String? {
+        if (artist.isNullOrBlank()) return null
+        val cut = FEATURING.split(artist).firstOrNull()?.trim()?.ifBlank { null } ?: return null
+        return if (cut.equals(artist.trim(), ignoreCase = true)) null else cut
+    }
+
+    /** The ways a guest is introduced, all of which mean the same thing. */
+    private val FEATURING = Regex(
+        """\s+(feat\.?|ft\.?|featuring|with|x|&|,)\s+""",
+        RegexOption.IGNORE_CASE,
+    )
 
     private fun split(text: String): Split {
         // Pipes first: a name with pipes is the film convention, and its dashes
