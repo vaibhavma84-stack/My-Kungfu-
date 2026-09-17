@@ -947,3 +947,219 @@ class CoverVideoTest {
         )
     }
 }
+
+/**
+ * Eighteen strangers at the same score, and a query nobody could answer.
+ *
+ * From a report for
+ *
+ *     O_Sajna__Official_Video__-_Badshah_X_DIVINE_X_Nikhita_Gandhi___Ek_THA_RAJA(1080p).mp4
+ *
+ * The name reduced to the two words "O Sajna", and India has a great many
+ * records of that name: Neha Kakkar, Akhil Sachdeva, Gajendra Verma, Lata
+ * Mangeshkar, eighteen in the report. Every one of them scored a flat 64% and
+ * the app said "filename matches artist and title" about all of them, which
+ * was not true of any of them -- their names appear nowhere in the file.
+ *
+ * Three faults, all visible in the one report.
+ */
+class CreditListTest {
+
+    private val name =
+        "O_Sajna__Official_Video__-_Badshah_X_DIVINE_X_Nikhita_Gandhi___Ek_THA_RAJA(1080p).mp4"
+
+    private fun stranger(title: String, artist: String, durationMs: Int? = null) = Candidate(
+        source = "iTunes", id = title + artist, title = title, artist = artist,
+        durationMs = durationMs, kind = "song", mediaKind = MediaKind.MUSIC_VIDEO,
+    )
+
+    @Test
+    fun `a field keeps none of the punctuation that separated it`() {
+        // The download tool left "- Badshah X DIVINE X Nikhita Gandhi", dash
+        // and all, and the dash went into a query.
+        val p = FilenameParser.parse(name)
+        assertTrue(p.extras.toString(), p.extras.none { it.startsWith("-") })
+        assertTrue(p.extras.toString(), p.extras.contains("Badshah X DIVINE X Nikhita Gandhi"))
+    }
+
+    @Test
+    fun `nothing with a separator in it is ever asked for`() {
+        // Every request in three separate reports whose term still had a
+        // separator came back empty, on every storefront.
+        for (query in FilenameParser.parse(name).queries) {
+            assertTrue("asked for '" + query + "'", !query.contains("|"))
+            assertTrue("asked for '" + query + "'", !query.contains(" - "))
+        }
+    }
+
+    @Test
+    fun `the first name on a credit list is asked for beside the song`() {
+        // "Badshah X DIVINE X Nikhita Gandhi" is filed nowhere. "O Sajna
+        // Badshah" is the record.
+        val p = FilenameParser.parse(name)
+        assertTrue(p.queries.toString(), p.queries.contains("O Sajna Badshah"))
+    }
+
+    @Test
+    fun `a stranger who shares the title is no longer credited with the filename`() {
+        val p = FilenameParser.parse(name)
+        val top = Matching.rank(listOf(stranger("O Sajna", "Neha Kakkar")), p).first()
+        assertTrue(
+            top.reasons.toString(),
+            top.reasons.none { it.contains("filename matches") },
+        )
+    }
+
+    /**
+     * The ceiling this buys, which is the point of the whole change: a title
+     * and a runtime, with no artist agreeing, cannot apply itself to a file.
+     */
+    @Test
+    fun `a title and a lucky runtime cannot apply on their own`() {
+        val p = FilenameParser.parse(name)
+        // The report's top match: right title, right length to the second,
+        // and an artist with nothing to do with this file.
+        val top = Matching.rank(
+            listOf(stranger("Sajna O Sajna", "Ravindra Jain", durationMs = 214_000)),
+            p,
+            durationMs = 214_000,
+        ).first()
+        assertTrue("scored " + top.score, !top.isConfident)
+    }
+
+    @Test
+    fun `the record whose artist agrees wins outright`() {
+        val p = FilenameParser.parse(name)
+        val right = Candidate(
+            source = "iTunes", id = "right", title = "O Sajna",
+            artist = "Badshah, DIVINE & Nikhita Gandhi", album = "Ek Tha Raja",
+            durationMs = 214_000, kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val ranked = Matching.rank(
+            listOf(
+                stranger("Sajna O Sajna", "Ravindra Jain", durationMs = 214_000),
+                stranger("O Sajna", "Neha Kakkar", durationMs = 245_000),
+                right,
+            ),
+            p,
+            durationMs = 214_000,
+        )
+        assertEquals(ranked.toString(), "right", ranked.first().candidate.id)
+        assertTrue(ranked.toString(), ranked.first().isConfident)
+    }
+
+    /**
+     * A score arithmetically at the threshold has to count as at it.
+     *
+     * The report printed "the best scored 80%, under the 80% needed", which
+     * reads like nonsense and was arithmetically true: the weights are
+     * decimals, a double cannot hold them, and the sum came out a
+     * ten-thousandth of a per cent short.
+     */
+    @Test
+    fun `a score that reaches the threshold is not lost to arithmetic`() {
+        val p = FilenameParser.parse("Adele - Hello.mp4")
+        // Title and artist both exact, and a runtime ten seconds out: the
+        // weights for those are 0.45, 0.30 and 0.05.
+        val c = Candidate(
+            source = "iTunes", id = "1", title = "Hello", artist = "Adele",
+            durationMs = 300_000, kind = "song", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val top = Matching.rank(listOf(c), p, durationMs = 309_000).first()
+        assertEquals(0.80, top.score, 0.0001)
+        assertTrue("scored " + top.score, top.isConfident)
+    }
+
+    @Test
+    fun `a well named file still finds its record on the first request`() {
+        // Nothing here may be spent on the broader queries: the first attempt
+        // is the precise one and it has to stay first.
+        assertEquals("Adele Hello", FilenameParser.parse("Adele - Hello.mp4").queries.first())
+        assertEquals(
+            "Arijit Singh Kesariya",
+            FilenameParser.parse("Arijit Singh - Kesariya.mp4").queries.first(),
+        )
+    }
+}
+
+/**
+ * A record that exists, in a shop that was asked, and was never returned.
+ *
+ * From a report for `Nora_Fatehi_-_Im_Bossy_[Official_Music_Video](1080p).mp4`.
+ * The name was read perfectly. Thirty-three records came back, all called
+ * "Bossy" and none of them hers, while Apple's catalogue does carry her music
+ * video. So the search was at fault rather than the scoring, in three ways.
+ *
+ * The apostrophe: the file says "Im" and the record is "I'm". A filesystem is
+ * not troubled by an apostrophe but plenty of download tools drop one anyway,
+ * and a shop's index is less forgiving than it looks.
+ *
+ * The ceiling: ten results per storefront cannot reach the eleventh record of
+ * a title that dozens share, and "Bossy" is such a title.
+ *
+ * And the artist: nobody had asked for her by name on her own, which is the
+ * one search a shop cannot get wrong about a record it holds.
+ */
+class ApostropheTest {
+
+    private val name = "Nora_Fatehi_-_Im_Bossy_[Official_Music_Video](1080p).mp4"
+
+    @Test
+    fun `the name was never the problem`() {
+        val p = FilenameParser.parse(name)
+        assertEquals("Nora Fatehi", p.artist)
+        assertEquals("Im Bossy", p.title)
+    }
+
+    @Test
+    fun `the apostrophe is put back and asked for as well`() {
+        val p = FilenameParser.parse(name)
+        assertTrue(p.queries.toString(), p.queries.contains("Nora Fatehi I'm Bossy"))
+    }
+
+    @Test
+    fun `the artist alone is one of the things asked`() {
+        val p = FilenameParser.parse(name)
+        assertTrue(p.queries.toString(), p.queries.contains("Nora Fatehi"))
+    }
+
+    @Test
+    fun `the precise query still goes first`() {
+        assertEquals("Nora Fatehi Im Bossy", FilenameParser.parse(name).queries.first())
+    }
+
+    @Test
+    fun `a word that is only ever a contraction is restored`() {
+        // "Dont Stop" is certainly "Don't Stop".
+        val p = FilenameParser.parse("Journey - Dont Stop Believin.mp4")
+        assertTrue(p.queries.toString(), p.queries.any { it.contains("Don't Stop") })
+    }
+
+    @Test
+    fun `a word that is also an ordinary word is left alone`() {
+        // "Ill Manors" is a real title and is not "I'll Manors"; nor is
+        // "Let It Be" waiting for an apostrophe.
+        val p = FilenameParser.parse("Plan B - Ill Manors.mp4")
+        assertTrue(p.queries.toString(), p.queries.none { it.contains("I'll") })
+    }
+
+    @Test
+    fun `putting nothing back adds no second query for the same words`() {
+        val p = FilenameParser.parse("Adele - Hello.mp4")
+        assertEquals(p.queries.toString(), 1, p.queries.count { it == "Adele Hello" })
+    }
+
+    @Test
+    fun `the record is found once the shop returns it`() {
+        // What the app does with her video when a search finally hands it
+        // over: the title folds to the same words with or without the mark.
+        val p = FilenameParser.parse(name)
+        val hers = Candidate(
+            source = "iTunes", id = "1722673331", title = "I'm Bossy",
+            artist = "Nora Fatehi", durationMs = 201_000,
+            kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val top = Matching.rank(listOf(hers), p, durationMs = 201_000).first()
+        assertTrue("scored " + top.score, top.isConfident)
+    }
+}

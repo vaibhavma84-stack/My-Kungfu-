@@ -201,6 +201,38 @@ object Matching {
         return (total / 60).toString() + ":" + (total % 60).toString().padStart(2, '0')
     }
 
+    /*
+       What the two halves of an answer are worth.
+
+       There used to be a third signal in front of these: the whole cleaned
+       filename against the candidate's artist and title joined together,
+       worth 0.35 -- more than either half on its own. It was meant to catch a
+       dash split guessed the wrong way round.
+
+       It had to go, and a report for
+
+           O Sajna (Official Video) - Badshah X DIVINE X Nikhita Gandhi | Ek Tha Raja
+
+       is what settled it. The filename reduced to the two words "O Sajna", and
+       every record in India called "O Sajna" -- by Neha Kakkar, by Akhil
+       Sachdeva, by Gajendra Verma, eighteen of them -- contains both of those
+       words somewhere in its artist and title. [tokenOverlap] measures against
+       the shorter side, so all eighteen scored a flat 1.0 and collected the
+       full 0.35 for it, and the report told the person "filename matches
+       artist and title" about eighteen people whose names are nowhere in the
+       filename. They sat in a row at 64%, separated only by their runtimes.
+
+       Nothing is lost by removing it. Its one real job is already done twice
+       over: [titleHit] tries the parsed artist against the candidate's title
+       and [artistHit] tries the parsed title against the candidate's artist,
+       so an inverted split is caught by both. What is gained is a ceiling: a
+       title and a runtime, with no artist agreeing, now reaches 0.63 and
+       cannot apply itself. Three reports running, a title match on its own was
+       the whole of the evidence for a wrong answer.
+    */
+    private const val TITLE = 0.45
+    private const val ARTIST = 0.30
+
     fun rank(
         candidates: List<Candidate>,
         parsed: ParsedName,
@@ -219,11 +251,6 @@ object Matching {
     ): Scored {
         var score = 0.0
         val reasons = ArrayList<String>()
-
-        // The whole cleaned filename against "artist title" -- catches the case
-        // where the dash split guessed the two the wrong way round.
-        val whole = tokenOverlap(parsed.query, listOfNotNull(c.artist, c.title).joinToString(" "))
-        score += whole * 0.35
 
         /*
            The title, against every part of the name that could be one.
@@ -247,16 +274,9 @@ object Matching {
             titleMatch(parsed.artist, c.title),
             parsed.extras.maxOfOrNull { titleMatch(stripMarker(it), c.title) } ?: 0.0,
         )
-        score += titleHit * 0.30
+        score += titleHit * TITLE
         if (titleHit >= 0.99) reasons += "title matches exactly"
         else if (titleHit >= 0.6) reasons += "title mostly matches"
-
-        // Said here rather than above, because it is only true with the title
-        // check in hand. Every word of the filename can be accounted for by
-        // the candidate's *artist* alone -- an artist's name and a record of
-        // theirs the file has nothing to do with -- and claiming the title
-        // matched in that case is the reason a wrong match looked convincing.
-        if (whole >= 0.75 && titleHit >= 0.5) reasons += "filename matches artist and title"
 
         val artistHit = maxOf(
             tokenOverlap(parsed.artist, c.artist),
@@ -264,7 +284,7 @@ object Matching {
             // Singers are often listed after pipes in the filename.
             parsed.extras.maxOfOrNull { tokenOverlap(it, c.artist) } ?: 0.0,
         )
-        score += artistHit * 0.20
+        score += artistHit * ARTIST
         if (artistHit >= 0.75) reasons += "artist matches"
 
         /*
@@ -345,7 +365,18 @@ object Matching {
         // artwork is a video still; the artwork rule handles that separately.
         if (c.kind == "musicVideo") score += 0.03
 
-        return Scored(c, score.coerceIn(0.0, 1.0), reasons)
+        /*
+           Rounded before it is compared with anything.
+
+           The weights are decimals and a double cannot hold them, so a
+           candidate scoring title, artist and length -- 0.45 + 0.30 + 0.15 --
+           came out as 0.7999999999999999 and failed a test for 0.80, while
+           the report printed it as "80%, under the 80% needed". Arithmetic
+           that is exactly at the threshold has to count as at the threshold,
+           and a figure shown to a person has to mean what it says.
+        */
+        val rounded = Math.round(score.coerceIn(0.0, 1.0) * 1000.0) / 1000.0
+        return Scored(c, rounded, reasons)
     }
 }
 

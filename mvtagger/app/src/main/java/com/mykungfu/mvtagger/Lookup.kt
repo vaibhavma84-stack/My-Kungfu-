@@ -35,7 +35,25 @@ import com.mykungfu.mvtagger.core.Wikipedia
 object Lookup {
 
     /** Further attempts cost round trips for rapidly diminishing returns. */
-    private const val MAX_QUERY_ATTEMPTS = 3
+    private const val MAX_QUERY_ATTEMPTS = 4
+
+    /*
+       How many results to take from a storefront, per entity.
+
+       Ten, and a common title buries the answer. "Bossy" is the name of
+       records by Kelis, Lindsay Lohan, JD McPherson, anders, WurlD, Juan
+       Magan, Higher Brothers and a good many more; asking Apple for "Im Bossy"
+       and keeping ten of them cannot reach the eleventh, whoever it is. A
+       report for "Nora Fatehi - Im Bossy" came back with thirty-three records
+       and not one of them hers, while Apple's catalogue has her video.
+
+       Twenty-five costs no extra requests -- it is the same six calls with a
+       bigger answer -- and the scoring is what sorts the pile out. It earns
+       its place precisely when the title is common, which is when the ranking
+       was already the only thing standing between a right answer and a
+       plausible stranger.
+    */
+    private const val MUSIC_RESULTS = 25
 
     /** A match this strong will not be improved on by searching again. */
     private const val GOOD_ENOUGH_TO_STOP = 0.75
@@ -73,7 +91,7 @@ object Lookup {
         for ((index, query) in attempts.take(MAX_QUERY_ATTEMPTS).withIndex()) {
             for (store in storefronts) {
                 for (entity in listOf("musicVideo", "song")) {
-                    Net.getTextOrNull(ITunes.searchUrl(query, entity, store, limit = 10))
+                    Net.getTextOrNull(ITunes.searchUrl(query, entity, store, limit = MUSIC_RESULTS))
                         ?.let { found += ITunes.parse(it, store) }
                 }
             }

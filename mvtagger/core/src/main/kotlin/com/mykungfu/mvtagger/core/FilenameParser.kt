@@ -71,6 +71,17 @@ object FilenameParser {
         "latest song", "new song", "bollywood song",
     )
 
+    /**
+     * Punctuation that is only ever a separator, never part of a name.
+     *
+     * Trimmed from the whole name and from each field of it. A field that kept
+     * its leading dash -- "- Badshah X DIVINE X Nikhita Gandhi", which is what
+     * a download tool leaves behind -- carried that dash into a query, and a
+     * query with a dash in it is answered by nobody.
+     */
+    private val EDGE_JUNK =
+        charArrayOf(' ', '-', '\u2013', '\u2014', '|', '.', '_', ',')
+
     /** A YouTube id as yt-dlp leaves it: exactly eleven of this alphabet. */
     private val YOUTUBE_ID = Regex("""[\[(\-_ ][A-Za-z0-9_-]{11}[\])]?$""")
 
@@ -177,7 +188,7 @@ object FilenameParser {
         val yearFromText = YEAR.find(work)?.value
         val year = yearFromBrackets ?: yearFromText
 
-        work = work.replace(Regex("""\s+"""), " ").trim(' ', '-', '–', '—', '|', '.', '_')
+        work = work.replace(Regex("""\s+"""), " ").trim(*EDGE_JUNK)
         work = pipesWrittenAsLetters(work)
 
         val (artist, title, album, extras) = split(work)
@@ -187,6 +198,11 @@ object FilenameParser {
         // which of the two is even in the name.
         val queries = listOfNotNull(
             listOfNotNull(artist, title).joinToString(" ").trim().ifBlank { null },
+            // The same thing with the apostrophe put back. A filesystem drops
+            // it and a shop's index keeps it, and one missing apostrophe is
+            // the difference between finding a record in a single request and
+            // not finding it at all.
+            apostrophesBack(listOfNotNull(artist, title).joinToString(" ").trim()),
             // The same thing without whoever was featured on it. A shop files
             // a record under the artist it was released by, and the guest is
             // often only in the subtitle or not there at all -- so "The Weeknd
@@ -196,9 +212,33 @@ object FilenameParser {
                 .ifBlank { null },
             listOfNotNull(title, album).joinToString(" ").trim().ifBlank { null },
             extras.firstOrNull()?.let { listOfNotNull(title, it).joinToString(" ").trim() },
+            /*
+               The song and the first name credited beside it.
+
+               "O Sajna | Badshah X DIVINE X Nikhita Gandhi | Ek Tha Raja" names
+               three artists with an X between them, and the whole string is
+               filed nowhere. A shop files a record under the first name on it,
+               so this asks for "O Sajna Badshah" -- which is the record.
+            */
+            extras.firstOrNull()?.let { first ->
+                headliner(first)?.let { listOfNotNull(title, it).joinToString(" ").trim() }
+            },
             title?.trim(),
+            apostrophesBack(title?.trim()),
+            /*
+               The artist on their own, which is the last thing worth asking.
+
+               A shop files everything an artist released under their name, so
+               this cannot miss a record that exists -- where a title-only
+               search can, and does, whenever the title is one that dozens of
+               records share. It is late in the order because it is the
+               broadest and the slowest to score, and it is here because a
+               report came back with thirty-three records called "Bossy" and
+               none of them by the artist the filename named.
+            */
+            artist?.trim(),
             work.trim(),
-        ).map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        ).map { plainWords(it) }.map { it.trim() }.filter { it.isNotBlank() }.distinct()
 
         // A Devanagari title has to be searched for in Latin letters: the
         // catalogues index the transliterated spelling and searching in the
@@ -209,7 +249,7 @@ object FilenameParser {
                 .map { it.trim() }.filter { it.isNotBlank() }.distinct()
         } else {
             queries
-        }.take(4)
+        }.take(6)
 
         val query = attempts.firstOrNull() ?: work.trim()
 
@@ -278,6 +318,81 @@ object FilenameParser {
     }
 
     /**
+     * A query with nothing in it but words.
+     *
+     * A shop's search is not a parser. Three reports in a row show the same
+     * thing: every request whose term still had a separator in it came back
+     * empty, on every storefront --
+     *
+     *     Nora Fatehi - Im Bossy                          nothing
+     *     It will Rain - Bruno Mars cover - Austin Mahone  nothing
+     *     O Sajna | | - Badshah X DIVINE X Nikhita Gandhi  nothing
+     *
+     * -- while the same words with the punctuation taken out are answered at
+     * once. The separators are there to tell this app which field is which,
+     * and they have done that job by the time a query is built.
+     */
+    private fun plainWords(query: String): String =
+        query.replace(Regex("""[|\u2013\u2014_]"""), " ")
+            // A dash between spaces is a separator; one inside a word is part
+            // of it, as in "Blu-ray" or a hyphenated name.
+            .replace(Regex("""\s+-+\s+"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+    /**
+     * The same phrase with the apostrophes put back where they belong.
+     *
+     * "Nora Fatehi - Im Bossy" is the file; the record is "I'm Bossy". No
+     * filesystem is troubled by an apostrophe, but plenty of download tools
+     * strip one anyway, and a shop's search index is not as forgiving as it
+     * looks: asking for the title without it found thirty-three records called
+     * "Bossy" by other people, and asking for the artist and the title
+     * together found nothing whatsoever.
+     *
+     * Only the contractions, which are the only words where a missing
+     * apostrophe is certain rather than guessed -- a name might be spelled
+     * either way and is left alone. Returns null when there is nothing to put
+     * back, so the caller does not end up asking the same thing twice.
+     */
+    private fun apostrophesBack(text: String?): String? {
+        val original = text?.takeIf { it.isNotBlank() } ?: return null
+        var out = original
+        for ((flat, proper) in CONTRACTIONS) {
+            out = Regex(
+                """(?<![\p{L}\p{N}'])""" + flat + """(?![\p{L}\p{N}'])""",
+                RegexOption.IGNORE_CASE,
+            ).replace(out) { match ->
+                // Keep whatever case the file used; only the mark is added.
+                if (match.value.first().isUpperCase()) proper.replaceFirstChar { it.uppercaseChar() }
+                else proper
+            }
+        }
+        return out.takeIf { it != original }
+    }
+
+    /**
+     * Contractions worth restoring, flattened spelling to proper.
+     *
+     * Deliberately short. Every entry is a word that is only ever a
+     * contraction, so putting the mark back cannot turn one word into another:
+     * "im" is never anything else, while "were", "well", "ill" and "lets"
+     * plainly are, and are not here.
+     */
+    private val CONTRACTIONS = listOf(
+        "im" to "i'm", "dont" to "don't", "cant" to "can't", "wont" to "won't",
+        "aint" to "ain't", "isnt" to "isn't", "arent" to "aren't",
+        "wasnt" to "wasn't", "werent" to "weren't", "doesnt" to "doesn't",
+        "didnt" to "didn't", "hasnt" to "hasn't", "havent" to "haven't",
+        "couldnt" to "couldn't", "wouldnt" to "wouldn't", "shouldnt" to "shouldn't",
+        "youre" to "you're", "theyre" to "they're", "ive" to "i've",
+        "youve" to "you've", "weve" to "we've", "theyve" to "they've",
+        "youll" to "you'll", "theyll" to "they'll",
+        "thats" to "that's", "whats" to "what's", "wheres" to "where's",
+        "whos" to "who's",
+    )
+
+    /**
      * The artist a record is filed under, without the guests.
      *
      * "The Weeknd ft. Dua Lipa" is filed as The Weeknd everywhere that sells
@@ -301,7 +416,9 @@ object FilenameParser {
         // Pipes first: a name with pipes is the film convention, and its dashes
         // (if any) are inside one of the fields rather than the top-level split.
         if (text.contains('|')) {
-            val parts = text.split('|').map { it.trim() }.filter { !meaningless(it) }
+            val parts = text.split('|')
+                .map { it.trim().trim(*EDGE_JUNK) }
+                .filter { it.isNotEmpty() && !meaningless(it) }
             if (parts.size >= 2) {
                 // The first field is the song, often with the film attached by a
                 // dash: "Kesariya - Brahmastra". Those have to come apart --

@@ -42,7 +42,24 @@ object Net {
        meant to be pasted to somebody, and nobody's TMDb key should travel with
        it.
     */
-    private const val REMEMBERED = 16
+    /*
+       Enough to cover every attempt, which sixteen was not.
+
+       A music lookup makes seven requests per attempt -- six storefront-and-
+       entity combinations and one to MusicBrainz -- and tries up to four
+       attempts. Sixteen kept the last two and a bit, and a ring buffer drops
+       the oldest, so the requests that went missing were the ones from the
+       *first* attempt: the precise "artist and title" query, which is the one
+       whose answer decides everything.
+
+       A report for "Nora Fatehi - Im Bossy" is what showed this up. The record
+       is in Apple's catalogue and was not in the results, and the report could
+       not say whether the precise query had been asked and answered empty or
+       had never been sent, because those lines had already fallen off the
+       front. A report that cannot account for the first attempt cannot be read
+       at all.
+    */
+    private const val REMEMBERED = 40
     private val log = ArrayDeque<String>()
 
     @Synchronized
