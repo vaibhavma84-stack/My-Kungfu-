@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "MVTagger"
 include(":core")
-// include(":app")
+include(":app")

@@ -36,6 +36,19 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # The sandbox that writes this code has no Android SDK, so the local test
+      # script comments the app module out of the Gradle files to run the core
+      # tests, and puts them back afterwards. Once it did not put them back, the
+      # stubs were committed, and this build failed at configuration in six
+      # seconds with two hundred lines of Gradle stack trace saying nothing
+      # about the cause. One line, before anything else, says it plainly.
+      - name: Check both modules are still in the build
+        run: |
+          grep -q '^include(":app")' settings.gradle.kts \
+            || { echo "settings.gradle.kts has the app module commented out."; exit 1; }
+          grep -q 'com.android.application' build.gradle.kts \
+            || { echo "build.gradle.kts is missing the Android plugins."; exit 1; }
+
       # The JVM and Android do not share a regex engine, so a pattern the tests
       # accept can still kill the app on launch -- which is exactly how v1
       # shipped. Every pattern is compiled against ICU, the engine the phone
