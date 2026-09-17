@@ -840,3 +840,110 @@ class BracketedTitleTest {
         assertEquals(1.0, Matching.titleMatch(real, real), 0.001)
     }
 }
+
+/**
+ * A cover video, where the song was read as the artist.
+ *
+ * From a report for
+ *
+ *     It will Rain - Bruno Mars music video cover - Austin Mahone_HD.mp4
+ *
+ * read as an artist called "It will Rain" performing something called "Bruno
+ * Mars cover - Austin Mahone". Everything after the first dash was glued
+ * together into the title, so the shops were asked for a song of that name.
+ * Apple's Indian storefront answered with eleven records, every one of them a
+ * stranger -- "If I Ain't Got You", "Shower", "Just a Friend" -- and all
+ * eleven scored zero, which was the only honest thing left to do with them.
+ *
+ * Nothing was missing from the name. The pairing that finds this in one
+ * request was simply never asked for.
+ */
+class CoverVideoTest {
+
+    private val name = "It will Rain - Bruno Mars music video cover - Austin Mahone_HD.mp4"
+
+    @Test
+    fun `the song is the field that is not a credit`() {
+        val p = FilenameParser.parse(name)
+        assertEquals("It will Rain", p.title)
+        assertEquals("Bruno Mars", p.artist)
+    }
+
+    @Test
+    fun `and the pairing that finds it is asked for first`() {
+        val p = FilenameParser.parse(name)
+        assertEquals("Bruno Mars It will Rain", p.queries.first())
+    }
+
+    @Test
+    fun `whoever actually performed it is not thrown away`() {
+        val p = FilenameParser.parse(name)
+        assertTrue(p.extras.toString(), p.extras.any { it.contains("Austin Mahone") })
+    }
+
+    @Test
+    fun `the third field is a field rather than part of the title`() {
+        // The whole fault in one assertion: the title must not carry the rest
+        // of the name along with it.
+        val p = FilenameParser.parse(name)
+        assertTrue(p.title.toString(), !p.title!!.contains("-"))
+    }
+
+    @Test
+    fun `a two field cover credit reads the same way`() {
+        val p = FilenameParser.parse("It will Rain - Bruno Mars cover.mp4")
+        assertEquals("It will Rain", p.title)
+        assertEquals("Bruno Mars", p.artist)
+    }
+
+    @Test
+    fun `and so does the credit written the other way about`() {
+        val p = FilenameParser.parse("Photograph - cover by Boyce Avenue.mp4")
+        assertEquals("Photograph", p.title)
+        assertEquals("Boyce Avenue", p.artist)
+    }
+
+    /**
+     * The cost of the rule, and why it is affordable.
+     *
+     * A title can genuinely end in the word, and this reads such a name the
+     * wrong way round. The reading as written is kept as an extra, so it is
+     * still one of the things asked for and nothing is lost but the order.
+     */
+    @Test
+    fun `a title that really ends in the word is still asked for as written`() {
+        val p = FilenameParser.parse("Some Band - Under Cover.mp4")
+        assertTrue(p.queries.toString(), p.queries.any { it == "Some Band Under Cover" })
+    }
+
+    @Test
+    fun `the ordinary two part name is untouched`() {
+        val p = FilenameParser.parse("Adele - Hello.mp4")
+        assertEquals("Adele", p.artist)
+        assertEquals("Hello", p.title)
+    }
+
+    /**
+     * The scoring half, with the runtimes from the report: the file runs 4:23
+     * and Bruno Mars's record 4:17, which is the ordinary difference between a
+     * video and the album cut.
+     */
+    @Test
+    fun `the right record now wins outright`() {
+        val p = FilenameParser.parse(name)
+        val right = Candidate(
+            source = "iTunes", id = "1", title = "It Will Rain", artist = "Bruno Mars",
+            durationMs = 257_000, kind = "song", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val stranger = Candidate(
+            source = "iTunes", id = "2", title = "If I Ain't Got You", artist = "Alicia Keys",
+            durationMs = 209_000, kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val ranked = Matching.rank(listOf(stranger, right), p, durationMs = 263_000)
+        assertEquals(ranked.toString(), "It Will Rain", ranked.first().candidate.title)
+        assertTrue(
+            "score was " + ranked.first().score,
+            ranked.first().isConfident,
+        )
+    }
+}

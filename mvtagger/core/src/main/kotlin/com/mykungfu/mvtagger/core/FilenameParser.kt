@@ -369,14 +369,11 @@ object FilenameParser {
         }
 
         for (sep in SEPARATORS) {
-            val at = text.indexOf(sep)
-            if (at > 0) {
-                val left = text.substring(0, at).trim()
-                val right = text.substring(at + sep.length).trim()
-                if (left.isNotEmpty() && right.isNotEmpty()) {
-                    return Split(artist = left, title = right, album = null, extras = emptyList())
-                }
-            }
+            if (!text.contains(sep)) continue
+            val fields = text.split(sep)
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !meaningless(it) }
+            if (fields.size >= 2) return dashFields(fields)
         }
 
         // A bare dash with no spaces around it, as in "Adele-Hello".
@@ -392,6 +389,80 @@ object FilenameParser {
 
         return Split(artist = null, title = text.ifBlank { null }, album = null, extras = emptyList())
     }
+
+    /**
+     * A dash-separated name, read as fields rather than as two halves.
+     *
+     *     It will Rain - Bruno Mars cover - Austin Mahone
+     *
+     * Everything after the first dash used to be glued together into the
+     * title, which asked the shops for a song called "Bruno Mars cover -
+     * Austin Mahone". Apple's Indian storefront answered with eleven records,
+     * every one of them a stranger -- "If I Ain't Got You", "Shower", "Just a
+     * Friend" -- and all eleven scored zero, which was the only honest thing
+     * left to do with them.
+     *
+     * The words were all there. The pairing that finds this in one request,
+     * "It will Rain" with "Bruno Mars", was never asked for. So the fields
+     * after the second are kept as extras, which the scoring tries against
+     * every field, exactly as the pipe convention already does.
+     */
+    private fun dashFields(fields: List<String>): Split {
+        val first = fields[0]
+        val second = fields[1]
+        val rest = fields.drop(2)
+
+        /*
+           A cover credit names a person, so the song is the other field.
+
+           The field as it was written is kept as an extra, which puts the
+           untouched reading back in the list of things asked for. It matters
+           because a title really can end in the word: "Some Band - Under
+           Cover" is read here as an artist called Under, and the extra is what
+           still asks the shops for "Some Band Under Cover". Trying both and
+           letting the scoring decide is how every other guess in this file is
+           handled.
+        */
+        coverCredit(second)?.let {
+            return Split(artist = it, title = first, album = null, extras = rest + second)
+        }
+        coverCredit(first)?.let {
+            return Split(artist = it, title = second, album = null, extras = rest + first)
+        }
+
+        return Split(artist = first, title = second, album = null, extras = rest)
+    }
+
+    /**
+     * The artist a cover credit names, or null when this field is not one.
+     *
+     * "Bruno Mars cover" is not a title and it is not the performer either --
+     * it is who the song belongs to, which is precisely what a catalogue has
+     * it filed under. Reading it as a credit is what turns this name the right
+     * way round: a field that names an artist cannot be the song, so the other
+     * one is.
+     *
+     * The performer is not lost; they are the field after, and the scoring
+     * tries every field against every part of an answer.
+     *
+     * A title really can end in the word -- and if one does, this reads it
+     * wrongly, asks for something no shop has, scores zero and shows the
+     * person a list rather than writing anything. That is the cheap way round
+     * to be wrong, and the whole class of cover uploads works.
+     */
+    private fun coverCredit(field: String): String? {
+        COVER_BEFORE.find(field)?.let { return it.groupValues[1].trim().ifBlank { null } }
+        COVER_AFTER.find(field)?.let { return it.groupValues[2].trim().ifBlank { null } }
+        return null
+    }
+
+    /** `Bruno Mars cover`, `Ed Sheeran cover version`. */
+    private val COVER_BEFORE =
+        Regex("""^(.+?)\s+cover(\s+version)?$""", RegexOption.IGNORE_CASE)
+
+    /** `cover by Boyce Avenue`, `covered by Austin Mahone`. */
+    private val COVER_AFTER =
+        Regex("""^cover(ed)?\s+by\s+(.+)$""", RegexOption.IGNORE_CASE)
 
     private fun stripNoise(text: String): String {
         var out = text
