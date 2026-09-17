@@ -1368,7 +1368,7 @@
 <div id="listWrap"></div>
 
   <div class="pa-block" id="portCallWrap">
-    <button type="button" class="pa-head pa-head-toggle" id="portCallToggle">Port call <span id="portCallChevron">&#9656;</span></button>
+    <button type="button" class="pa-head pa-head-toggle" id="portCallToggle">Checklists <span id="portCallChevron">&#9656;</span></button>
     <div id="portCallBody">
     <div class="form-row row-main">
       <div class="field span-2">
@@ -1377,6 +1377,7 @@
           <option value="arrival">Pre-arrival</option>
           <option value="lastmin">Last minute checks</option>
           <option value="departure">Departure</option>
+          <option value="takingover">Taking Over Checks</option>
         </select>
       </div>
       <div class="field job-field">
@@ -4315,6 +4316,7 @@
         ['Load / Discharge Orders'],
         ['BWRF'],
         ['BWRB'],
+        ['Take ballast samples'],
         ['GRB'],
         ['OLB'],
         ['Rodent log'],
@@ -4376,6 +4378,7 @@
         ['Port log'],
         ['BWRF'],
         ['BWRB'],
+        ['Take ballast samples'],
         ['OLB'],
         ['Vessel Search Checklist'],
         ['Load / Disch. Orders'],
@@ -4383,6 +4386,36 @@
         ['MSDS'],
         ['MARVS ENTRY'],
         ['Post Cargo form']
+      ]
+    },
+    // Not tied to a port or an arrival -- an officer taking over goes through
+    // this whichever day it happens to be. Port is left optional rather than
+    // required like the others. More items to come; this is a starting list.
+    takingover: {
+      label: 'Taking Over Checks',
+      portOptional: true,
+      items: [
+        ['Go through handing over notes'],
+        ['Cargo onboard - heel'],
+        ['Cargo loaded / discharged'],
+        ['Cargo in hand'],
+        ['Inspection dates'],
+        ['Charterers instructions'],
+        ['Fuel consumption issue with cooling down'],
+        ['Issues onboard'],
+        ['Cranes'],
+        ['Spare wires'],
+        ['Expiring / expired certificates'],
+        ['Gas meters / span gas'],
+        ['CO2 Room Entry Procedure'],
+        ['Standing Orders'],
+        ['Vents List. Red and Green dot'],
+        ['Paint Store MSDS organise and training'],
+        ['SOPEP equipment remove all and take inventory. Check condition of 7 Barrel Kit Wheels'],
+        ['Aft and Fwd. ETA condition. Greasing. Test the light. ETA max deployment time. Poster ship specific'],
+        ['Pilot ladders actual manufacturing dates'],
+        ['Pending requisitions. Requisitions to be raised?'],
+        ['Lifting equipment inventory. Slings. D shackles. Harness. Double lanyards. Fall preventer equipment']
       ]
     }
   };
@@ -4411,17 +4444,18 @@
     var date = document.getElementById('paDate').value;
     var kind = document.getElementById('paKind').value;
     if(!PORT_CALL_SETS[kind]) kind = 'arrival';
-    var arr  = kind === 'departure' ? '' : document.getElementById('paArrDate').value;
+    var arr  = (kind === 'departure' || kind === 'takingover') ? '' : document.getElementById('paArrDate').value;
     var set  = portCallSet(kind);
     var note = document.getElementById('paNote');
-    if(!port){ note.textContent = 'Enter the port.'; document.getElementById('paPort').focus(); return; }
+    if(!port && !set.portOptional){ note.textContent = 'Enter the port.'; document.getElementById('paPort').focus(); return; }
     if(set.fromArrival && !arr){
       note.textContent = 'Enter the arrival date \u2014 these checks are dated off it.';
       document.getElementById('paArrDate').focus(); return;
     }
     if(!date){
-      note.textContent = 'Enter the ' + (kind === 'departure' ? 'departure' : 'pre-arrival') +
-                         ' date \u2014 that is the day the jobs go on.';
+      note.textContent = 'Enter the ' +
+                         (kind === 'departure' ? 'departure date' : kind === 'takingover' ? 'date' : 'pre-arrival date') +
+                         ' \u2014 that is the day the jobs go on.';
       document.getElementById('paDate').focus(); return;
     }
     // the same port on the same date for the same kind is far more likely a
@@ -4433,7 +4467,7 @@
              c.port.toLowerCase() === port.toLowerCase();
     });
     if(dupe){
-      note.textContent = set.label + ' for ' + port + ' on ' + fmtDate(date) + ' is already entered.';
+      note.textContent = set.label + (port ? ' for ' + port : '') + ' on ' + fmtDate(date) + ' is already entered.';
       return;
     }
 
@@ -4443,10 +4477,10 @@
       tasks.push({
         id: uid(),
         serial: nextSerial(),
-        job: row[0] + ' \u2014 ' + port,
+        job: row[0] + (port ? ' \u2014 ' + port : ''),
         due: date,
         priority: 'normal',
-        remarks: set.label + ' ' + port + (arr ? ', arrives ' + fmtDate(arr) : ''),
+        remarks: set.label + (port ? ' ' + port : '') + (arr ? ', arrives ' + fmtDate(arr) : ''),
         weeklyReport: 'no',
         ad34Planner: 'no',
         ra: !!extra.ra,
@@ -9722,7 +9756,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v57';
+  var APP_BUILD = 'v58';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -10482,14 +10516,19 @@
     var set = portCallSet(kind);
     document.getElementById('paDateLabel').textContent =
       kind === 'departure' ? 'Departure date' :
+      kind === 'takingover' ? 'Date' :
       set.fromArrival ? 'Jobs on' : 'Pre-arrival date';
-    // a departure has one date; leaving the arrival field showing would invite
+    // a departure -- or taking-over checks, which is not tied to an arrival
+    // either -- has one date; leaving the arrival field showing would invite
     // a date that nothing would ever use
-    document.getElementById('paArrField').style.display = kind === 'departure' ? 'none' : '';
+    document.getElementById('paArrField').style.display =
+      (kind === 'departure' || kind === 'takingover') ? 'none' : '';
     document.getElementById('paAddBtn').textContent = '+ Add ' + set.label.toLowerCase();
+    document.getElementById('paPort').placeholder = set.portOptional ? 'Optional' : 'e.g. Singapore';
     document.getElementById('paNote').textContent =
       set.items.length + ' jobs will be raised ' +
       (kind === 'departure' ? 'on the departure date'
+        : kind === 'takingover' ? 'on that date'
         : set.fromArrival ? 'the day before the ship arrives'
         : 'on the pre-arrival date') + '.';
     syncLastMinDate();
