@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose paints everything; this only has to be a valid parent that does
+         not draw its own action bar over the top. -->
+    <style name="Theme.MVTagger" parent="android:Theme.Material.NoActionBar" />
+</resources>

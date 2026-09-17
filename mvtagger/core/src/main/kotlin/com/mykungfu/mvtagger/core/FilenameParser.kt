@@ -1,0 +1,609 @@
+package com.mykungfu.mvtagger.core
+
+/**
+ * What could be worked out from a filename before anything was looked up.
+ *
+ * [query] is what actually gets sent to the search services -- they do better
+ * with the whole cleaned phrase than with a guessed split, so the split into
+ * [artist] and [title] is for showing the user and for scoring the results,
+ * not for the search itself.
+ */
+data class ParsedName(
+    val artist: String? = null,
+    val title: String? = null,
+    val album: String? = null,
+    val year: String? = null,
+    val trackNumber: Int? = null,
+    /** The best single query. Kept for callers that only want one. */
+    val query: String = "",
+    /**
+     * Queries to try in order, best first.
+     *
+     * Indian film music needs this. "Kesariya" alone is ambiguous, "Kesariya
+     * Brahmastra" finds it at once, and which combination works depends on how
+     * the uploader happened to name the file -- so several are tried rather
+     * than betting everything on one guess.
+     */
+    val queries: List<String> = emptyList(),
+    /** Leftover pipe-separated fields: singers, music director, film. */
+    val extras: List<String> = emptyList(),
+    val language: String? = null,
+)
+
+/**
+ * Turns a downloaded filename into something searchable.
+ *
+ * Downloaded music videos are named in a handful of recognisable ways:
+ *
+ * ```
+ * Adele - Hello (Official Music Video) [1080p].mp4
+ * 03. Coldplay - Yellow.mkv
+ * Kesariya – Brahmastra | Ranbir Kapoor | Arijit Singh | Pritam.mp4
+ * Tum_Hi_Ho_-_Aashiqui_2_[YE7VzlLtp-4].webm
+ * ```
+ *
+ * The first is `Artist - Title`. The third is the Hindi film convention, which
+ * is the opposite way round: the song comes first and the film, cast and
+ * singers follow after pipes. Both are handled, because the collection has both.
+ */
+object FilenameParser {
+
+    /** Junk that is never part of a song title. Matched whole-word, any case. */
+    private val NOISE = listOf(
+        "official music video", "official video song", "official video",
+        "official audio", "official lyric video", "official trailer",
+        "full video song", "full video", "video song", "full song",
+        "lyric video", "lyrical video", "with lyrics", "lyrics", "lyrical",
+        "music video", "official", "hd video", "audio song",
+        "remastered", "reupload", "extended version",
+        "4k", "8k", "2160p", "1440p", "1080p", "1080i", "720p", "480p", "360p",
+        "hd", "fhd", "uhd", "hq", "x264", "x265", "h264", "h265", "hevc",
+        "aac", "mp3", "m4a", "webm", "bluray", "brrip", "dvdrip", "web-dl",
+        "60fps", "copyright free", "free download",
+        // Labels and channels, which are in the name of most Indian uploads and
+        // are never part of the song.
+        "t-series", "t series", "zee music company", "zee music", "sony music india",
+        "sony music", "tips official", "tips music", "saregama", "yrf", "eros now",
+        "shemaroo", "venus", "speed records", "white hill music", "geet mp3",
+        "times music", "aditya music", "lahari music", "think music",
+        "full audio", "audio jukebox", "jukebox", "teaser", "making of",
+        "out now", "latest hindi song", "new hindi song", "hindi song",
+        "latest song", "new song", "bollywood song",
+    )
+
+    /**
+     * Punctuation that is only ever a separator, never part of a name.
+     *
+     * Trimmed from the whole name and from each field of it. A field that kept
+     * its leading dash -- "- Badshah X DIVINE X Nikhita Gandhi", which is what
+     * a download tool leaves behind -- carried that dash into a query, and a
+     * query with a dash in it is answered by nobody.
+     */
+    private val EDGE_JUNK =
+        charArrayOf(' ', '-', '\u2013', '\u2014', '|', '.', '_', ',')
+
+    /** A YouTube id as yt-dlp leaves it: exactly eleven of this alphabet. */
+    private val YOUTUBE_ID = Regex("""[\[(\-_ ][A-Za-z0-9_-]{11}[\])]?$""")
+
+    private val BRACKETED = Regex("""[\[({][^\[\]{}()]*[\])}]""")
+    private val LEADING_TRACK = Regex("""^\s*(\d{1,3})\s*[.\-)]\s+""")
+    private val YEAR = Regex("""(?<!\d)(19\d{2}|20\d{2})(?!\d)""")
+    private val SEPARATORS = listOf(" - ", " – ", " — ", " -- ", " _ ")
+
+    /**
+     * A run of underscores: a separator a download tool flattened.
+     *
+     * Two, not three. Tools differ in what they do with the pipe itself --
+     * some replace it, giving " | " -> "___", and some delete it, leaving the
+     * two spaces around it as "__". Both are the same separator, and a real
+     * title almost never carries a double space.
+     */
+    private val UNDERSCORE_RUN = Regex("_{2,}")
+
+    /**
+     * Words that are a whole segment and say nothing.
+     *
+     * "Maine Pi Rakhi Hai | Song | Tu Jhoothi Main Makkaar" has three fields
+     * and only two of them are worth anything. Left in, the useless one is
+     * first in line to be tried with the song -- so the search asks for
+     * "Maine Pi Rakhi Hai Song" while the film sits unused behind it.
+     */
+    private val SEGMENT_NOISE = setOf(
+        "song", "songs", "video", "videos", "audio", "lyrical", "lyric",
+        "lyrics", "official", "full", "hd", "4k", "teaser", "trailer",
+        "promo", "jukebox", "reprise", "cover", "remix", "new", "latest",
+    )
+
+    /** A trailing "song", with any of the words that usually come before it. */
+    private val TRAILING_SONG = Regex(
+        """\s+(full\s+)?(video\s+|audio\s+|lyrical\s+)?song\s*$""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * The words an uploader hangs on the end of the song and nobody else uses.
+     *
+     * `Nachle Na Video`, `Kesariya Full Video Song`, `Tera Hua Lyrical`. None
+     * of them is part of a title and all of them wreck a search, because the
+     * catalogue has the song under its own name and nothing else.
+     */
+    private val TRAILING_MARKER = Regex(
+        """\s+((official|full|hd|4k)\s+)*(video|audio|lyrical|lyrics|song)\s*$""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Whether this segment is the song rather than a name.
+     *
+     * The marker is the tell. An uploader writes `Nachle Na Video` for the
+     * song and `Neeti M` for the singer, never the other way round.
+     */
+    private fun looksLikeTheSong(part: String): Boolean =
+        TRAILING_MARKER.containsMatchIn(part)
+
+    fun parse(fileName: String): ParsedName {
+        val base = stripExtension(fileName)
+        // Non-breaking spaces survive many download tools and break matching.
+        var work = base.replace('\u00A0', ' ')
+
+        // A run of underscores is a separator the download tool flattened. " | "
+        // is three characters and a fussy filesystem takes all three, so the
+        // pipes that carry the whole film convention arrive as "___":
+        //
+        //     Besharam Rang Song | Pathaan | Shah Rukh Khan, Deepika Padukone
+        //     Besharam_Rang_Song___Pathaan___Shah_Rukh_Khan,_Deepika_Padukone
+        //
+        // This has to be undone before the single underscores are, or the
+        // separator becomes an ordinary space, the name reads as one long
+        // title, and the search asks for the song, the film and the entire
+        // cast at once -- which no catalogue has anything filed under.
+        val hadSpaces = work.contains(' ')
+        work = work.replace(UNDERSCORE_RUN, " | ")
+
+        // yt-dlp writes underscores for spaces when a filesystem is fussy. Only
+        // undo that if the name had no real spaces, so "Tum Hi Ho_Aashiqui" is
+        // untouched.
+        if (!hadSpaces && work.contains('_')) work = work.replace('_', ' ')
+
+        var trackNumber: Int? = null
+        LEADING_TRACK.find(work)?.let {
+            val n = it.groupValues[1].toIntOrNull()
+            // A leading "2013" is a year, not track two hundred and thirteen.
+            if (n != null && n in 1..199) {
+                trackNumber = n
+                work = work.removeRange(it.range)
+            }
+        }
+
+        // Bracketed groups are almost always noise -- resolution, a video id, a
+        // channel name. Keep a bracketed year, which is not.
+        val yearFromBrackets = BRACKETED.findAll(work)
+            .mapNotNull { YEAR.find(it.value)?.value }
+            .firstOrNull()
+        work = BRACKETED.replace(work, " ")
+        work = YOUTUBE_ID.replace(work, " ")
+
+        work = stripNoise(work)
+
+        val yearFromText = YEAR.find(work)?.value
+        val year = yearFromBrackets ?: yearFromText
+
+        work = work.replace(Regex("""\s+"""), " ").trim(*EDGE_JUNK)
+        work = pipesWrittenAsLetters(work)
+
+        val (artist, title, album, extras) = split(work)
+
+        // Several attempts, best first, deduplicated. The film is worth as much
+        // as the singer for finding an Indian track, and the uploader decides
+        // which of the two is even in the name.
+        val queries = listOfNotNull(
+            listOfNotNull(artist, title).joinToString(" ").trim().ifBlank { null },
+            // The same thing with the apostrophe put back. A filesystem drops
+            // it and a shop's index keeps it, and one missing apostrophe is
+            // the difference between finding a record in a single request and
+            // not finding it at all.
+            apostrophesBack(listOfNotNull(artist, title).joinToString(" ").trim()),
+            // The same thing without whoever was featured on it. A shop files
+            // a record under the artist it was released by, and the guest is
+            // often only in the subtitle or not there at all -- so "The Weeknd
+            // ft. Dua Lipa Obsession" can find nothing where "The Weeknd
+            // Obsession" finds it at once.
+            listOfNotNull(headliner(artist), title).joinToString(" ").trim()
+                .ifBlank { null },
+            listOfNotNull(title, album).joinToString(" ").trim().ifBlank { null },
+            extras.firstOrNull()?.let { listOfNotNull(title, it).joinToString(" ").trim() },
+            /*
+               The song and the first name credited beside it.
+
+               "O Sajna | Badshah X DIVINE X Nikhita Gandhi | Ek Tha Raja" names
+               three artists with an X between them, and the whole string is
+               filed nowhere. A shop files a record under the first name on it,
+               so this asks for "O Sajna Badshah" -- which is the record.
+            */
+            extras.firstOrNull()?.let { first ->
+                headliner(first)?.let { listOfNotNull(title, it).joinToString(" ").trim() }
+            },
+            title?.trim(),
+            apostrophesBack(title?.trim()),
+            /*
+               The artist on their own, which is the last thing worth asking.
+
+               A shop files everything an artist released under their name, so
+               this cannot miss a record that exists -- where a title-only
+               search can, and does, whenever the title is one that dozens of
+               records share. It is late in the order because it is the
+               broadest and the slowest to score, and it is here because a
+               report came back with thirty-three records called "Bossy" and
+               none of them by the artist the filename named.
+            */
+            artist?.trim(),
+            work.trim(),
+        ).map { plainWords(it) }.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+
+        // A Devanagari title has to be searched for in Latin letters: the
+        // catalogues index the transliterated spelling and searching in the
+        // original script finds nothing at all. The Latin form goes first
+        // because it is the one that will actually hit.
+        val attempts = if (Transliterate.hasDevanagari(work)) {
+            (queries.map { Transliterate.devanagari(it) } + queries)
+                .map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        } else {
+            queries
+        }.take(6)
+
+        val query = attempts.firstOrNull() ?: work.trim()
+
+        return ParsedName(
+            artist = artist?.takeIf { it.isNotBlank() },
+            title = title?.takeIf { it.isNotBlank() },
+            album = album?.takeIf { it.isNotBlank() },
+            year = year,
+            trackNumber = trackNumber,
+            query = query,
+            queries = attempts,
+            extras = extras,
+            language = Languages.fromScript(TextScript.dominant(work))
+                ?.takeIf { TextScript.hasNonLatin(work) },
+        )
+    }
+
+    private data class Split(
+        val artist: String?,
+        val title: String?,
+        val album: String?,
+        val extras: List<String>,
+    )
+
+    /**
+     * Whether a field carries anything worth searching for.
+     *
+     * A bare "Song", a stray track number: these are fields in the name and
+     * nothing in the answer. Dropping them matters more than it looks, because
+     * the first field after the song is the one tried alongside it, and every
+     * attempt spent on a word like "Song" is one the film does not get.
+     */
+    private fun meaningless(part: String): Boolean {
+        val words = part.split(Regex("""[^\p{L}\p{N}]+""")).filter { it.isNotBlank() }
+        if (words.isEmpty()) return true
+        // A lone short number is a track number, not a field. Four digits is a
+        // year, which is worth keeping.
+        if (words.size == 1 && words[0].length <= 3 && words[0].all { it.isDigit() }) return true
+        return words.all { it.lowercase() in SEGMENT_NOISE }
+    }
+
+    /**
+     * The pipe that could not be a pipe.
+     *
+     * `BAILAMOS I PAYAL DEV I BADSHAH I ADITYA DEV I PAVAN BOB` is the film
+     * convention -- song, then singers, then whoever else -- written with a
+     * capital I where each pipe belongs. It is not a typo and it is not rare:
+     * no filesystem will accept `|` in a name, so the uploader or the
+     * downloader puts the nearest thing that looks the same, and every one of
+     * these arrives as one unbroken string that no catalogue has ever heard of.
+     * Searched whole, it returns nothing, which is exactly what it did.
+     *
+     * Two or more of them, or none. A single standalone I is far more likely a
+     * word -- "You And I", "Me And I" -- and turning that one into a separator
+     * would cut a title in half to fix a filename shape that is not there.
+     * With two the reading is unambiguous: nothing is called "You And I Love
+     * You And I".
+     */
+    private fun pipesWrittenAsLetters(text: String): String {
+        // Punctuation that is simply a pipe wearing a different code point can
+        // be swapped outright; there is nothing else it could be.
+        val work = text.replace('\uFF5C', '|').replace('\u00A6', '|').replace('\u01C0', '|')
+        val standalone = Regex("""(?<=\s)I(?=\s)""")
+        if (standalone.findAll(work).count() < 2) return work
+        return standalone.replace(work, "|")
+    }
+
+    /**
+     * A query with nothing in it but words.
+     *
+     * A shop's search is not a parser. Three reports in a row show the same
+     * thing: every request whose term still had a separator in it came back
+     * empty, on every storefront --
+     *
+     *     Nora Fatehi - Im Bossy                          nothing
+     *     It will Rain - Bruno Mars cover - Austin Mahone  nothing
+     *     O Sajna | | - Badshah X DIVINE X Nikhita Gandhi  nothing
+     *
+     * -- while the same words with the punctuation taken out are answered at
+     * once. The separators are there to tell this app which field is which,
+     * and they have done that job by the time a query is built.
+     */
+    private fun plainWords(query: String): String =
+        query.replace(Regex("""[|\u2013\u2014_]"""), " ")
+            // A dash between spaces is a separator; one inside a word is part
+            // of it, as in "Blu-ray" or a hyphenated name.
+            .replace(Regex("""\s+-+\s+"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+    /**
+     * The same phrase with the apostrophes put back where they belong.
+     *
+     * "Nora Fatehi - Im Bossy" is the file; the record is "I'm Bossy". No
+     * filesystem is troubled by an apostrophe, but plenty of download tools
+     * strip one anyway, and a shop's search index is not as forgiving as it
+     * looks: asking for the title without it found thirty-three records called
+     * "Bossy" by other people, and asking for the artist and the title
+     * together found nothing whatsoever.
+     *
+     * Only the contractions, which are the only words where a missing
+     * apostrophe is certain rather than guessed -- a name might be spelled
+     * either way and is left alone. Returns null when there is nothing to put
+     * back, so the caller does not end up asking the same thing twice.
+     */
+    private fun apostrophesBack(text: String?): String? {
+        val original = text?.takeIf { it.isNotBlank() } ?: return null
+        var out = original
+        for ((flat, proper) in CONTRACTIONS) {
+            out = Regex(
+                """(?<![\p{L}\p{N}'])""" + flat + """(?![\p{L}\p{N}'])""",
+                RegexOption.IGNORE_CASE,
+            ).replace(out) { match ->
+                // Keep whatever case the file used; only the mark is added.
+                if (match.value.first().isUpperCase()) proper.replaceFirstChar { it.uppercaseChar() }
+                else proper
+            }
+        }
+        return out.takeIf { it != original }
+    }
+
+    /**
+     * Contractions worth restoring, flattened spelling to proper.
+     *
+     * Deliberately short. Every entry is a word that is only ever a
+     * contraction, so putting the mark back cannot turn one word into another:
+     * "im" is never anything else, while "were", "well", "ill" and "lets"
+     * plainly are, and are not here.
+     */
+    private val CONTRACTIONS = listOf(
+        "im" to "i'm", "dont" to "don't", "cant" to "can't", "wont" to "won't",
+        "aint" to "ain't", "isnt" to "isn't", "arent" to "aren't",
+        "wasnt" to "wasn't", "werent" to "weren't", "doesnt" to "doesn't",
+        "didnt" to "didn't", "hasnt" to "hasn't", "havent" to "haven't",
+        "couldnt" to "couldn't", "wouldnt" to "wouldn't", "shouldnt" to "shouldn't",
+        "youre" to "you're", "theyre" to "they're", "ive" to "i've",
+        "youve" to "you've", "weve" to "we've", "theyve" to "they've",
+        "youll" to "you'll", "theyll" to "they'll",
+        "thats" to "that's", "whats" to "what's", "wheres" to "where's",
+        "whos" to "who's",
+    )
+
+    /**
+     * The artist a record is filed under, without the guests.
+     *
+     * "The Weeknd ft. Dua Lipa" is filed as The Weeknd everywhere that sells
+     * anything; the feature is a credit, not part of the name. Returns null
+     * when there is nothing to take off, so the caller does not end up with
+     * the same query twice.
+     */
+    private fun headliner(artist: String?): String? {
+        if (artist.isNullOrBlank()) return null
+        val cut = FEATURING.split(artist).firstOrNull()?.trim()?.ifBlank { null } ?: return null
+        return if (cut.equals(artist.trim(), ignoreCase = true)) null else cut
+    }
+
+    /** The ways a guest is introduced, all of which mean the same thing. */
+    private val FEATURING = Regex(
+        """\s+(feat\.?|ft\.?|featuring|with|x|&|,)\s+""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun split(text: String): Split {
+        // Pipes first: a name with pipes is the film convention, and its dashes
+        // (if any) are inside one of the fields rather than the top-level split.
+        if (text.contains('|')) {
+            val parts = text.split('|')
+                .map { it.trim().trim(*EDGE_JUNK) }
+                .filter { it.isNotEmpty() && !meaningless(it) }
+            if (parts.size >= 2) {
+                // The first field is the song, often with the film attached by a
+                // dash: "Kesariya - Brahmastra". Those have to come apart --
+                // searching for the two glued together finds nothing at all.
+                // "Besharam Rang Song", "Kesariya Song" -- the word is on the
+                // end of most of these uploads and is part of no title. Only
+                // stripped here, inside the film convention, where it is a
+                // reliable habit rather than a guess: an English song really
+                // can be called "Song 2".
+                /*
+                   Which way round this one is.
+
+                   Two conventions share the pipe and they are opposites:
+
+                     Kesariya | Brahmastra | Arijit Singh      song first
+                     Guru Randhawa | Nachle Na Video | DIL ... artist first
+
+                   The second is what a channel uploads under its own name, and
+                   it read as a song called "Guru Randhawa" -- which no
+                   catalogue has, so the search found his other records and
+                   scored the right one tenth.
+
+                   The marker word is what tells them apart. "Nachle Na Video"
+                   is the song with the uploader's habit on the end of it;
+                   "Guru Randhawa" is a person. So when the first segment
+                   carries no marker and the second does, they swap.
+                */
+                val artistFirst = parts.size >= 2 &&
+                        !looksLikeTheSong(parts[0]) && looksLikeTheSong(parts[1])
+                if (artistFirst) {
+                    val song = TRAILING_MARKER.replace(parts[1], "").trim()
+                    return Split(
+                        artist = parts[0].trim().ifBlank { null },
+                        title = song.ifBlank { null } ?: parts[1],
+                        album = null,
+                        extras = parts.drop(2),
+                    )
+                }
+
+                val head = TRAILING_SONG.replace(parts[0], "").trim()
+                var song = head
+                var film: String? = null
+                for (sep in SEPARATORS) {
+                    val at = head.indexOf(sep)
+                    if (at > 0) {
+                        song = head.substring(0, at).trim()
+                        film = head.substring(at + sep.length).trim().ifBlank { null }
+                        break
+                    }
+                }
+                return Split(
+                    // The fields after the song are the film, the cast, the
+                    // singers and the composer, in no reliable order -- the one
+                    // straight after the song is as often an actor as a singer.
+                    // Naming an actor as the artist poisons the search and gets
+                    // written to the file if the lookup then fails, so nothing
+                    // is claimed here. They are kept as extras, which the
+                    // scoring tries against every field.
+                    artist = null,
+                    title = song,
+                    album = film,
+                    extras = parts.drop(1),
+                )
+            }
+        }
+
+        for (sep in SEPARATORS) {
+            if (!text.contains(sep)) continue
+            val fields = text.split(sep)
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !meaningless(it) }
+            if (fields.size >= 2) return dashFields(fields)
+        }
+
+        // A bare dash with no spaces around it, as in "Adele-Hello".
+        val bare = Regex("""^([^-]{2,})-([^-]{2,})$""").find(text)
+        if (bare != null) {
+            return Split(
+                artist = bare.groupValues[1].trim(),
+                title = bare.groupValues[2].trim(),
+                album = null,
+                extras = emptyList(),
+            )
+        }
+
+        return Split(artist = null, title = text.ifBlank { null }, album = null, extras = emptyList())
+    }
+
+    /**
+     * A dash-separated name, read as fields rather than as two halves.
+     *
+     *     It will Rain - Bruno Mars cover - Austin Mahone
+     *
+     * Everything after the first dash used to be glued together into the
+     * title, which asked the shops for a song called "Bruno Mars cover -
+     * Austin Mahone". Apple's Indian storefront answered with eleven records,
+     * every one of them a stranger -- "If I Ain't Got You", "Shower", "Just a
+     * Friend" -- and all eleven scored zero, which was the only honest thing
+     * left to do with them.
+     *
+     * The words were all there. The pairing that finds this in one request,
+     * "It will Rain" with "Bruno Mars", was never asked for. So the fields
+     * after the second are kept as extras, which the scoring tries against
+     * every field, exactly as the pipe convention already does.
+     */
+    private fun dashFields(fields: List<String>): Split {
+        val first = fields[0]
+        val second = fields[1]
+        val rest = fields.drop(2)
+
+        /*
+           A cover credit names a person, so the song is the other field.
+
+           The field as it was written is kept as an extra, which puts the
+           untouched reading back in the list of things asked for. It matters
+           because a title really can end in the word: "Some Band - Under
+           Cover" is read here as an artist called Under, and the extra is what
+           still asks the shops for "Some Band Under Cover". Trying both and
+           letting the scoring decide is how every other guess in this file is
+           handled.
+        */
+        coverCredit(second)?.let {
+            return Split(artist = it, title = first, album = null, extras = rest + second)
+        }
+        coverCredit(first)?.let {
+            return Split(artist = it, title = second, album = null, extras = rest + first)
+        }
+
+        return Split(artist = first, title = second, album = null, extras = rest)
+    }
+
+    /**
+     * The artist a cover credit names, or null when this field is not one.
+     *
+     * "Bruno Mars cover" is not a title and it is not the performer either --
+     * it is who the song belongs to, which is precisely what a catalogue has
+     * it filed under. Reading it as a credit is what turns this name the right
+     * way round: a field that names an artist cannot be the song, so the other
+     * one is.
+     *
+     * The performer is not lost; they are the field after, and the scoring
+     * tries every field against every part of an answer.
+     *
+     * A title really can end in the word -- and if one does, this reads it
+     * wrongly, asks for something no shop has, scores zero and shows the
+     * person a list rather than writing anything. That is the cheap way round
+     * to be wrong, and the whole class of cover uploads works.
+     */
+    private fun coverCredit(field: String): String? {
+        COVER_BEFORE.find(field)?.let { return it.groupValues[1].trim().ifBlank { null } }
+        COVER_AFTER.find(field)?.let { return it.groupValues[2].trim().ifBlank { null } }
+        return null
+    }
+
+    /** `Bruno Mars cover`, `Ed Sheeran cover version`. */
+    private val COVER_BEFORE =
+        Regex("""^(.+?)\s+cover(\s+version)?$""", RegexOption.IGNORE_CASE)
+
+    /** `cover by Boyce Avenue`, `covered by Austin Mahone`. */
+    private val COVER_AFTER =
+        Regex("""^cover(ed)?\s+by\s+(.+)$""", RegexOption.IGNORE_CASE)
+
+    private fun stripNoise(text: String): String {
+        var out = text
+        for (word in NOISE) {
+            // Whole words only, so "HD" does not eat the "hd" in a real title.
+            out = Regex("""(?<![\p{L}\p{N}])${Regex.escape(word)}(?![\p{L}\p{N}])""",
+                RegexOption.IGNORE_CASE).replace(out, " ")
+        }
+        return out
+    }
+
+    fun stripExtension(fileName: String): String {
+        val dot = fileName.lastIndexOf('.')
+        // Only treat a short trailing run as an extension: "Vol.2" keeps its .2
+        // only because that is two characters and numeric, so guard on letters.
+        if (dot > 0 && dot >= fileName.length - 6 &&
+            fileName.substring(dot + 1).all { it.isLetterOrDigit() } &&
+            fileName.substring(dot + 1).any { it.isLetter() }
+        ) return fileName.substring(0, dot)
+        return fileName
+    }
+
+    fun extensionOf(fileName: String): String {
+        val stripped = stripExtension(fileName)
+        return if (stripped.length == fileName.length) "" else fileName.substring(stripped.length + 1)
+    }
+}

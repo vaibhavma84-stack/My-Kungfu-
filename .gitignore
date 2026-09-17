@@ -2,3 +2,10 @@ tests/node_modules/
 tests/package-lock.json
 tests/package.json
 tests/undefined/
+
+# MV Tagger build output
+mvtagger/.gradle/
+mvtagger/build/
+mvtagger/*/build/
+mvtagger/local.properties
+mvtagger/.kotlin/
