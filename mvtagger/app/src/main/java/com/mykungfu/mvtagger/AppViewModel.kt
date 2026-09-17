@@ -219,6 +219,14 @@ data class UiState(
      * the ordinary tap back into playing rather than choosing.
      */
     val selection: Set<String> = emptySet(),
+    /**
+     * Files ticked on the to-do list, by their own id.
+     *
+     * Kept apart from [selection], which belongs to the library: the two lists
+     * hold different things, and a tick left behind on one tab turning up on
+     * the other is the kind of surprise that gets the wrong file rewritten.
+     */
+    val todoSelection: Set<String> = emptySet(),
 ) {
     /** Something to come back out of, for the back button and the heading. */
     val insideFolder: Boolean get() = collectionFolder != null
@@ -934,13 +942,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                over it -- the note is for the ordinary case of a fresh download
                that carries nothing at all.
             */
-            val inside = TagJob.readExisting(app, item.uri, item.name)
-            val existing = if (!inside.isEmpty) {
-                inside
-            } else {
-                Catalogue.sidecarTags(app, item.treeUri, item.parentDocumentId, item.name)
-                    ?: inside
-            }
+            val existing = startingTags(item)
             val duration = TagJob.durationMs(app, item.uri)
             // Start from what the file already says, topped up with what the
             // filename suggests, so nothing is blank before a lookup runs.
@@ -957,6 +959,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 conversion = loaded.third,
             )
         )
+    }
+
+    /**
+     * What the file says, or failing that the note beside it.
+     *
+     * The note is written by the downloader, which is the one moment anybody
+     * knows for certain which channel a video came from and what it is. A file
+     * carrying its own tags is trusted over it; the note is for the ordinary
+     * case of a fresh download that carries nothing at all.
+     *
+     * Used by both ways in -- opening one file, and running over a batch --
+     * because a channel remembered for the first and forgotten for the second
+     * is the kind of difference nobody can explain afterwards.
+     */
+    private fun startingTags(item: Item): VideoTags {
+        val app = getApplication<Application>()
+        val inside = TagJob.readExisting(app, item.uri, item.name)
+        if (!inside.isEmpty) return inside
+        return Catalogue.sidecarTags(app, item.treeUri, item.parentDocumentId, item.name) ?: inside
     }
 
     private fun seedFromName(item: Item, existing: VideoTags): VideoTags {
@@ -1585,6 +1606,55 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = _state.value.copy(message = "Nothing new to do.")
             return@launch
         }
+        autoTag(todo)
+    }
+
+    /**
+     * Looks up the ticked files and nothing else.
+     *
+     * The same work as the button that does everything, aimed. Which matters
+     * for a folder of two hundred where six are worth a look: a run over all
+     * of them spends an hour and several hundred requests to answer a question
+     * about six.
+     */
+    fun lookUpSelected() = viewModelScope.launch {
+        val chosen = _state.value.todoSelection
+        val files = _state.value.items.filter { it.id in chosen }
+        if (files.isEmpty()) {
+            _state.value = _state.value.copy(message = "Nothing is ticked.")
+            return@launch
+        }
+        _state.value = _state.value.copy(todoSelection = emptySet())
+        autoTag(files)
+    }
+
+    fun toggleTodo(id: String) {
+        val now = _state.value.todoSelection
+        _state.value = _state.value.copy(
+            todoSelection = if (id in now) now - id else now + id,
+        )
+    }
+
+    fun clearTodoSelection() {
+        _state.value = _state.value.copy(todoSelection = emptySet())
+    }
+
+    fun selectAllTodo() {
+        _state.value = _state.value.copy(
+            todoSelection = _state.value.items
+                .filter { it.status == ItemStatus.NEW }
+                .map { it.id }
+                .toSet(),
+        )
+    }
+
+    /**
+     * Look each one up, and save the ones there is no doubt about.
+     *
+     * Anything under the confidence threshold is left for a person to look at
+     * rather than guessed at, which is the whole reason there is a threshold.
+     */
+    private suspend fun autoTag(todo: List<Item>) {
         var saved = 0
         var unsure = 0
         var failed = 0
@@ -1594,7 +1664,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 busy = "Auto-tagging " + (index + 1) + " of " + todo.size + "…"
             )
             val outcome = withContext(Dispatchers.IO) {
-                val existing = TagJob.readExisting(getApplication<Application>(), item.uri, item.name)
+                val existing = startingTags(item)
                 val duration = TagJob.durationMs(getApplication<Application>(), item.uri)
                 val detail = Detail(item, seedFromName(item, existing), durationMs = duration)
                 val (ranked, alternatives) = search(detail)

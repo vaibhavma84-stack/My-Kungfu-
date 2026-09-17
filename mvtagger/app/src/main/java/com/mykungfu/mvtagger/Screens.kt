@@ -275,12 +275,49 @@ private fun ToDoContent(state: UiState, viewModel: AppViewModel, onAddSource: ()
         }
     }
 
+    /*
+       Ticked files, and what can be done to them.
+
+       A long press starts it, which is how every list on the phone works, and
+       after that a tap ticks rather than opens. The bar only exists while
+       something is ticked, so the ordinary case -- open one file, deal with it
+       -- is untouched.
+    */
+    if (state.todoSelection.isNotEmpty()) {
+        Row(
+            Modifier.fillMaxWidth().padding(16.dp, 0.dp, 16.dp, 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                state.todoSelection.size.toString() + " ticked",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(
+                onClick = { viewModel.lookUpSelected() },
+                enabled = state.busy == null,
+            ) { Text("Look up these") }
+            TextButton(onClick = { viewModel.selectAllTodo() }) { Text("All new") }
+            TextButton(onClick = { viewModel.clearTodoSelection() }) { Text("Clear") }
+        }
+    }
+
     LazyColumn(
         contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(state.items, key = { it.id }) { item ->
-            ItemRow(item) { viewModel.open(item) }
+            val ticking = state.todoSelection.isNotEmpty()
+            ItemRow(
+                item = item,
+                ticked = item.id in state.todoSelection,
+                onClick = {
+                    // While ticking, a tap ticks. Opening a file in the middle
+                    // of choosing a dozen is never what was meant.
+                    if (ticking) viewModel.toggleTodo(item.id) else viewModel.open(item)
+                },
+                onLongClick = { viewModel.toggleTodo(item.id) },
+            )
         }
     }
 }
@@ -1374,13 +1411,25 @@ private fun SetupCard(state: UiState, onAddSource: () -> Unit, onPickOutput: () 
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ItemRow(item: Item, onClick: () -> Unit) {
+private fun ItemRow(
+    item: Item,
+    ticked: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        colors = if (ticked) {
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            )
+        } else {
+            CardDefaults.cardColors()
+        },
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1391,7 +1440,15 @@ private fun ItemRow(item: Item, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                StatusDot(item.status)
+                if (ticked) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = "Ticked",
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                } else {
+                    StatusDot(item.status)
+                }
             }
             Spacer(Modifier.height(4.dp))
             Text(
