@@ -78,6 +78,49 @@ object Matching {
     }
 
     /**
+     * A candidate's title with its bracketed qualifier taken off.
+     *
+     * Shops put a great deal inside brackets, and it is not all the same kind
+     * of thing:
+     *
+     *     Nachle Na (From "Dil Juunglee")     the same song, longer name
+     *     Obsession (feat. Dua Lipa)          the same song, guest credited
+     *     Butter (Megan Thee Stallion Remix)  somebody else's record entirely
+     *
+     * The first two are the record the filename is asking for. The third only
+     * has the artist's name in it, and compared whole the three are
+     * indistinguishable -- [tokenOverlap] measures against the shorter side,
+     * so the three words "Megan Thee Stallion" sitting inside that five-word
+     * title came out at 1.0 and were reported to the user as "title matches
+     * exactly".
+     *
+     * That is what put "Butter -- BTS & Megan Thee Stallion" top of the list
+     * at 84% for a file called `Megan Thee Stallion | Fantasy Pool Party`:
+     * confident enough to write on its own, and wrong. The head of the title
+     * is the part that has to agree.
+     *
+     * A blank head falls back to the whole title, because a record really can
+     * be called "(Everything I Do) I Do It for You".
+     */
+    fun headline(title: String?): String {
+        val text = title ?: return ""
+        val at = text.indexOfFirst { it == '(' || it == '[' }
+        if (at <= 0) return text
+        return text.substring(0, at).trim().ifBlank { text }
+    }
+
+    /**
+     * How well a name matches a candidate's title.
+     *
+     * The qualifier is dropped rather than weighed. Nothing is lost in the
+     * other direction: a filename that spells the qualifier out in full --
+     * "Butter Megan Thee Stallion Remix" -- is the longer side, so every word
+     * of the head still counts and the match is still exact.
+     */
+    fun titleMatch(mine: String?, theirs: String?): Double =
+        tokenOverlap(mine, headline(theirs))
+
+    /**
      * Scores episodes, which are a different problem from songs.
      *
      * A season and episode number is an exact answer, so there is nothing to
@@ -181,7 +224,6 @@ object Matching {
         // where the dash split guessed the two the wrong way round.
         val whole = tokenOverlap(parsed.query, listOfNotNull(c.artist, c.title).joinToString(" "))
         score += whole * 0.35
-        if (whole >= 0.75) reasons += "filename matches artist and title"
 
         /*
            The title, against every part of the name that could be one.
@@ -199,15 +241,22 @@ object Matching {
            check never looked at.
         */
         val titleHit = maxOf(
-            tokenOverlap(parsed.title, c.title),
+            titleMatch(parsed.title, c.title),
             // The film convention puts the song first, so the parser's "artist"
             // may in fact be the title. Try it both ways.
-            tokenOverlap(parsed.artist, c.title),
-            parsed.extras.maxOfOrNull { tokenOverlap(stripMarker(it), c.title) } ?: 0.0,
+            titleMatch(parsed.artist, c.title),
+            parsed.extras.maxOfOrNull { titleMatch(stripMarker(it), c.title) } ?: 0.0,
         )
         score += titleHit * 0.30
         if (titleHit >= 0.99) reasons += "title matches exactly"
         else if (titleHit >= 0.6) reasons += "title mostly matches"
+
+        // Said here rather than above, because it is only true with the title
+        // check in hand. Every word of the filename can be accounted for by
+        // the candidate's *artist* alone -- an artist's name and a record of
+        // theirs the file has nothing to do with -- and claiming the title
+        // matched in that case is the reason a wrong match looked convincing.
+        if (whole >= 0.75 && titleHit >= 0.5) reasons += "filename matches artist and title"
 
         val artistHit = maxOf(
             tokenOverlap(parsed.artist, c.artist),
@@ -237,7 +286,7 @@ object Matching {
            not evidence of a wrong artist. Penalising it broke a test that has
            guarded that case since the beginning, which is what tests are for.
         */
-        val artistWasReallyTheTitle = tokenOverlap(parsed.artist, c.title) >= 0.6
+        val artistWasReallyTheTitle = titleMatch(parsed.artist, c.title) >= 0.6
         if (artistNamed && !artistWasReallyTheTitle && titleHit >= 0.6 && artistHit < 0.2) {
             score -= 0.12
             reasons += "but nothing in the name matches this artist"

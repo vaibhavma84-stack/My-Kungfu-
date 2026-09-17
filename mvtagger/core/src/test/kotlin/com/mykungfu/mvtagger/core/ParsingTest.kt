@@ -754,3 +754,89 @@ class FeaturedArtistTest {
         )
     }
 }
+
+/**
+ * Confidently wrong: the words of the filename inside somebody else's brackets.
+ *
+ * From a report for `Megan_Thee_Stallion__Fantasy_Pool_Party_(1080p).mp4`. The
+ * search worked, the shop answered, and the top result was "Butter (Megan Thee
+ * Stallion Remix)" by BTS at 84% with the reason "title matches exactly" --
+ * confident enough, by the app's own rule, to write to the file without anyone
+ * looking at it. A BTS single would have been stamped onto a live set.
+ *
+ * Nothing was wrong with the search. The title check measured against the
+ * shorter side, so three words sitting inside a five-word title scored full
+ * marks, and the qualifier -- which is where the artist's name was -- counted
+ * as if it were the title.
+ */
+class BracketedTitleTest {
+
+    private val name = "Megan_Thee_Stallion__Fantasy_Pool_Party_(1080p).mp4"
+
+    private val butter = Candidate(
+        source = "iTunes", id = "1", title = "Butter (Megan Thee Stallion Remix)",
+        artist = "BTS & Megan Thee Stallion", durationMs = 227_000,
+        kind = "song", mediaKind = MediaKind.MUSIC_VIDEO,
+    )
+
+    @Test
+    fun `both halves of the name are still asked for`() {
+        val parsed = FilenameParser.parse(name)
+        assertTrue(
+            parsed.queries.toString(),
+            parsed.queries.any { it.contains("Megan Thee Stallion") && it.contains("Fantasy Pool Party") },
+        )
+    }
+
+    @Test
+    fun `an artist named inside a remix title is not a title match`() {
+        assertEquals(
+            0.0,
+            Matching.titleMatch("Megan Thee Stallion", "Butter (Megan Thee Stallion Remix)"),
+            0.001,
+        )
+    }
+
+    @Test
+    fun `it is no longer claimed as an exact title`() {
+        val top = Matching.rank(listOf(butter), FilenameParser.parse(name)).first()
+        assertFalse(top.reasons.toString(), top.reasons.any { "title" in it })
+    }
+
+    @Test
+    fun `and it is no longer confident enough to apply on its own`() {
+        val top = Matching.rank(listOf(butter), FilenameParser.parse(name)).first()
+        assertFalse("score was " + top.score, top.isConfident)
+    }
+
+    /**
+     * The other side of the same coin, which must not regress: a longer name
+     * for the record actually being looked for.
+     */
+    @Test
+    fun `a longer name for the same song still matches exactly`() {
+        assertEquals(
+            1.0,
+            Matching.titleMatch("Nachle Na", "Nachle Na (From \"Dil Juunglee\")"),
+            0.001,
+        )
+        assertEquals(1.0, Matching.titleMatch("Obsession", "Obsession (feat. Dua Lipa)"), 0.001)
+        assertEquals(1.0, Matching.titleMatch("Kesariya", "Kesariya [Explicit]"), 0.001)
+    }
+
+    @Test
+    fun `a filename that spells the qualifier out still matches exactly`() {
+        assertEquals(
+            1.0,
+            Matching.titleMatch("Butter Megan Thee Stallion Remix", "Butter (Megan Thee Stallion Remix)"),
+            0.001,
+        )
+    }
+
+    @Test
+    fun `a title that is bracketed from its first character is not thrown away`() {
+        val real = "(Everything I Do) I Do It for You"
+        assertEquals(real, Matching.headline(real))
+        assertEquals(1.0, Matching.titleMatch(real, real), 0.001)
+    }
+}
