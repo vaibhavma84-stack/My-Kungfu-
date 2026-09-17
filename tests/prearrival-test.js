@@ -11,14 +11,14 @@ function ok(name, cond, got){
 
 const WANT = [
   'Pre-Arrival Checklist', 'Load / Disch. Comparison Sheet', 'Cargo Plan', 'Stowage Plan',
-  'Risk Assessment', 'Load / Discharge Orders', 'BWRF', 'BWRB', 'GRB', 'OLB',
+  'Risk Assessment', 'Load / Discharge Orders', 'BWRF', 'BWRB', 'Take ballast samples', 'GRB', 'OLB',
   'Rodent log', 'Sounding log', 'PTW - WAH', 'NOR', 'MSDS', 'VEF', 'DLB', 'MARVS ENTRY'
 ];
 const WANT_DEP = [
   'Hourly calculations sheet', 'Pumping log', 'Manifold log', 'Comparison sheets',
   'Cargo plan', 'Stowage plan', 'Condition entries each stage', 'Risk Assessment',
   'Departure condition', 'Booster / heater log', 'Taking over checklist', 'Cargo receipt',
-  'Cargo documents in envelope', 'Port log', 'BWRF', 'BWRB', 'OLB',
+  'Cargo documents in envelope', 'Port log', 'BWRF', 'BWRB', 'Take ballast samples', 'OLB',
   'Vessel Search Checklist', 'Load / Disch. Orders', 'PTW - WAH', 'MSDS', 'MARVS ENTRY',
   'Post Cargo form'
 ];
@@ -95,7 +95,7 @@ const WANT_DEP = [
      /arrives 20-Sep-2026/.test(await p.textContent('#paList')),
      await p.textContent('#paList'));
   ok('and it is listed', await p.locator('#paList .pa-row').count() === 1);
-  ok('showing how much of it is done', /0 of 18 done/.test(await p.textContent('#paList')),
+  ok('showing how much of it is done', new RegExp('0 of ' + WANT.length + ' done').test(await p.textContent('#paList')),
      await p.textContent('#paList'));
 
   // the same port on the same day twice is a slip, not two calls
@@ -124,7 +124,7 @@ const WANT_DEP = [
   await p.selectOption('#paKind', 'departure');
   await p.waitForTimeout(150);
   ok('choosing departure says how many jobs that will be',
-     /23 jobs will be raised/.test(await p.textContent('#paNote')),
+     new RegExp(WANT_DEP.length + ' jobs will be raised').test(await p.textContent('#paNote')),
      await p.textContent('#paNote'));
   ok('and the date is labelled for leaving, not arriving',
      (await p.textContent('#paDateLabel')).indexOf('Departure') === 0,
@@ -328,6 +328,45 @@ const WANT_DEP = [
   ok('the calls are still listed after a restart',
      await p.locator('#paList .pa-row').count() === 4,
      await p.locator('#paList .pa-row').count());
+
+  // ---- Taking Over Checks: not tied to a port or an arrival ----------------
+  const WANT_TO = [
+    'Go through handing over notes', 'Cargo onboard - heel', 'Cargo loaded / discharged',
+    'Cargo in hand', 'Inspection dates', 'Charterers instructions',
+    'Fuel consumption issue with cooling down', 'Issues onboard', 'Cranes',
+    'Spare wires', 'Expiring / expired certificates', 'Gas meters / span gas',
+    'CO2 Room Entry Procedure', 'Standing Orders', 'Vents List. Red and Green dot',
+    'Paint Store MSDS organise and training',
+    'SOPEP equipment remove all and take inventory. Check condition of 7 Barrel Kit Wheels',
+    'Aft and Fwd. ETA condition. Greasing. Test the light. ETA max deployment time. Poster ship specific',
+    'Pilot ladders actual manufacturing dates',
+    'Pending requisitions. Requisitions to be raised?',
+    'Lifting equipment inventory. Slings. D shackles. Harness. Double lanyards. Fall preventer equipment'
+  ];
+  await p.selectOption('#paKind', 'takingover');
+  await p.fill('#paPort', '');
+  await p.waitForTimeout(150);
+  ok('taking-over checks have their own date label, not "pre-arrival"',
+     (await p.textContent('#paDateLabel')).trim() === 'Date',
+     await p.textContent('#paDateLabel'));
+  ok('and no arrival field -- it is not dated off an ETA',
+     !(await p.locator('#paArrField').isVisible()));
+  ok('the note says how many, and that they land on that date',
+     new RegExp(WANT_TO.length + ' jobs will be raised on that date').test(await p.textContent('#paNote')),
+     await p.textContent('#paNote'));
+  await p.fill('#paDate', '2026-09-17');
+  await p.click('#paAddBtn');
+  await p.waitForTimeout(300);
+  t = await jobs();
+  const takingOver = t.filter(j => WANT_TO.includes(j.job));
+  ok('the whole taking-over set is raised without a port being entered',
+     takingOver.length === WANT_TO.length, takingOver.length);
+  ok('none of them carry a port suffix, since none was given',
+     takingOver.every(j => !/ — /.test(j.job)), takingOver.map(j => j.job).join(' | '));
+  ok('all of them due on the date entered',
+     takingOver.every(j => j.due === '2026-09-17'));
+  ok('the call itself records no port',
+     (await calls()).find(x => x.kind === 'takingover').port === '');
 
   ok('no page errors', errs.length === 0, errs.join(' | '));
   await b.close();

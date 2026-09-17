@@ -178,6 +178,8 @@ function ok(name, cond, got){
 
     ok('Port call is collapsed on a first visit',
        await p.evaluate(() => document.getElementById('portCallWrap').classList.contains('collapsed')));
+    ok('and reads "Checklists" now, not "Port call" -- it covers more than port calls',
+       (await p.evaluate(() => document.getElementById('portCallToggle').textContent)).trim().indexOf('Checklists') === 0);
     ok('so its fields are not the thing taking up the screen',
        !(await p.locator('#paPort').isVisible()));
 
