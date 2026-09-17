@@ -75,7 +75,7 @@ function serve(){
     ok('and has no world map tile, because its data is not here',
        await p.locator('[data-tool="map"]').count() === 0);
     ok('the other tools are all still there',
-       await p.locator('.tool-tile[data-tool]').count() === 6,
+       await p.locator('.tool-tile[data-tool]').count() === 8,
        await p.locator('.tool-tile[data-tool]').count());
 
     // the ETA tool works in UTC and needs nothing from the map at all

@@ -47,6 +47,35 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('and still decodes',
      await p.locator('.task .thumbstrip img').first().evaluate(i=>i.naturalWidth) > 0);
 
+  // ---- tapping it opens a full-scale, zoomable viewer ----
+  // A real pinch needs two touch pointers, which a headless browser has no
+  // easy way to synthesize -- the wheel handler exercises the same scale/pan
+  // transform a pinch would drive, and is what a mouse-and-trackpad user gets
+  // anyway.
+  // a real click() waits for a non-zero bounding box, which this thumbnail
+  // does not reliably have the instant it is inserted -- dispatch the click
+  // directly, the same as a touch tap would deliver it.
+  await p.locator('.task .thumbstrip img').first().evaluate(img => img.click());
+  await p.waitForTimeout(200);
+  ok('the viewer opens', await p.locator('.modal-bg.photo-viewer').count()===1);
+  const scaleOf = async () => {
+    const t = await p.locator('.pv-zoom-img').evaluate(el => el.style.transform);
+    const m = t.match(/scale\(([\d.]+)\)/);
+    return m ? parseFloat(m[1]) : 1;
+  };
+  ok('it starts at 1x', await scaleOf() === 1, await scaleOf());
+  await p.hover('.pv-zoom-img');
+  await p.mouse.wheel(0, -400);
+  await p.waitForTimeout(150);
+  const zoomed = await scaleOf();
+  ok('a zoom-in gesture scales the image up', zoomed > 1, zoomed);
+  await p.mouse.wheel(0, 400);
+  await p.waitForTimeout(150);
+  ok('and zooming back out brings it down again', await scaleOf() < zoomed, await scaleOf());
+  await p.click('.modal-close');
+  await p.waitForTimeout(150);
+  ok('the close button removes the viewer', await p.locator('.modal-bg.photo-viewer').count()===0);
+
   // ---- migration from an older version ----
   // a realistic photo, not the tiny fixture — otherwise "localStorage shrank"
   // proves nothing, since a 200-byte image barely fills it in the first place

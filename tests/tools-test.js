@@ -22,8 +22,8 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
      await p.locator('#toolsHome').isVisible() && !(await p.locator('#toolConvert').isVisible()));
   ok('converter tile has a drawn icon, not an emoji',
      await p.locator('[data-tool="convert"] svg').count()===1);
-  ok('seven live tools on the launcher',
-     await p.locator('.tool-tile[data-tool]').count()===7,
+  ok('nine live tools on the launcher',
+     await p.locator('.tool-tile[data-tool]').count()===9,
      await p.locator('.tool-tile[data-tool]').count());
   ok('no placeholder left, every tile does something',
      await p.locator('.tool-tile.soon').count()===0);
@@ -108,6 +108,30 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('1 knot = 1.852 km/h', (await val('km/h'))==='1.852', await val('km/h'));
   await setUp('flow','m3h',100);
   ok('100 m³/h = 1.666667 m³/min', (await val('m³/min'))==='1.666667', await val('m³/min'));
+
+  // ---- area ----
+  // expected figures computed from the same length constants the app itself
+  // uses (0.9144 m/yd, 0.3048 m/ft) and run through the app's own seven-
+  // significant-figure formatting rule, rather than typed in as decimals.
+  const convFmt7 = (v) => {
+    const a = Math.abs(v);
+    let dp = 7 - Math.floor(Math.log10(a)) - 1;
+    if (dp < 0) dp = 0;
+    let str = v.toFixed(dp);
+    if (str.indexOf('.') >= 0) str = str.replace(/0+$/, '').replace(/\.$/, '');
+    const parts = str.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.join('.');
+  };
+  await setUp('area','ha',1);
+  ok('1 hectare = 10 000 m²', (await val('square metre'))==='10 000', await val('square metre'));
+  const acresPerHectare = convFmt7(10000 / (4840 * 0.9144 * 0.9144));
+  ok("1 hectare in acres matches the acre's own definition",
+     (await val('acre')) === acresPerHectare, (await val('acre')) + ' vs ' + acresPerHectare);
+  await setUp('area','m2',1);
+  const ft2PerM2 = convFmt7(1 / (0.3048 * 0.3048));
+  ok("1 m² in square feet matches the foot's own definition",
+     (await val('square foot'))===ft2PerM2, (await val('square foot'))+' vs '+ft2PerM2);
 
   // ---- copy, and remembering where you were ----
   await setUp('pressure','bar',1);
@@ -294,6 +318,82 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
 
   await p.click('#guideBackBtn');
   ok('back returns to the launcher', await p.locator('#toolsHome').isVisible());
+
+  // ---- formulas ----
+  await p.click('[data-tool="formulas"]');
+  ok('formulas opens', await p.locator('#toolFormulas').isVisible());
+  ok('title reads Formulas', (await p.textContent('#pageTitle')).trim()==='Formulas');
+  const formulaCats = await p.locator('#formulaCats button').allTextContents();
+  ok('Volume, Area and Azimuth categories are offered',
+     JSON.stringify(formulaCats)===JSON.stringify(['Volume','Area','Azimuth']), JSON.stringify(formulaCats));
+  ok('opens on Volume, with its full item list',
+     await p.locator('#formulaOut .ug-item').count()===10, await p.locator('#formulaOut .ug-item').count());
+  ok('entries start closed', await p.locator('#formulaOut .ug-item.open').count()===0);
+
+  const hcylItem = p.locator('.ug-item', { hasText:'Horizontal cylinder, partly full' }).first();
+  await hcylItem.locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  const hcylText = await hcylItem.textContent();
+  ok('the partly-full horizontal cylinder gives the segment formula, not a shortcut',
+     /arccos/.test(hcylText) && /segment area/.test(hcylText));
+
+  await p.click('#formulaCats button[data-fcat="area"]');
+  await p.waitForTimeout(120);
+  ok('switching to Area switches the list',
+     await p.locator('#formulaOut .ug-item').count()===8, await p.locator('#formulaOut .ug-item').count());
+  ok('circle is there with its symbol', /πr²/.test(await p.textContent('#formulaOut')));
+
+  await p.click('#formulaCats button[data-fcat="azimuth"]');
+  await p.waitForTimeout(120);
+  ok('Azimuth has its six steps',
+     await p.locator('#formulaOut .ug-item').count()===6, await p.locator('#formulaOut .ug-item').count());
+  const azFormulaItem = p.locator('.ug-item', { hasText:'The azimuth formula' }).first();
+  await azFormulaItem.locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  const azFormulaText = await azFormulaItem.textContent();
+  ok('the azimuth formula names LHA, declination and latitude',
+     /LHA/.test(azFormulaText) && /Dec/.test(azFormulaText) && /Lat/.test(azFormulaText));
+  const azBodiesItem = p.locator('.ug-item', { hasText:'what differs' }).first();
+  await azBodiesItem.locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  ok('it steers clear of daily almanac figures, same reasoning as the ASTM/IMPA rule',
+     /Nautical Almanac/.test(await azBodiesItem.textContent()));
+  // no GHA/Dec-shaped numeric figures (dd°mm.m) anywhere in the azimuth notes --
+  // those change daily and must never be baked into the app
+  ok('no degrees-and-minutes almanac figures appear anywhere in the azimuth notes',
+     !/\d{1,3}°\s*\d{1,2}\.\d/.test(await p.textContent('#formulaOut')));
+
+  await p.click('#formulasBackBtn');
+  ok('formulas back button returns to the launcher', await p.locator('#toolsHome').isVisible());
+
+  // ---- stars ----
+  await p.click('[data-tool="stars"]');
+  ok('stars opens', await p.locator('#toolStars').isVisible());
+  ok('title reads Stars', (await p.textContent('#pageTitle')).trim()==='Stars');
+  ok('the traditional list of 58 navigation stars is shown',
+     await p.locator('#starsOut .ug-item').count()===58, await p.locator('#starsOut .ug-item').count());
+  ok('entries start closed', await p.locator('#starsOut .ug-item.open').count()===0);
+
+  const sirius = p.locator('.ug-item[data-ug="sirius"]');
+  await sirius.locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  const siriusText = await sirius.textContent();
+  ok('Sirius names its constellation', /Canis Major/.test(siriusText));
+  ok('and a way to star-hop to it', /Orion/.test(siriusText));
+  ok('Sirius is tagged CMa', /CMa/.test(await sirius.locator('.ug-sym').textContent()));
+
+  const polaris = p.locator('.ug-item[data-ug="polaris"]');
+  ok('Polaris is tagged UMi', (await polaris.locator('.ug-sym').textContent())==='UMi');
+  await polaris.locator('.ug-head').click();
+  await p.waitForTimeout(120);
+  ok('Polaris explains finding it off the Big Dipper pointers',
+     /Dubhe/.test(await polaris.textContent()));
+
+  ok('no GHA/Dec/SHA figures reproduced for any star',
+     !/\d{1,3}°\s*\d{1,2}\.\d/.test(await p.textContent('#starsOut')));
+
+  await p.click('#starsBackBtn');
+  ok('stars back button returns to the launcher', await p.locator('#toolsHome').isVisible());
 
   ok('no page errors', errs.length===0, errs.join(' | '));
   await b.close(); srv.close();

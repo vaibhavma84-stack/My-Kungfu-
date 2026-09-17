@@ -70,6 +70,11 @@ REF = {
  'speed': {  # m/s
    'kn':1852/3600,'ms':1.0,'kmh':1000/3600,'mph':1609.344/3600,'fts':0.3048,
  },
+ 'area': {  # m2
+   'm2':1.0,'cm2':0.01**2,'mm2':0.001**2,'km2':1000.0**2,
+   'in2':0.0254**2,'ft2':0.3048**2,'yd2':0.9144**2,
+   'acre':4840*(0.9144**2),'ha':10000.0,
+ },
 }
 
 # If the parse comes back empty the categories below all "mismatch" and every
