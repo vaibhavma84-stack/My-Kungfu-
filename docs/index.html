@@ -1266,7 +1266,7 @@
   }
 </style>
 </head>
-<body>
+<body autocapitalize="words">
 
 <header>
   <div class="hdr-row">
@@ -1613,7 +1613,7 @@
     <div class="ne-head">
       <input type="text" class="ne-title" id="noteTitle" placeholder="Title" maxlength="120">
     </div>
-    <textarea class="ne-body" id="noteBody" placeholder="Write it down&hellip;"></textarea>
+    <textarea class="ne-body" id="noteBody" autocapitalize="sentences" placeholder="Write it down&hellip;"></textarea>
     <div class="ne-head">
       <button class="btn btn-ghost" id="noteImgBtn">+ Photograph</button>
       <input type="file" id="noteImgInput" accept="image/*" multiple style="display:none">
@@ -9756,7 +9756,7 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v58';
+  var APP_BUILD = 'v59';
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
