@@ -157,6 +157,7 @@ object FilenameParser {
         val year = yearFromBrackets ?: yearFromText
 
         work = work.replace(Regex("""\s+"""), " ").trim(' ', '-', '–', '—', '|', '.', '_')
+        work = pipesWrittenAsLetters(work)
 
         val (artist, title, album, extras) = split(work)
 
@@ -220,6 +221,32 @@ object FilenameParser {
         // year, which is worth keeping.
         if (words.size == 1 && words[0].length <= 3 && words[0].all { it.isDigit() }) return true
         return words.all { it.lowercase() in SEGMENT_NOISE }
+    }
+
+    /**
+     * The pipe that could not be a pipe.
+     *
+     * `BAILAMOS I PAYAL DEV I BADSHAH I ADITYA DEV I PAVAN BOB` is the film
+     * convention -- song, then singers, then whoever else -- written with a
+     * capital I where each pipe belongs. It is not a typo and it is not rare:
+     * no filesystem will accept `|` in a name, so the uploader or the
+     * downloader puts the nearest thing that looks the same, and every one of
+     * these arrives as one unbroken string that no catalogue has ever heard of.
+     * Searched whole, it returns nothing, which is exactly what it did.
+     *
+     * Two or more of them, or none. A single standalone I is far more likely a
+     * word -- "You And I", "Me And I" -- and turning that one into a separator
+     * would cut a title in half to fix a filename shape that is not there.
+     * With two the reading is unambiguous: nothing is called "You And I Love
+     * You And I".
+     */
+    private fun pipesWrittenAsLetters(text: String): String {
+        // Punctuation that is simply a pipe wearing a different code point can
+        // be swapped outright; there is nothing else it could be.
+        val work = text.replace('\uFF5C', '|').replace('\u00A6', '|').replace('\u01C0', '|')
+        val standalone = Regex("""(?<=\s)I(?=\s)""")
+        if (standalone.findAll(work).count() < 2) return work
+        return standalone.replace(work, "|")
     }
 
     private fun split(text: String): Split {

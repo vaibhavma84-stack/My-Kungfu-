@@ -591,3 +591,47 @@ class SidecarTest {
         assertNull(Sidecar.lrc(VideoTags(title = "Kesariya")))
     }
 }
+
+/**
+ * Filenames where the pipe could not be a pipe.
+ *
+ * From a real search report: the whole name was searched as one string and
+ * every provider answered with nothing, because no catalogue has ever heard of
+ * "BAILAMOS I PAYAL DEV I BADSHAH I ADITYA DEV I PAVAN BOB".
+ */
+class PipeAsLetterTest {
+
+    @Test
+    fun `a capital I between words is the pipe it stands in for`() {
+        val parsed = FilenameParser.parse(
+            "BAILAMOS_I_PAYAL_DEV_I_BADSHAH_I_ADITYA_DEV_I_PAVAN_BOB(1080p).mp4"
+        )
+        assertEquals("BAILAMOS", parsed.title)
+        // The names after the song are singers, actors and labels in no
+        // reliable order, so none of them is claimed as the artist.
+        assertTrue(parsed.extras.toString(), parsed.extras.any { it.contains("PAYAL DEV") })
+        assertTrue(parsed.queries.toString(), parsed.queries.any { it == "BAILAMOS" })
+    }
+
+    @Test
+    fun `the search stops being one long string nobody has heard of`() {
+        val parsed = FilenameParser.parse(
+            "Tera_Hua_I_Atif_Aslam_I_Loveratri_I_Tanishk_Bagchi.mp4"
+        )
+        assertEquals("Tera Hua", parsed.title)
+        assertTrue(parsed.queries.toString(), parsed.queries.none { it.contains(" I ") })
+    }
+
+    @Test
+    fun `one standalone I is a word and is left alone`() {
+        // The guard that keeps this from cutting real titles in half.
+        assertEquals("You And I", FilenameParser.parse("You And I.mp4").title)
+        assertEquals("Me And I", FilenameParser.parse("Me And I.mp4").title)
+    }
+
+    @Test
+    fun `a pipe by another code point is simply a pipe`() {
+        val parsed = FilenameParser.parse("Kesariya ｜ Arijit Singh ｜ Brahmastra.mp4")
+        assertEquals("Kesariya", parsed.title)
+    }
+}
