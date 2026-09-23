@@ -9,14 +9,30 @@ device.
 
 ## Putting it on a phone
 
-1. Open `…/money/` in Safari (iPhone/iPad) or Chrome (Android) **once while
-   connected**. That first visit caches the whole app on the device.
+### iPhone and iPad
+
+1. Open `…/money/` in **Safari** — it has to be Safari, and you have to be
+   **connected** for that first visit, which caches the whole app on the device.
 2. Share → **Add to Home Screen**.
 3. From then on it opens from the icon, full screen, with no signal needed.
 
 Opening the HTML file straight from the Files app does **not** work: iOS renders
 it in Quick Look, where JavaScript is restricted and nothing is saved between
 opens. It has to be served over https.
+
+**One thing to know about backing up on an iPhone.** A home-screen app on iOS
+cannot save a file the ordinary way — a download there does nothing at all, with
+no error. The app handles it: on the home-screen app, exporting opens the
+**share sheet** instead, and you save the file to Files or send it to yourself.
+If you cancel that sheet, nothing is recorded as a backup, because nothing was
+backed up. On an iPad or iPhone old enough to be short of the share sheet, the
+app says so and tells you to export from Safari instead, rather than quietly
+doing nothing.
+
+### Android
+
+Either the same way in Chrome, or install the APK — see `android/README.md`.
+The APK and the website are separate stores and never see each other's data.
 
 ## What it holds
 
@@ -70,3 +86,13 @@ copy. Updates are picked up on the launch *after* the one that downloads them,
 since pages are served from cache first.
 
 Run `tests/run.sh` before pushing.
+
+## Known limits
+
+- **iOS 15.4 or later** for the record editor, which uses `<dialog>`. Older
+  than that and it falls back to a plain panel, which works but is plainer.
+- **The home-screen app exports through the share sheet**, not a download. See
+  above.
+- **No price feed.** Share and NAV prices are the ones you type in. The card
+  shows the date you wrote them down and marks a price more than a month old.
+- **One device.** Nothing syncs. The JSON backup is how data moves.

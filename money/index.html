@@ -147,6 +147,11 @@
   dialog{border:0;border-radius:12px;padding:0;background:var(--card);color:var(--ink);
     width:min(560px,94vw);max-height:88vh;}
   dialog::backdrop{background:rgba(0,0,0,.45);}
+  dialog:not([open]){display:none;}
+  /* Safari before 15.4 has no <dialog>: same markup, shown as a plain panel. */
+  dialog.fallback{display:block;position:fixed;top:4vh;left:0;right:0;
+    margin:0 auto;z-index:100;box-shadow:0 12px 44px rgba(0,0,0,.45);
+    border:1px solid var(--line);}
   .dlg-hd{position:sticky;top:0;background:var(--hull);color:#fff;padding:11px 14px;
     display:flex;align-items:center;gap:8px;}
   .dlg-hd h3{margin:0;font-size:15px;font-weight:600;}
@@ -288,7 +293,7 @@ function fmtDate(iso){
 /* The build this page is. CI reads it out of here to name the APK and its
    release, and the Data tab prints it, so "which version is actually on the
    phone" is a question that can be answered by looking rather than guessed. */
-const APP_BUILD = 'v1';
+const APP_BUILD = 'v2';
 
 const S = { cur:'₹', locale:'en-IN', theme:'light', month:'', spendCats:[] };
 function money(n, dp){
@@ -723,9 +728,24 @@ function editor(title, fields, rec, onSave, onDelete){
   el('dlgTitle').textContent = title;
   el('dlgDelete').style.display = onDelete ? '' : 'none';
   drawFields();
-  el('dlg').showModal();
+  openDialog();
   const first = el('dlgBody').querySelector('input,select,textarea');
   if(first && !first.readOnly) setTimeout(() => first.focus(), 50);
+}
+/* <dialog> and showModal landed in Safari 15.4. An older iPad aboard would
+   otherwise reach a dead button: the editor simply would not open, with
+   nothing on screen to say why. The fallback shows the same markup as a
+   plain fixed panel. */
+function openDialog(){
+  const d = el('dlg');
+  if(typeof d.showModal === 'function'){ d.showModal(); }
+  else { d.classList.add('fallback'); d.setAttribute('open',''); }
+}
+function closeDialog(){
+  const d = el('dlg');
+  if(typeof d.close === 'function' && d.open){ d.close(); }
+  d.removeAttribute('open');
+  d.classList.remove('fallback');
 }
 function drawFields(){
   const { fields, rec } = DLG;
@@ -1619,15 +1639,60 @@ function renderBanner(){
   }
   el('backup').innerHTML = h;
 }
-function download(name, text, mime){
-  const blob = new Blob([text], { type: (mime || 'text/csv') + ';charset=utf-8' });
+/* navigator.standalone is iOS-only and true only in a home-screen app. It is
+   the one case where saving a file needs a different route entirely. */
+function isIosStandalone(){ return navigator.standalone === true; }
+
+/* The date is stamped only where the file is known to have gone somewhere.
+
+   This used to be stamped unconditionally, at the moment of the click. On an
+   iPhone home-screen app the click saves nothing — see below — so the app
+   would record a backup that had not happened, go quiet for another fourteen
+   days, and the first anyone would know is when the phone was wiped. A backup
+   reminder that lies is worse than no reminder. */
+function stampBackup(){
+  localStorage.setItem(K.backup + 'all', today());
+  renderBanner();
+}
+
+async function download(name, text, mime){
+  const type = (mime || 'text/csv') + ';charset=utf-8';
+
+  /* An iPhone home-screen app ignores a click on <a download> completely: no
+     file, no error, nothing at all — the same silence as an Android WebView,
+     for a different reason and with no shell here to catch it. The share
+     sheet is the way out, and it saves to Files or sends the backup on.
+
+     Safari in an ordinary tab is fine, and so is everything else, so this is
+     kept to the one case that needs it rather than changing how the file is
+     saved everywhere. */
+  if(isIosStandalone()){
+    try{
+      const file = new File([text], name, { type });
+      if(navigator.canShare && navigator.canShare({ files:[file] })){
+        await navigator.share({ files:[file], title:name });
+        stampBackup();
+        return true;
+      }
+    }catch(e){
+      // Cancelling the share sheet is a decision, not a failure, and must not
+      // be recorded as a backup.
+      if(e && e.name === 'AbortError') return false;
+    }
+    alert('This iPhone cannot save a file from the home-screen app.\n\n' +
+          'Open the same page in Safari and export from there — the data is ' +
+          'the same, it is the saving that Safari can do and this cannot.');
+    return false;
+  }
+
+  const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
-  localStorage.setItem(K.backup + 'all', today());
-  renderBanner();
+  stampBackup();
+  return true;
 }
 function csv(rows){
   // Quote everything. A note with a comma in it broke this in the deck log.
@@ -1976,14 +2041,14 @@ document.addEventListener('change', e => {
 /* ---------- dialog buttons ---------- */
 el('dlgSave').onclick = () => {
   const rec = readFields();
-  el('dlg').close();
+  closeDialog();
   if(DLG && DLG.onSave) DLG.onSave(rec);
   DLG = null;
 };
-el('dlgCancel').onclick = el('dlgX').onclick = () => { el('dlg').close(); DLG = null; };
+el('dlgCancel').onclick = el('dlgX').onclick = () => { closeDialog(); DLG = null; };
 el('dlgDelete').onclick = () => {
   const fn = DLG && DLG.onDelete;
-  el('dlg').close(); DLG = null;
+  closeDialog(); DLG = null;
   if(fn) fn();
 };
 

@@ -495,6 +495,73 @@ const stepUpClosed = (A, s, ratePa, m, years) => {
      caughtJson.ok === true && /\.json$/.test(caughtJson.name || ''),
      JSON.stringify(caughtJson));
 
+  /* ---- the iPhone home-screen case ----
+     navigator.standalone is true only in an iOS home-screen app, and there a
+     click on <a download> saves nothing at all — no file, no error. Since the
+     export IS the backup in this app, every one of these matters. */
+  const ios = async (fn, setup) => p.evaluate(async ({ setup }) => {
+    const realShare = navigator.share, realCanShare = navigator.canShare;
+    const realAlert = window.alert;
+    let alerted = null, shared = null, anchors = 0;
+    const countAnchor = e => {
+      const a = e.target.closest && e.target.closest('a[download]');
+      if(a){ anchors++; e.preventDefault(); e.stopPropagation(); }
+    };
+    document.addEventListener('click', countAnchor, true);
+    Object.defineProperty(navigator, 'standalone', { value:true, configurable:true });
+    window.alert = m => { alerted = m; };
+    if(setup === 'ok'){
+      navigator.canShare = () => true;
+      navigator.share = o => { shared = o.files[0].name; return Promise.resolve(); };
+    } else if(setup === 'cancel'){
+      navigator.canShare = () => true;
+      navigator.share = () => Promise.reject(Object.assign(new Error('x'), { name:'AbortError' }));
+    } else {
+      navigator.canShare = () => false;
+      navigator.share = undefined;
+    }
+    localStorage.removeItem('money_lastBackup_all');
+    await download('ledger-test.json', '{"app":"ledger"}', 'application/json');
+    const stamped = !!localStorage.getItem('money_lastBackup_all');
+
+    document.removeEventListener('click', countAnchor, true);
+    delete navigator.standalone;
+    navigator.share = realShare; navigator.canShare = realCanShare;
+    window.alert = realAlert;
+    return { stamped, shared, alerted, anchors };
+  }, { setup });
+
+  const iosOk = await ios(null, 'ok');
+  ok('on an iPhone home-screen app the backup goes through the share sheet',
+     iosOk.shared === 'ledger-test.json' && iosOk.anchors === 0, JSON.stringify(iosOk));
+  ok('a shared backup is recorded as a backup', iosOk.stamped === true);
+
+  const iosCancel = await ios(null, 'cancel');
+  ok('cancelling the share sheet is NOT recorded as a backup',
+     iosCancel.stamped === false, JSON.stringify(iosCancel));
+
+  const iosNone = await ios(null, 'none');
+  ok('with no way to save, it says so rather than pretending',
+     /Safari/.test(iosNone.alerted || ''), JSON.stringify(iosNone));
+  ok('and nothing that saved nothing is recorded as a backup',
+     iosNone.stamped === false, JSON.stringify(iosNone));
+
+  /* <dialog> landed in Safari 15.4. An older iPad would otherwise reach a
+     button that does nothing at all, with no clue why. */
+  ok('the editor still opens where <dialog> is not supported',
+     await p.evaluate(() => {
+       const d = document.getElementById('dlg');
+       const real = d.showModal;
+       d.showModal = undefined;
+       openDialog();
+       const shown = d.hasAttribute('open') && d.classList.contains('fallback') &&
+                     getComputedStyle(d).display !== 'none';
+       closeDialog();
+       const hidden = !d.hasAttribute('open') && getComputedStyle(d).display === 'none';
+       d.showModal = real;
+       return shown && hidden;
+     }));
+
   ok('the page reports a build, which CI reads to name the APK',
      /^v\d/.test(await p.evaluate(() => APP_BUILD)),
      await p.evaluate(() => APP_BUILD));

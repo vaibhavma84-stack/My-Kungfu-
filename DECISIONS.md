@@ -398,3 +398,35 @@ own Gradle project at `money/android/`, its own workflow, its own release tag.
 - **`APP_BUILD` in the page is what CI names the release after**, and the Data
   tab prints it, so "which version is actually on this phone" is answered by
   looking rather than guessed.
+
+## Ledger on iPhone
+
+The web app **is** the iPhone app — Safari, Add to Home Screen, full screen,
+offline, its own icon. There is no native wrapper and no App Store listing,
+which would need a Mac, Xcode and a paid Apple Developer account, and would buy
+nothing this does not already do.
+
+Two things had to be fixed before that was true rather than nearly true.
+
+- **A home-screen app on iOS cannot save a file by clicking `<a download>`.**
+  It does nothing: no file, no error, nothing — the same silence as an Android
+  WebView, for a different reason, and with no shell here to catch it. Export
+  is the backup in this app, so on iOS standalone the export goes through the
+  **share sheet** instead, which saves to Files or sends it on. Safari in an
+  ordinary tab is fine, so this is kept to the one case that needs it rather
+  than changing how every platform saves.
+- **The backup date was stamped unconditionally, at the moment of the click.**
+  On an iPhone home-screen app that meant the app recorded a backup that had
+  not happened, went quiet for another fourteen days, and the first anyone
+  would know is when the phone was wiped. It is now stamped only where the file
+  is known to have gone somewhere — and cancelling the share sheet is a
+  decision, not a backup. A backup reminder that lies is worse than none, which
+  is the whole argument for having the reminder in the first place.
+
+Also: `<dialog>` and `showModal` landed in Safari 15.4. An older iPad aboard
+would have reached a button that did nothing with no clue why, so the editor
+falls back to a plain fixed panel with the same markup.
+
+Both iOS paths are tested by driving the real page with `navigator.standalone`
+forced true, including the cancel and the no-share-sheet cases, because none of
+them can be reached from a desktop browser by accident.

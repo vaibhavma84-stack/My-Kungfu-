@@ -7,7 +7,7 @@
 // worker also skips this path explicitly, because on a first visit — before
 // this worker has installed — the root one would otherwise be the one
 // answering, and it answers every navigation with the deck log.
-const CACHE = 'ledger-v1';
+const CACHE = 'ledger-v2';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './icon-180.png', './icon-192.png', './icon-512.png'
