@@ -237,6 +237,20 @@ object FilenameParser {
                none of them by the artist the filename named.
             */
             artist?.trim(),
+            /*
+               The other half of the name, on its own.
+
+               `Megan_Thee_Stallion__Fantasy_Pool_Party` has no marker word on
+               either segment, so the pipe convention reads it song-first and
+               calls "Megan Thee Stallion" the song. The report shows the cost:
+               two queries went out, both of them about her name, and "Fantasy
+               Pool Party" -- the only words in the file that name the
+               recording -- were never asked for at all.
+
+               Which way round a markerless name is cannot be known from the
+               name. Asking for both halves separately does not need to know.
+            */
+            extras.firstOrNull()?.trim(),
             work.trim(),
         ).map { plainWords(it) }.map { it.trim() }.filter { it.isNotBlank() }.distinct()
 

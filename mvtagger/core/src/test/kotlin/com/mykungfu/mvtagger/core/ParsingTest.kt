@@ -1163,3 +1163,136 @@ class ApostropheTest {
         assertTrue("scored " + top.score, top.isConfident)
     }
 }
+
+/**
+ * A recording the shops do not sell, and the one clue that spans the gap.
+ *
+ * From a report for `Megan_Thee_Stallion__Fantasy_Pool_Party_(1080p).mp4`,
+ * after the scoring had already been fixed twice on this same file. Nothing
+ * applied itself this time, which was right -- and nothing useful was said
+ * either, which was not.
+ *
+ * "Fantasy Pool Party" is a live set. No shop sells it. But Apple has "Girls
+ * In The Hood & Savage Remix Performance" by her, running four twenty-nine,
+ * which is this file's length to the second, and is very probably the same
+ * video under Apple's own name for it. The app scored it 48% with two mute
+ * reasons and left the person to spot the coincidence.
+ *
+ * Three faults, none of them the ranking.
+ */
+class AnotherNameTest {
+
+    private val name = "Megan_Thee_Stallion__Fantasy_Pool_Party_(1080p).mp4"
+
+    @Test
+    fun `the other half of the name is asked for on its own`() {
+        // Two queries went out and both were about her name. The only words in
+        // the file that name the recording were never asked for at all.
+        val p = FilenameParser.parse(name)
+        assertTrue(p.queries.toString(), p.queries.contains("Fantasy Pool Party"))
+    }
+
+    @Test
+    fun `musicbrainz is asked a different question each time`() {
+        // The log showed `recording:"Megan Thee Stallion"` twice: two requests,
+        // one question, and the question was about the artist.
+        val questions = MusicBrainz.questions(FilenameParser.parse(name))
+        assertEquals(questions.toString(), questions.size, questions.distinct().size)
+        assertTrue(questions.toString(), questions.size >= 2)
+    }
+
+    @Test
+    fun `and one of them asks the pair the other way round`() {
+        val questions = MusicBrainz.questions(FilenameParser.parse(name))
+        assertTrue(
+            questions.toString(),
+            questions.any {
+                it.contains("recording:\"Fantasy Pool Party\"") &&
+                        it.contains("artist:\"Megan Thee Stallion\"")
+            },
+        )
+    }
+
+    @Test
+    fun `a well named file still asks the plain question first`() {
+        val questions = MusicBrainz.questions(FilenameParser.parse("Adele - Hello.mp4"))
+        assertEquals(
+            "recording:\"Hello\" AND artist:\"Adele\"",
+            questions.first(),
+        )
+    }
+
+    /**
+     * What the app can now say about a record it cannot confirm.
+     */
+    @Test
+    fun `the coincidence of artist and exact length is named`() {
+        val p = FilenameParser.parse(name)
+        val apples = Candidate(
+            source = "iTunes", id = "1",
+            title = "Girls In The Hood & Savage Remix Performance",
+            artist = "Megan Thee Stallion", durationMs = 269_000,
+            kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val top = Matching.rank(listOf(apples), p, durationMs = 269_000).first()
+        assertTrue(
+            top.reasons.toString(),
+            top.reasons.any { it.contains("possibly this recording under another name") },
+        )
+    }
+
+    @Test
+    fun `but it is never confident enough to write on its own`() {
+        val p = FilenameParser.parse(name)
+        val apples = Candidate(
+            source = "iTunes", id = "1",
+            title = "Girls In The Hood & Savage Remix Performance",
+            artist = "Megan Thee Stallion", durationMs = 269_000,
+            kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val top = Matching.rank(listOf(apples), p, durationMs = 269_000).first()
+        assertTrue("scored " + top.score, !top.isConfident)
+    }
+
+    @Test
+    fun `it beats the artist's other records that do not match on length`() {
+        val p = FilenameParser.parse(name)
+        val right = Candidate(
+            source = "iTunes", id = "right",
+            title = "Girls In The Hood & Savage Remix Performance",
+            artist = "Megan Thee Stallion", durationMs = 269_000,
+            kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val others = listOf(
+            Candidate(
+                source = "iTunes", id = "a", title = "Beautiful Mistakes",
+                artist = "Maroon 5 & Megan Thee Stallion",
+                kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+            ),
+            Candidate(
+                source = "iTunes", id = "b", title = "The Good News Interview",
+                artist = "Megan Thee Stallion & Nadeska",
+                kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+            ),
+        )
+        val ranked = Matching.rank(others + right, p, durationMs = 269_000)
+        assertEquals(ranked.toString(), "right", ranked.first().candidate.id)
+    }
+
+    /**
+     * The coincidence has to be a coincidence of all three, or it says nothing.
+     */
+    @Test
+    fun `a title that does agree is not described as another name`() {
+        val p = FilenameParser.parse("Adele - Hello.mp4")
+        val c = Candidate(
+            source = "iTunes", id = "1", title = "Hello", artist = "Adele",
+            durationMs = 295_000, kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val top = Matching.rank(listOf(c), p, durationMs = 295_000).first()
+        assertTrue(
+            top.reasons.toString(),
+            top.reasons.none { it.contains("another name") },
+        )
+    }
+}

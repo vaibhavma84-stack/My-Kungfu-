@@ -306,6 +306,43 @@ object MusicBrainz {
         }
     }
 
+    /**
+     * The questions worth asking about one file, best first and without repeats.
+     *
+     * [recordingQuery] answers from the parsed fields alone, so every attempt of
+     * a lookup asked it the same thing. A report for
+     *
+     *     Megan_Thee_Stallion__Fantasy_Pool_Party_(1080p).mp4
+     *
+     * shows the identical request twice: `recording:"Megan Thee Stallion"`, both
+     * times, because that is what the parser called the title and no later
+     * attempt changed it. Two requests, one question, and the question was
+     * about the artist.
+     *
+     * The second question here is the one that file actually needed. A
+     * pipe-separated name with no artist in it may be the other convention --
+     * the channel's own name first and the song after -- so the pair is asked
+     * both ways round, which for this file is `recording:"Fantasy Pool Party"
+     * AND artist:"Megan Thee Stallion"`. Trying both readings and letting the
+     * scoring decide is how every other guess in this app is handled.
+     */
+    fun questions(parsed: ParsedName): List<String> {
+        val out = LinkedHashSet<String>()
+        out += recordingQuery(parsed.title, parsed.artist, parsed.query, parsed.album)
+
+        val other = parsed.extras.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+        if (parsed.artist.isNullOrBlank() && other != null && !parsed.title.isNullOrBlank()) {
+            out += recordingQuery(other, parsed.title, parsed.query)
+        }
+
+        // Whatever else was worth asking a shop is worth asking here as plain
+        // words: the Lucene endpoint searches every field, so a phrase that
+        // names neither half still finds a recording that carries it.
+        for (q in parsed.queries.drop(1)) if (q.isNotBlank()) out += q
+
+        return out.toList()
+    }
+
     fun parseRecordings(body: String): List<Candidate> {
         val root = Json.parseOrNull(body)
         return root["recordings"].array.mapNotNull { rec ->

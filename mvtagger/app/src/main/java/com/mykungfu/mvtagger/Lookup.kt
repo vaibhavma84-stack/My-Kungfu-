@@ -83,6 +83,7 @@ object Lookup {
 
         val found = ArrayList<Candidate>()
         var ranked: List<Matching.Scored> = emptyList()
+        val questions = MusicBrainz.questions(parsed)
 
         // One query is not enough for Indian film music: whether the song, the
         // film or the singer is in the filename depends entirely on who
@@ -97,12 +98,13 @@ object Lookup {
             }
 
             // MusicBrainz second: slower and thinner on film music, but the only
-            // source that states a release language.
-            val mbQuery = MusicBrainz.recordingQuery(
-                parsed.title, parsed.artist, query, parsed.album
-            )
-            Net.getTextOrNull(MusicBrainz.recordingSearchUrl(mbQuery, limit = 10))
-                ?.let { found += MusicBrainz.parseRecordings(it) }
+            // source that states a release language. A different question each
+            // attempt -- it used to be the same one every time, which spent a
+            // request to learn nothing.
+            questions.getOrNull(index)?.let { question ->
+                Net.getTextOrNull(MusicBrainz.recordingSearchUrl(question, limit = 10))
+                    ?.let { found += MusicBrainz.parseRecordings(it) }
+            }
 
             ranked = Matching.rank(
                 found.distinctBy { it.source + ":" + it.id },

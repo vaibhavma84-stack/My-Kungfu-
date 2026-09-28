@@ -331,8 +331,10 @@ object Matching {
 
         // Duration is worth a lot when it lines up, because titles repeat and
         // running times do not. Within three seconds is the same recording.
+        var lengthToTheSecond = false
         if (durationMs != null && c.durationMs != null && c.durationMs > 0) {
             val gapSec = Math.abs(durationMs - c.durationMs) / 1000.0
+            lengthToTheSecond = gapSec <= 3
             // A song entry's length is the audio track. The video of the same
             // song routinely runs a minute longer -- an intro, dialogue, a fade
             // -- so only a like-for-like entry may be punished for a gap.
@@ -364,6 +366,33 @@ object Matching {
         // A music-video entry is the better description of the file, but its
         // artwork is a video still; the artwork rule handles that separately.
         if (c.kind == "musicVideo") score += 0.03
+
+        /*
+           The same artist, the same length to the second, and a title that
+           agrees on nothing.
+
+           A report for `Megan_Thee_Stallion__Fantasy_Pool_Party` ends here.
+           The shops do not sell that recording -- it is a live set -- but Apple
+           has "Girls In The Hood & Savage Remix Performance" by her, running
+           four minutes twenty-nine, which is this file's length to the second.
+           It is very likely the same video under Apple's own name for it, and
+           the app had no way to say so: it scored 48% with the two mute reasons
+           "artist matches" and "length matches within 3s" and left the person
+           to notice the coincidence themselves.
+
+           This is worth saying and not worth applying. Running times do not
+           repeat the way titles do, so the coincidence is real evidence; but
+           the file and the record share no word of a name, and writing a title
+           nobody can check is how the wrong tag gets into a library. So it
+           earns a sentence and a place at the top of the list, and stays well
+           under the score that would let it apply itself.
+        */
+        if (artistHit >= 0.75 && titleHit < 0.3 && lengthToTheSecond) {
+            score += 0.10
+            reasons += "the same artist and the same length to the second, " +
+                    "though the titles have nothing in common -- possibly this " +
+                    "recording under another name"
+        }
 
         /*
            Rounded before it is compared with anything.
