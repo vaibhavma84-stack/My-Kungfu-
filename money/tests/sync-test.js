@@ -28,13 +28,11 @@ const ledgerOf = pg => pg.evaluate(() => {
   for(const n of LISTS){
     out[n] = DB[n].slice()
       .sort((a,b) => String(a.id).localeCompare(String(b.id)))
-      .map(r => {
-        const c = Object.assign({}, r);
-        for(const k of ['extras','ledger'])
-          if(Array.isArray(c[k])) c[k] = c[k].slice()
-            .sort((a,b) => String(a.id).localeCompare(String(b.id)));
-        return c;
-      });
+      // Nested lists are compared in the order they are actually stored in,
+      // not sorted first. Sorting here would hide the two phones holding the
+      // same prices in a different order, which is what the card's little
+      // line is drawn from.
+      .map(r => Object.assign({}, r));
   }
   out.tomb = (DB.tomb||[]).map(t => t.id).sort();
   return JSON.stringify(out);
@@ -166,6 +164,28 @@ const put = (pg, list, rec) => pg.evaluate(({list,rec}) => {
   ok('and it goes on the other phone too',
      await B.evaluate(() => !DB.loans.find(l => l.id === 'l2')
        .extras.some(e => e.id === 'p_b')));
+
+  /* ---- 7b. prices written on each phone build one history ---- */
+  await put(A, 'invest', { id:'v1', upd:T+100, dev:'dAAA', kind:'equity',
+    name:'Infosys', units:120, buy:1420, price:1500, asof:'2026-09-01',
+    hist:[{ id:'ph_a', upd:T+100, dev:'dAAA', d:'2026-09-01', p:1500, src:'typed' }] });
+  await put(B, 'invest', { id:'v1', upd:T+110, dev:'dBBB', kind:'equity',
+    name:'Infosys', units:120, buy:1420, price:1685, asof:'2026-09-08',
+    hist:[{ id:'ph_b', upd:T+110, dev:'dBBB', d:'2026-09-08', p:1685, src:'typed' }] });
+  await mergeInto(A, await fileFrom(B));
+  await mergeInto(B, await fileFrom(A));
+  const hist = await A.evaluate(() =>
+    DB.invest.find(h => h.id === 'v1').hist.map(x => x.d));
+  const histB = await B.evaluate(() =>
+    DB.invest.find(h => h.id === 'v1').hist.map(x => x.d));
+  ok('a price written on each phone gives a history with both in it',
+     hist.join() === '2026-09-01,2026-09-08', hist.join());
+  ok('and the history is in date order on both phones, not merge order',
+     hist.join() === histB.join(), hist.join() + '  vs  ' + histB.join());
+  ok('and the holding itself is the same on both phones',
+     (await ledgerOf(A)) === (await ledgerOf(B)));
+  ok('portfolio readings merge as their own records too',
+     await A.evaluate(() => Array.isArray(DB.snap)));
 
   /* ---- 8. the order the two phones merge in cannot change the answer ---- */
   {

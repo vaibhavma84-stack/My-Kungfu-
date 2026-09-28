@@ -562,6 +562,159 @@ const stepUpClosed = (A, s, ratePa, m, years) => {
        return shown && hidden;
      }));
 
+  /* ---- price history and the charts ---- */
+  ok('a price written down is kept, dated, one point a day',
+     await p.evaluate(() => {
+       const h = { id:'h1', kind:'equity', units:10, buy:100, price:120, asof:'2026-09-01' };
+       notePrice(h);
+       notePrice(h);                                   // same day, same price
+       h.price = 130; notePrice(h);                    // same day, changed
+       h.asof = '2026-09-02'; h.price = 140; notePrice(h);
+       return h.hist.length === 2 && h.hist[0].p === 130 && h.hist[1].p === 140 &&
+              h.hist.every(x => x.id && x.upd && x.src === 'typed');
+     }),
+     await p.evaluate(() => {
+       const h = { id:'h1', kind:'equity', price:120, asof:'2026-09-01' };
+       notePrice(h); h.price = 130; notePrice(h);
+       return JSON.stringify(h.hist);
+     }));
+  ok('a deposit gets no price history, having no price to write down',
+     await p.evaluate(() => {
+       const h = { id:'h2', kind:'fd', principal:100000, rate:7, months:12 };
+       notePrice(h);
+       return h.hist === undefined;
+     }));
+  ok('history points carry a source, so a fetched price can slot in later',
+     await p.evaluate(() => {
+       const h = { id:'h3', kind:'mf', price:50, asof:'2026-09-01' };
+       notePrice(h);
+       return h.hist[0].src === 'typed' && 'p' in h.hist[0] && 'd' in h.hist[0];
+     }));
+
+  ok('changing a holding writes one portfolio reading, and only one a day',
+     await p.evaluate(() => {
+       DB.invest = []; DB.snap = []; save('invest'); save('snap');
+       upsert('invest', { id:'e1', kind:'equity', units:10, buy:100, price:120,
+                          asof:today() });
+       const one = DB.snap.length;
+       upsert('invest', { id:'e1', kind:'equity', units:10, buy:100, price:150,
+                          asof:today() });
+       return one === 1 && DB.snap.length === 1 && DB.snap[0].value === 1500 &&
+              DB.snap[0].cost === 1000;
+     }),
+     await p.evaluate(() => JSON.stringify(DB.snap)));
+
+  ok('one reading draws no line, and says why rather than an empty box',
+     /One reading so far/.test(await p.evaluate(() =>
+       lineChart([{ d:'2026-09-01', value:100, cost:90 }]))));
+  ok('the value line and the put-in line are drawn on one scale, not two',
+     await p.evaluate(() => {
+       const d = document.createElement('div');
+       d.innerHTML = lineChart([
+         { d:'2026-01-01', value:100000, cost:100000 },
+         { d:'2026-06-01', value:140000, cost:120000 },
+         { d:'2026-09-01', value:180000, cost:120000 }]);
+       const paths = d.querySelectorAll('svg.line path');
+       // Same value on both series must land on the same height, which is the
+       // whole difference between one axis and the two-scale chart that lies.
+       const d2 = document.createElement('div');
+       d2.innerHTML = lineChart([
+         { d:'2026-01-01', value:50000, cost:50000 },
+         { d:'2026-09-01', value:50000, cost:50000 }]);
+       const p2 = d2.querySelectorAll('svg.line path');
+       const ys = s => (s.match(/[\d.]+ ([\d.]+)/g) || []).join();
+       return paths.length === 2 &&
+              ys(p2[0].getAttribute('d')) === ys(p2[1].getAttribute('d'));
+     }));
+  /* A zero baseline on a line chart of a portfolio that went from eight lakh
+     to nine squeezes the whole story into the top of the box. The scale runs
+     over the figures instead, and both ends of it are printed so the reader
+     is not misled by the steepness. */
+  ok('the scale runs over the figures rather than from zero',
+     await p.evaluate(() => {
+       const d = document.createElement('div');
+       d.innerHTML = lineChart([
+         { d:'2026-01-01', value:800000, cost:790000 },
+         { d:'2026-05-01', value:860000, cost:800000 },
+         { d:'2026-09-01', value:900000, cost:800000 }]);
+       // Across both series — the cost line is deliberately the flat one, so
+       // it is the pair that has to fill the box, not either alone.
+       const ys = Array.from(d.querySelectorAll('svg.line path'))
+         .reduce((a,pa) => a.concat((pa.getAttribute('d').match(/ ([\d.]+)/g) || [])
+           .map(Number)), []);
+       return (Math.max.apply(null, ys) - Math.min.apply(null, ys)) > 60;
+     }),
+     await p.evaluate(() => lineChart([
+       { d:'2026-01-01', value:800000, cost:790000 },
+       { d:'2026-09-01', value:900000, cost:800000 }]).slice(0,400)));
+  ok('and both ends of that scale are printed, so it cannot mislead quietly',
+     await p.evaluate(() => {
+       const d = document.createElement('div');
+       d.innerHTML = lineChart([
+         { d:'2026-01-01', value:800000, cost:790000 },
+         { d:'2026-09-01', value:900000, cost:800000 }]);
+       return d.querySelectorAll('svg.line text.ax').length === 4;
+     }));
+  ok('a scale never runs below zero, whatever the figures',
+     await p.evaluate(() => {
+       const d = document.createElement('div');
+       d.innerHTML = lineChart([{ d:'2026-01-01', value:10, cost:5 },
+                                { d:'2026-09-01', value:40, cost:5 }]);
+       const labels = Array.from(d.querySelectorAll('svg.line text.ax'))
+                           .map(t => t.textContent);
+       return !labels.some(l => l.indexOf('-') === 0);
+     }));
+
+  ok('both lines are labelled, so neither is told apart by colour alone',
+     await p.evaluate(() => {
+       const d = document.createElement('div');
+       d.innerHTML = lineChart([
+         { d:'2026-01-01', value:100000, cost:100000 },
+         { d:'2026-09-01', value:180000, cost:120000 }]);
+       return d.querySelectorAll('svg.line text.ll').length === 2 &&
+              /Worth now/.test(d.textContent) && /Put in/.test(d.textContent);
+     }));
+  ok('a sparkline needs two prices, and draws one point per price',
+     await p.evaluate(() => {
+       const none = sparkline([{ d:'2026-09-01', p:10 }], 100, 30);
+       const d = document.createElement('div');
+       d.innerHTML = sparkline([{d:'2026-09-01',p:10},{d:'2026-09-02',p:12},
+                                {d:'2026-09-03',p:11}], 100, 30);
+       const pl = d.querySelector('polyline');
+       return none === '' && pl.getAttribute('points').split(' ').length === 3;
+     }));
+  ok('a sparkline reads green when it ended up and red when it ended down',
+     await p.evaluate(() => {
+       const up = sparkline([{p:10},{p:14}], 100, 30);
+       const dn = sparkline([{p:14},{p:10}], 100, 30);
+       return /--in/.test(up) && /--out/.test(dn);
+     }));
+
+  ok('updating every price at once stamps them all with the one date',
+     await p.evaluate(() => {
+       DB.invest = [
+         { id:'q1', kind:'equity', name:'A', units:10, buy:100, price:100 },
+         { id:'q2', kind:'mf',     name:'B', units:20, buy:50,  price:50 },
+         { id:'q3', kind:'fd',     name:'C', principal:1000, rate:7, months:12,
+           start:'2026-01-01' }];
+       DB.snap = []; save('invest'); save('snap');
+       pricesEditor();
+       const fields = Array.from(document.querySelectorAll('#dlgBody [data-k]'))
+                           .map(n => n.dataset.k);
+       document.querySelector('[data-k="asof"]').value = '2026-09-15';
+       document.querySelector('[data-k="p_q1"]').value = '130';
+       document.querySelector('[data-k="p_q2"]').value = '60';
+       document.getElementById('dlgSave').click();
+       const a = DB.invest.find(x => x.id === 'q1');
+       const b = DB.invest.find(x => x.id === 'q2');
+       return fields.indexOf('p_q3') === -1 &&          // the FD is not offered
+              a.price === 130 && a.asof === '2026-09-15' &&
+              b.price === 60  && a.hist[0].d === '2026-09-15' &&
+              DB.snap.length === 1;
+     }),
+     await p.evaluate(() => JSON.stringify(DB.invest.map(h => [h.id, h.price, h.asof]))));
+  await p.evaluate(() => { DB.invest = []; DB.snap = []; save('invest'); save('snap'); });
+
   /* ---- spending categories ---- */
   ok('no category is listed in two groups, and none is repeated',
      await p.evaluate(() => {

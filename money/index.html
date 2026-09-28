@@ -172,7 +172,15 @@
     text-transform:uppercase;letter-spacing:.06em;}
   .pie-list{flex:1 1 200px;min-width:190px;}
   .pie-list .kv .k{display:flex;align-items:center;gap:7px;}
-  .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto;display:inline-block;}
+  .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto;display:inline-block;
+    margin-right:4px;vertical-align:-1px;}
+  .spark{display:block;margin:6px 0 0;overflow:visible;}
+  svg.line{width:100%;height:auto;display:block;margin:2px 0 0;overflow:visible;}
+  svg.line .gl{stroke:var(--line);stroke-width:1;}
+  svg.line .ll{font-size:9px;fill:var(--ink);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  svg.line .ll.dim{fill:var(--ink-soft);}
+  svg.line .ax{font-size:9px;fill:var(--ink-soft);}
   @media (max-width:400px){ .pie-wrap{justify-content:center;} }
   .f.half{margin:0;}
   .f2 > .f{margin:0 0 8px;}
@@ -293,7 +301,7 @@ function fmtDate(iso){
 /* The build this page is. CI reads it out of here to name the APK and its
    release, and the Data tab prints it, so "which version is actually on the
    phone" is a question that can be answered by looking rather than guessed. */
-const APP_BUILD = 'v4';
+const APP_BUILD = 'v5';
 
 const S = { cur:'₹', locale:'en-IN', theme:'light', month:'', spendCats:[] };
 function money(n, dp){
@@ -331,19 +339,21 @@ const K = {
   spend  :'money_spend_v1',
   invest :'money_invest_v1',
   goals  :'money_goals_v1',
+  snap   :'money_snap_v1',
   tomb   :'money_tomb_v1',
   set    :'money_settings_v1',
   backup :'money_lastBackup_',
   snooze :'money_backupSnooze'
 };
-const LISTS  = ['income','receipt','loans','fixed','spend','invest','goals'];
+const LISTS  = ['income','receipt','loans','fixed','spend','invest','goals','snap'];
 /* The two places a record holds records of its own. They have to be merged in
    their own right: a prepayment added on one phone and one added on the other
    both have to survive, whichever copy of the loan happens to be newer. */
-const NESTED = { loans:'extras', goals:'ledger' };
+const NESTED = { loans:['extras'], goals:['ledger'], invest:['hist'] };
+function nestedKeys(name){ return NESTED[name] || []; }
 
 let DB = { income:[], receipt:[], loans:[], fixed:[], spend:[], invest:[],
-           goals:[], tomb:[] };
+           goals:[], snap:[], tomb:[] };
 
 function load(){
   for(const name of LISTS.concat(['tomb'])){
@@ -452,8 +462,8 @@ function migrateForSync(){
     for(const r of DB[name]){
       if(!r || typeof r !== 'object') continue;
       if(!r.upd) r.upd = bornAt(r.id);
-      const key = NESTED[name];
-      if(key && Array.isArray(r[key])){
+      for(const key of nestedKeys(name)){
+        if(!Array.isArray(r[key])) continue;
         r[key].forEach((e, ix) => {
           if(e && typeof e === 'object'){
             if(!e.id)  e.id  = contentId(e, ix);
@@ -488,9 +498,7 @@ function buried(tomb, rec){
   return !!t && (t.upd || 0) >= (rec.upd || 0);
 }
 
-function mergeNested(name, a, b){
-  const key = NESTED[name];
-  if(!key) return null;
+function mergeNested(key, a, b){
   const map = new Map();
   for(const e of (a[key] || [])) if(e && e.id) map.set(e.id, e);
   for(const e of (b[key] || [])){
@@ -498,7 +506,20 @@ function mergeNested(name, a, b){
     const have = map.get(e.id);
     if(!have || newerOf(have, e) === e) map.set(e.id, e);
   }
-  return Array.from(map.values());
+  /* Sorted, and not by accident.
+
+     Taking them in the order they happened to be in leaves each phone with
+     the same entries in a different order — whichever list it started from
+     comes first. The contents would agree while the arrays did not, which for
+     a price history is not cosmetic: the little line on the card is drawn in
+     array order, so one phone would show the price wandering up and down and
+     the other the truth. Date first, then id, so both phones land on exactly
+     the same array. */
+  return Array.from(map.values()).sort((x,y) => {
+    const dx = x.d || x.date || '', dy = y.d || y.date || '';
+    return dx === dy ? String(x.id).localeCompare(String(y.id))
+                     : dx.localeCompare(dy);
+  });
 }
 
 /* Merges a sync file into what is on this phone. Returns what changed, so the
@@ -519,7 +540,7 @@ function mergeSync(obj){
   }
 
   for(const name of LISTS){
-    const key = NESTED[name];
+    const keys = nestedKeys(name);
     const byId = new Map();
     for(const r of DB[name]) if(r && r.id) byId.set(r.id, r);
 
@@ -528,7 +549,8 @@ function mergeSync(obj){
       const lr = byId.get(rr.id);
       if(!lr){ byId.set(rr.id, rr); rep.added++; continue; }
 
-      const nested = key ? mergeNested(name, lr, rr) : null;
+      const nested = {};
+      for(const key of keys) nested[key] = mergeNested(key, lr, rr);
       const win = newerOf(lr, rr);
 
       // Both phones edited this since the last merge. The newer one stands,
@@ -539,7 +561,7 @@ function mergeSync(obj){
                          ': ' + (lr.name || lr.note || lr.cat || lr.id));
       }
       const out = Object.assign({}, win);
-      if(nested) out[key] = nested;
+      for(const key of keys) out[key] = nested[key];
       byId.set(rr.id, out);
       if(win === rr) rep.updated++; else rep.kept++;
     }
@@ -548,8 +570,8 @@ function mergeSync(obj){
     for(const r of byId.values()){
       if(buried(tomb, r)){ rep.removed++; continue; }
       if(tomb.has(r.id)) rep.revived++;          // edited after it was deleted
-      if(key && Array.isArray(r[key])){
-        r[key] = r[key].filter(e => !buried(tomb, e));
+      for(const key of keys){
+        if(Array.isArray(r[key])) r[key] = r[key].filter(e => !buried(tomb, e));
       }
       out.push(r);
     }
@@ -844,6 +866,57 @@ function holdingValue(h, atIso){
 }
 const KINDS = { equity:'Equity', mf:'Mutual fund', bond:'Bond', fd:'Fixed deposit',
                 rd:'Recurring deposit' };
+/* The kinds that carry a price somebody has to write down. A deposit's worth
+   is computed from its own terms and needs no price. */
+const PRICED = { equity:1, mf:1, bond:1 };
+
+/* ---------- what a holding was worth, and when ----------
+   Every price that goes in is kept, dated, one point a day. That is what the
+   little line on each card is drawn from, and it is the seam an online price
+   would arrive through later: a fetched quote writes the same point with
+   src:'fetched' instead of 'typed', against the same ticker in `code`, and
+   nothing else in the app has to know the difference. */
+function notePrice(h){
+  if(!PRICED[h.kind]) return;
+  const p = toNum(h.price);
+  if(!(p > 0)) return;
+  const d = h.asof || today();
+  h.hist = Array.isArray(h.hist) ? h.hist : [];
+  const at = h.hist.find(x => x.d === d);
+  if(at){
+    if(toNum(at.p) !== p){ at.p = p; at.upd = Date.now(); at.dev = deviceId(); }
+    return;
+  }
+  h.hist.push({ id:uid(), upd:Date.now(), dev:deviceId(), d, p, src:'typed' });
+  h.hist.sort((a,b) => (a.d||'').localeCompare(b.d||''));
+}
+
+/* What the whole portfolio was worth on a given day.
+
+   Recorded as it happens rather than reconstructed afterwards. Reconstructing
+   it would mean applying today's number of shares to last year's prices,
+   because the app keeps no history of how many shares were held when — and
+   that produces a line that looks authoritative and is wrong. A point written
+   down on the day is simply true. */
+function noteSnapshot(){
+  let value = 0, cost = 0;
+  for(const h of DB.invest){
+    if(h.closed) continue;
+    const v = holdingValue(h);
+    value += v.value; cost += v.cost;
+  }
+  const d = today();
+  const at = DB.snap.find(x => x.d === d);
+  if(at){
+    if(Math.abs(toNum(at.value) - value) < 0.005 &&
+       Math.abs(toNum(at.cost)  - cost)  < 0.005) return;
+    at.value = value; at.cost = cost; at.upd = Date.now(); at.dev = deviceId();
+  }else{
+    DB.snap.push({ id:uid(), upd:Date.now(), dev:deviceId(), d, value, cost });
+    DB.snap.sort((a,b) => (a.d||'').localeCompare(b.d||''));
+  }
+  save('snap');
+}
 
 /* =====================================================================
    Rendering
@@ -931,6 +1004,108 @@ function donut(parts, centreLabel, centreValue){
     'px">' + esc(centreValue) + '</text>' +
     '<text x="90" y="100" class="pc2">' + esc(centreLabel) + '</text></svg>' +
     '<div class="pie-list">' + list + '</div></div>';
+}
+
+/* ---------- the line on a card ----------
+   One series, so no legend and no axis: the card around it already says what
+   it is and what it is worth now. Green up, red down, against where it
+   started — the only question a line this small can answer. */
+function sparkline(points, w, h){
+  const ps = (points || []).map(x => toNum(x.p)).filter(v => v > 0);
+  if(ps.length < 2) return '';
+  const lo = Math.min.apply(null, ps), hi = Math.max.apply(null, ps);
+  const span = (hi - lo) || Math.abs(lo) || 1;
+  const step = (w - 4) / (ps.length - 1);
+  const y = v => (h - 2 - (v - lo) / span * (h - 4)).toFixed(1);
+  const d = ps.map((v, i) => (2 + i * step).toFixed(1) + ',' + y(v)).join(' ');
+  const up = ps[ps.length - 1] >= ps[0];
+  return '<svg class="spark" viewBox="0 0 ' + w + ' ' + h + '" width="' + w +
+    '" height="' + h + '" aria-hidden="true"><polyline points="' + d +
+    '" fill="none" stroke="' + (up ? 'var(--in)' : 'var(--out)') +
+    '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<circle cx="' + (2 + (ps.length-1) * step).toFixed(1) + '" cy="' +
+    y(ps[ps.length-1]) + '" r="2.5" fill="' + (up ? 'var(--in)' : 'var(--out)') +
+    '"/></svg>';
+}
+
+/* ---------- value over time ----------
+   Two series on one axis, both in rupees — never two scales, which is the one
+   thing that makes a chart lie outright. What it is worth is the point and
+   carries the colour; what went in is context and stays grey. Both are
+   labelled at the end where the eye finishes, so neither is read by colour
+   alone, and the axis starts at zero because these are amounts. */
+function lineChart(rows){
+  const pts = (rows || []).slice()
+    .sort((a,b) => (a.d||'').localeCompare(b.d||''))
+    .filter(r => r.d);
+  if(pts.length < 2){
+    return '<div class="empty">One reading so far. The line starts at the ' +
+           'second — update your prices again in a week.</div>';
+  }
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const VAL = dark ? '#3987e5' : '#2a78d6';
+  const COST = dark ? '#7C858F' : '#8A8F96';
+
+  const W = 320, H = 150, L = 6, R = 62, Tp = 16, B = 32;
+  const t = r => dateFromIso(r.d).getTime();
+  const t0 = t(pts[0]), t1 = t(pts[pts.length-1]);
+  const tspan = (t1 - t0) || 1;
+
+  /* The scale runs over the figures, not from zero.
+
+     A bar has to start at zero because its length is the quantity. A line
+     does not: its shape is the quantity, and forcing the axis to zero on a
+     portfolio that went from eight lakh to nine squeezes the entire story
+     into the top fifth of the box and shows a flat line. That is not
+     conservative, it is just unreadable.
+
+     The price of that is a scale that can flatter a small change, so both
+     ends of it are written on the chart and the note underneath says so. */
+  const all = pts.reduce((a,r) => a.concat([toNum(r.value), toNum(r.cost)]), []);
+  let lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+  const pad = (hi - lo) * 0.14 || Math.abs(hi) * 0.05 || 1;
+  lo = Math.max(0, lo - pad); hi = hi + pad;
+  const span = (hi - lo) || 1;
+
+  const x = r => (L + (t(r) - t0) / tspan * (W - L - R));
+  const y = v => (Tp + (1 - (v - lo) / span) * (H - Tp - B));
+  const path = key => pts.map((r,i) => (i ? 'L' : 'M') + x(r).toFixed(1) + ' ' +
+        y(toNum(r[key])).toFixed(1)).join(' ');
+
+  const last = pts[pts.length-1];
+  const grid = [lo, (lo+hi)/2, hi].map(v =>
+    '<line x1="' + L + '" x2="' + (W-R) + '" y1="' + y(v).toFixed(1) +
+    '" y2="' + y(v).toFixed(1) + '" class="gl"/>').join('');
+
+  return '<svg class="line" viewBox="0 0 ' + W + ' ' + H + '" role="img" ' +
+    'aria-label="What the portfolio has been worth, against what was put in">' +
+    grid +
+    '<path d="' + path('cost')  + '" fill="none" stroke="' + COST +
+      '" stroke-width="2" stroke-linejoin="round"/>' +
+    '<path d="' + path('value') + '" fill="none" stroke="' + VAL +
+      '" stroke-width="2" stroke-linejoin="round"/>' +
+    '<circle cx="' + x(last).toFixed(1) + '" cy="' + y(toNum(last.value)).toFixed(1) +
+      '" r="3" fill="' + VAL + '"/>' +
+    '<text x="' + (W-R+6) + '" y="' + (y(toNum(last.value)) + 3).toFixed(1) +
+      '" class="ll">' + esc(money(toNum(last.value))) + '</text>' +
+    '<text x="' + (W-R+6) + '" y="' + (y(toNum(last.cost)) + 3).toFixed(1) +
+      '" class="ll dim">' + esc(money(toNum(last.cost))) + '</text>' +
+    '<text x="' + L + '" y="' + (H-4) + '" class="ax">' +
+      esc(shortMonth(ym(pts[0].d))) + '</text>' +
+    '<text x="' + (W-R) + '" y="' + (H-4) + '" class="ax" text-anchor="end">' +
+      esc(shortMonth(ym(last.d))) + '</text>' +
+    '<text x="' + L + '" y="' + (y(hi) - 4).toFixed(1) + '" class="ax">' +
+      esc(money(hi)) + '</text>' +
+    '<text x="' + L + '" y="' + (y(lo) + 10).toFixed(1) + '" class="ax">' +
+      esc(money(lo)) + '</text>' +
+    '</svg>' +
+    '<div class="row" style="gap:14px;margin-top:2px">' +
+    '<span class="tiny"><i class="sw" style="background:' + VAL +
+      '"></i> Worth now</span>' +
+    '<span class="tiny"><i class="sw" style="background:' + COST +
+      '"></i> Put in</span>' +
+    '<span class="tiny muted" style="margin-left:auto">' + pts.length +
+      ' readings</span></div>';
 }
 
 /* ---------- small builders ---------- */
@@ -1480,6 +1655,41 @@ function investFields(kind){
   ].concat(common);
 }
 
+/* Every price in one go. Typing them one holding at a time through the record
+   editor is six screens and a lot of tapping, which is how prices end up
+   months old and the whole portfolio figure quietly stops meaning anything. */
+function pricesEditor(){
+  const list = DB.invest.filter(h => !h.closed && PRICED[h.kind]);
+  if(!list.length){ alert('Nothing priced to update yet — add a share, a fund or a bond first.'); return; }
+  const fields = [
+    { k:'asof', label:'Prices as at', type:'date' },
+    { k:'n', type:'note', label:'Leave a box empty to leave that one alone. ' +
+      'Every figure is kept with its date, which is what the little lines on ' +
+      'the cards are drawn from.' }
+  ];
+  const rec = { asof: today() };
+  for(const h of list){
+    fields.push({ k:'p_' + h.id, type:'money',
+      label:(h.name || KINDS[h.kind]) + (h.code ? ' · ' + h.code : ''),
+      hint:'was ' + money(toNum(h.price) || toNum(h.buy), 2) +
+           (h.asof ? ' on ' + fmtDate(h.asof) : '') });
+    rec['p_' + h.id] = toNum(h.price) || '';
+  }
+  editor('Update prices', fields, rec, r => {
+    let n = 0;
+    for(const h of list){
+      const v = r['p_' + h.id];
+      if(v === '' || v === undefined || !(toNum(v) > 0)) continue;
+      if(toNum(v) === toNum(h.price) && h.asof === r.asof) continue;
+      h.price = toNum(v);
+      h.asof  = r.asof;
+      stamp(h); notePrice(h); n++;
+    }
+    if(!n){ alert('Nothing changed.'); return; }
+    if(save('invest')){ noteSnapshot(); render(); }
+  }, null);
+}
+
 let INV_KIND = 'all';
 function renderInvest(){
   const live = DB.invest.filter(h => !h.closed);
@@ -1496,9 +1706,22 @@ function renderInvest(){
     '<div class="work ' + (gain<0?'neg':'pos') + '">' + esc(money(gain)) + ' on ' +
     esc(money(cost)) + ' put in' + (cost ? ' · ' + pct(gain/cost*100) : '') + '</div></div>' +
     (income ? kv('Interest and coupons a year', esc(money(income))) : '') +
+    (DB.invest.some(x => !x.closed && PRICED[x.kind])
+      ? '<button class="btn" data-prices="1" style="margin-top:10px">Update prices</button>'
+      : '') +
     '<div class="row wrap" style="margin-top:10px;gap:6px">' +
     Object.keys(KINDS).map(k => '<button class="btn sm" data-add="inv:' + k + '">+ ' +
       esc(KINDS[k]) + '</button>').join('') + '</div></div>';
+
+  if((DB.snap || []).length){
+    h += '<div class="card"><h2>How it has gone</h2>' + lineChart(DB.snap) +
+      '<div class="work">A reading is written down each time you change a ' +
+      'price or a holding — at most one a day. The line is those readings, ' +
+      'not a reconstruction: the app does not know how many shares you held ' +
+      'last year, so it does not pretend to. <strong>The scale runs between ' +
+      'the two figures on the left, not from zero</strong>, so read the ' +
+      'numbers rather than the steepness.</div></div>';
+  }
 
   const byKind = {};
   for(const hd of live){
@@ -1534,7 +1757,12 @@ function renderInvest(){
         '<div class="small ' + (v.gain<0?'neg':'pos') + '">' + esc(money(v.gain)) +
         ' · ' + pct(d.gainPct) + '</div>' +
         '<div class="work">' + num(toNum(hd.units),3) + ' &times; ' +
-        esc(money(toNum(hd.price)||toNum(hd.buy),2)) + ' = ' + esc(money(v.value)) + '</div>';
+        esc(money(toNum(hd.price)||toNum(hd.buy),2)) + ' = ' + esc(money(v.value)) + '</div>' +
+        sparkline(hd.hist, 240, 34) +
+        ((hd.hist||[]).length > 1
+          ? '<div class="tiny muted">' + (hd.hist||[]).length + ' prices, ' +
+            esc(fmtDate(hd.hist[0].d)) + ' to ' +
+            esc(fmtDate(hd.hist[hd.hist.length-1].d)) + '</div>' : '');
       if(hd.asof && hd.asof < monthAdd(thisMonth(), -1) + '-01'){
         h += '<div class="small" style="color:var(--warn)">Price is over a month old.</div>';
       }
@@ -1545,7 +1773,8 @@ function renderInvest(){
         '<div class="small pos">' + esc(money(d.coupon)) + ' a year in coupons</div>' +
         '<div class="work">' + num(toNum(hd.units),0) + ' &times; ' +
         esc(money(toNum(hd.face))) + ' &times; ' + num(toNum(hd.coupon),2) +
-        '% = ' + esc(money(d.coupon)) + ' a year</div>';
+        '% = ' + esc(money(d.coupon)) + ' a year</div>' +
+        sparkline(hd.hist, 240, 34);
     } else if(hd.kind === 'fd'){
       h += '<div class="small muted">' + esc(money(toNum(hd.principal))) + ' at ' +
         num(toNum(hd.rate),2) + '% · ' + Math.round(toNum(hd.months)) + ' months' +
@@ -1989,8 +2218,8 @@ function readyForMerge(obj){
     for(const r of list){
       if(!r || typeof r !== 'object') continue;
       if(!r.upd) r.upd = bornAt(r.id);
-      const key = NESTED[name];
-      if(key && Array.isArray(r[key])){
+      for(const key of nestedKeys(name)){
+        if(!Array.isArray(r[key])) continue;
         r[key].forEach((e, ix) => {
           if(e && typeof e === 'object'){
             if(!e.id)  e.id  = contentId(e, ix);
@@ -2124,6 +2353,7 @@ function renderData(){
     kv('Expenses', DB.spend.length) +
     kv('Holdings', DB.invest.length) +
     kv('Goals', DB.goals.length) +
+    kv('Portfolio readings', (DB.snap||[]).length) +
     kv('Deleted, remembered for merging', (DB.tomb||[]).length) + '</div>';
 
   h += '<div class="card"><h2>Settings</h2>' +
@@ -2182,9 +2412,13 @@ function render(){
 }
 function upsert(name, rec){
   stamp(rec);
+  if(name === 'invest') notePrice(rec);
   const i = DB[name].findIndex(x => x.id === rec.id);
   if(i >= 0) DB[name][i] = rec; else DB[name].push(rec);
-  if(save(name)) render();
+  if(save(name)){
+    if(name === 'invest') noteSnapshot();
+    render();
+  }
 }
 function removeRec(name, id){
   DB[name] = DB[name].filter(x => x.id !== id);
@@ -2206,6 +2440,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('[data-tab],[data-go],[data-go-month],[data-pie],' +
     '[data-add],[data-edit],[data-openloan],[data-prepay],[data-delextra],' +
     '[data-invkind],[data-putgoal],[data-export],[data-wipe],[data-snooze],' +
+    '[data-prices],' +
     '[data-savesettings],[data-calc-kind],[data-calc-add],[data-calc="view"]');
   if(!t) return;
   const d = t.dataset;
@@ -2218,6 +2453,7 @@ document.addEventListener('click', e => {
   if(d.openloan) { OPEN_LOAN = (OPEN_LOAN === d.openloan) ? null : d.openloan;
                    renderLoans(); return; }
   if(d.snooze)   { localStorage.setItem(K.snooze, today()); renderBanner(); return; }
+  if(d.prices)   { pricesEditor(); return; }
 
   if(d.add){
     if(d.add === 'income') return editRecord('income', INCOME_FIELDS, null, 'income source');
