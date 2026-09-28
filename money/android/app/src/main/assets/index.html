@@ -301,7 +301,7 @@ function fmtDate(iso){
 /* The build this page is. CI reads it out of here to name the APK and its
    release, and the Data tab prints it, so "which version is actually on the
    phone" is a question that can be answered by looking rather than guessed. */
-const APP_BUILD = 'v5';
+const APP_BUILD = 'v6';
 
 const S = { cur:'₹', locale:'en-IN', theme:'light', month:'', spendCats:[] };
 function money(n, dp){
@@ -429,8 +429,50 @@ function deviceId(){
   if(!S.dev){ S.dev = 'd' + Math.random().toString(36).slice(2,8); save('set'); }
   return S.dev;
 }
+/* ---------- the clock ----------
+   A hybrid logical clock, not the wall clock.
+
+   Wall-clock last-write-wins has a failure that looks exactly like the app
+   losing data. Say her phone is ten minutes slow. I edit a loan at 09:55 and
+   send it over; she merges it, then edits the same loan at 10:05 — her phone
+   stamps it 09:55 by its own reckoning, or earlier, and my older edit wins.
+   Her change vanishes and nothing anywhere says why.
+
+   The fix is to carry a counter beside the time and to advance it whenever a
+   stamp is *seen*, not only when one is made. Having merged my 09:55, her
+   phone will not issue anything below it again, so her later edit sorts after
+   mine however wrong her clock is.
+
+   What that guarantees precisely: an edit made after seeing another edit
+   always wins. Two edits made without either phone having seen the other are
+   genuinely concurrent, and no clock can order those — there the device id
+   decides, and the point of that is only that both phones decide the same
+   way. (Taken from the Swift version of this app, which got here first.) */
+function hlcNow(){
+  const phys = Date.now(), last = S.hlc || { ms:0, c:0 };
+  S.hlc = phys > last.ms ? { ms:phys, c:0 } : { ms:last.ms, c:last.c + 1 };
+  save('set');
+  return S.hlc;
+}
+/* Absorb a stamp from somewhere else, so nothing issued here afterwards can
+   sort below it. This is the half that makes the counter worth having. */
+function hlcSee(ms, c){
+  const phys = Date.now(), last = S.hlc || { ms:0, c:0 };
+  const rm = ms || 0, rc = c || 0;
+  if(phys > last.ms && phys > rm)   S.hlc = { ms:phys, c:0 };
+  else if(last.ms === rm)           S.hlc = { ms:last.ms, c:Math.max(last.c, rc) + 1 };
+  else if(last.ms > rm)             S.hlc = { ms:last.ms, c:last.c + 1 };
+  else                              S.hlc = { ms:rm, c:rc + 1 };
+  save('set');
+  return S.hlc;
+}
+/* The three fields every record and every nested entry carries. */
+function newStamp(){
+  const t = hlcNow();
+  return { upd:t.ms, ctr:t.c, dev:deviceId() };
+}
 /* Marks a record as edited here, now. Every write goes through this. */
-function stamp(rec){ rec.upd = Date.now(); rec.dev = deviceId(); return rec; }
+function stamp(rec){ return Object.assign(rec, newStamp()); }
 
 /* When a record was created, read back out of its own id — uid() puts the
    millisecond in the first characters. Records written before this app could
@@ -482,11 +524,13 @@ function migrateForSync(){
 function newerOf(a, b){
   const ua = a.upd || 0, ub = b.upd || 0;
   if(ua !== ub) return ua > ub ? a : b;
+  const ca = a.ctr || 0, cb = b.ctr || 0;      // the logical half of the clock
+  if(ca !== cb) return ca > cb ? a : b;
   return String(a.dev || '') >= String(b.dev || '') ? a : b;
 }
 function tombstone(id){
   DB.tomb = (DB.tomb || []).filter(t => t.id !== id);
-  DB.tomb.push({ id, upd: Date.now(), dev: deviceId() });
+  DB.tomb.push(Object.assign({ id }, newStamp()));
   save('tomb');
 }
 /* A tombstone only buries a record that has not been edited since. Editing
@@ -495,7 +539,9 @@ function tombstone(id){
    has to be deleted twice. */
 function buried(tomb, rec){
   const t = tomb.get(rec.id);
-  return !!t && (t.upd || 0) >= (rec.upd || 0);
+  // Same comparison as everything else, so a delete and an edit are ordered
+  // against each other by the one rule rather than two that can disagree.
+  return !!t && newerOf(t, rec) === t;
 }
 
 function mergeNested(key, a, b){
@@ -529,6 +575,26 @@ function mergeSync(obj){
   const since  = S.lastMerge || 0;
   const rep = { added:0, updated:0, kept:0, removed:0, revived:0, clashes:[] };
 
+  /* Take in the highest stamp anywhere in their file before deciding
+     anything. After this, nothing this phone writes can sort below something
+     it has already seen — which is the whole point of the counter, and the
+     reason a slow clock stops being able to lose an edit. */
+  let hm = 0, hc = 0;
+  const see = e => {
+    if(!e) return;
+    const m = e.upd || 0, c = e.ctr || 0;
+    if(m > hm || (m === hm && c > hc)){ hm = m; hc = c; }
+  };
+  for(const name of LISTS){
+    for(const r of (remote[name] || [])){
+      see(r);
+      for(const key of nestedKeys(name))
+        if(Array.isArray(r[key])) r[key].forEach(see);
+    }
+  }
+  (remote.tomb || []).forEach(see);
+  if(hm) hlcSee(hm, hc);
+
   // Tombstones first, and from both sides, so a delete made on either phone
   // is known before anything is decided.
   const tomb = new Map();
@@ -536,7 +602,7 @@ function mergeSync(obj){
   for(const t of (remote.tomb || [])){
     if(!t || !t.id) continue;
     const have = tomb.get(t.id);
-    if(!have || (t.upd || 0) > (have.upd || 0)) tomb.set(t.id, t);
+    if(!have || newerOf(have, t) === t) tomb.set(t.id, t);
   }
 
   for(const name of LISTS){
@@ -884,10 +950,10 @@ function notePrice(h){
   h.hist = Array.isArray(h.hist) ? h.hist : [];
   const at = h.hist.find(x => x.d === d);
   if(at){
-    if(toNum(at.p) !== p){ at.p = p; at.upd = Date.now(); at.dev = deviceId(); }
+    if(toNum(at.p) !== p){ at.p = p; Object.assign(at, newStamp()); }
     return;
   }
-  h.hist.push({ id:uid(), upd:Date.now(), dev:deviceId(), d, p, src:'typed' });
+  h.hist.push(Object.assign({ id:uid() }, newStamp(), { d, p, src:'typed' }));
   h.hist.sort((a,b) => (a.d||'').localeCompare(b.d||''));
 }
 
@@ -910,9 +976,9 @@ function noteSnapshot(){
   if(at){
     if(Math.abs(toNum(at.value) - value) < 0.005 &&
        Math.abs(toNum(at.cost)  - cost)  < 0.005) return;
-    at.value = value; at.cost = cost; at.upd = Date.now(); at.dev = deviceId();
+    at.value = value; at.cost = cost; Object.assign(at, newStamp());
   }else{
-    DB.snap.push({ id:uid(), upd:Date.now(), dev:deviceId(), d, value, cost });
+    DB.snap.push(Object.assign({ id:uid() }, newStamp(), { d, value, cost }));
     DB.snap.sort((a,b) => (a.d||'').localeCompare(b.d||''));
   }
   save('snap');
@@ -2289,9 +2355,13 @@ function importJson(file, mode){
     if(obj.settings){
       // Not the device id: that names this phone, and two phones sharing one
       // would make every tie between them break the wrong way for ever.
-      const keepDev = S.dev;
+      const keepDev = S.dev, keepHlc = S.hlc;
       Object.assign(S, obj.settings);
       S.dev = keepDev;
+      // Absorb their clock rather than adopting it: going backwards here
+      // would let this phone re-issue stamps it has already used.
+      S.hlc = keepHlc;
+      if(obj.settings.hlc) hlcSee(obj.settings.hlc.ms, obj.settings.hlc.c);
       save('set');
     }
     document.documentElement.setAttribute('data-theme', S.theme === 'dark' ? 'dark' : 'light');
@@ -2519,8 +2589,8 @@ document.addEventListener('click', e => {
         'month it is made, and the rest of the schedule is worked out again ' +
         'from there — which is the whole reason this screen exists.' }
     ], { date:today() }, r => {
-      loan.extras = (loan.extras || []).concat([{ id:uid(), upd:Date.now(),
-        dev:deviceId(), date:r.date, amount:toNum(r.amount), note:r.note||'' }]);
+      loan.extras = (loan.extras || []).concat([Object.assign({ id:uid() },
+        newStamp(), { date:r.date, amount:toNum(r.amount), note:r.note||'' })]);
       upsert('loans', loan);
     }, null);
   }
@@ -2541,8 +2611,8 @@ document.addEventListener('click', e => {
       { k:'date',   label:'Date',   type:'date', half:true },
       { k:'amount', label:'Amount', type:'money', half:true }
     ], { date:today() }, r => {
-      g.ledger = (g.ledger || []).concat([{ id:uid(), upd:Date.now(),
-        dev:deviceId(), date:r.date, amount:toNum(r.amount) }]);
+      g.ledger = (g.ledger || []).concat([Object.assign({ id:uid() },
+        newStamp(), { date:r.date, amount:toNum(r.amount) })]);
       upsert('goals', g);
     }, null);
   }

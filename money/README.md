@@ -79,6 +79,13 @@ else is disturbed. Adding an expense on each phone gives you both. Merging the
 same file twice does nothing the second time. Merging in either order lands on
 the same answer, so it does not matter who goes first.
 
+**A wrong clock on one phone cannot lose an edit.** Every change carries a
+counter as well as a time, and merging a file advances it — so once a phone
+has seen an edit, nothing it writes afterwards can sort below it. Her phone
+being ten minutes slow does not make her later change lose to your older one.
+Changes made when neither of you had seen the other's are genuinely at the
+same moment; there the newer stamp wins and both phones pick the same one.
+
 Two cases it tells you about rather than deciding quietly:
 
 - **Both of you edited the same thing since the last sync.** The newer edit

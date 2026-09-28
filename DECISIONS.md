@@ -516,3 +516,44 @@ breaks nothing and nothing depends on where one sits.
   use it.** Without that, opening an old expense to correct its amount would
   silently re-file it under whatever happened to be first in the picker — a
   data change nobody asked for, made while doing something else.
+
+## The clock the merge runs on
+
+Wall-clock last-write-wins has a failure that looks exactly like the app
+losing data, and it was in here until a second implementation of this same app
+— written in Swift, in another repository, in another session — turned out to
+have solved it first.
+
+Her phone runs ten minutes slow. I edit a loan at 09:55 and send it over. She
+merges it, then edits the same loan at 10:05 — her phone stamps that 09:55 by
+its own reckoning, or earlier, and my older edit wins. Her change disappears
+and nothing anywhere says why.
+
+The fix is a **hybrid logical clock**: a counter carried beside the time, and
+advanced whenever a stamp is *seen* rather than only when one is made. Having
+merged my 09:55, her phone will not issue anything below it again, so her
+later edit sorts after mine however wrong her clock is.
+
+What that guarantees, precisely: **an edit made after seeing another edit
+always wins.** Two edits made without either phone having seen the other are
+genuinely concurrent, and no clock orders those — the device id decides, and
+the only thing that matters there is that both phones decide the same way. The
+README says it in those terms rather than claiming the clock is fixed.
+
+Three things follow and are all tested:
+
+- **Merging absorbs the highest stamp in the incoming file before anything is
+  decided.** Without that half the counter is decoration.
+- **Restoring a backup never takes this phone's clock backwards.** Adopting
+  the file's clock would let the phone re-issue stamps it had already used.
+- **A record with no counter counts as zero**, so files written before this
+  existed still merge, and an edit made after seeing one still beats it.
+
+The suite forces one phone's `Date.now` ten minutes behind and drives the
+whole scenario, including the control — that the slow phone's own clock really
+does read earlier than the edit it has just taken in, which is what makes the
+case real rather than hypothetical.
+
+Worth recording plainly: this came from reading the other implementation, not
+from finding it here. Two people building the same app twice is usually waste;
+this is the part that paid for itself.

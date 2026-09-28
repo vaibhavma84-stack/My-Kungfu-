@@ -293,6 +293,141 @@ const put = (pg, list, rec) => pg.evaluate(({list,rec}) => {
     await C.context().close(); await D.context().close();
   }
 
+  /* ---- 13. the clock ----
+     The failure this exists to stop: her phone runs slow, she edits something
+     after I do, and her change silently loses to my older one. */
+  {
+    const C = await phone('dCCC'), D = await phone('dDDD');
+    const SKEW = 10 * 60 * 1000;
+    await D.evaluate(skew => {
+      const real = Date.now;
+      window.__realNow = real;
+      Date.now = () => real() - skew;              // this phone is ten minutes slow
+    }, SKEW);
+
+    await C.evaluate(() => upsert('spend',
+      { id:'k1', date:'2026-09-01', amount:100, cat:'Food', note:'his' }));
+    const cs = await C.evaluate(() =>
+      (r => ({ upd:r.upd, ctr:r.ctr }))(DB.spend.find(x => x.id === 'k1')));
+
+    // She sees my edit, then makes her own — later in real time, earlier by
+    // her own clock.
+    await mergeInto(D, await fileFrom(C));
+    await D.evaluate(() => {
+      const r = DB.spend.find(x => x.id === 'k1');
+      upsert('spend', Object.assign({}, r, { amount:250, note:'hers' }));
+    });
+    const ds = await D.evaluate(() =>
+      (r => ({ upd:r.upd, ctr:r.ctr, wall:Date.now() }))(DB.spend.find(x => x.id === 'k1')));
+
+    ok('the slow phone reads earlier than the edit it just took in',
+       ds.wall < cs.upd,
+       ds.wall + ' vs ' + cs.upd);
+    ok('so a wall clock alone would have thrown her edit away — the case this is for',
+       ds.wall < cs.upd);
+    ok('but her edit is stamped above the one she had seen',
+       ds.upd > cs.upd || (ds.upd === cs.upd && ds.ctr > cs.ctr),
+       JSON.stringify(ds) + ' vs ' + JSON.stringify(cs));
+
+    await mergeInto(C, await fileFrom(D));
+    await mergeInto(D, await fileFrom(C));
+    ok('and it stands on both phones',
+       await C.evaluate(() => DB.spend.find(x => x.id === 'k1').amount) === 250 &&
+       await D.evaluate(() => DB.spend.find(x => x.id === 'k1').amount) === 250,
+       await C.evaluate(() => DB.spend.find(x => x.id === 'k1').amount));
+    ok('with the ledgers still identical', (await ledgerOf(C)) === (await ledgerOf(D)));
+
+    /* Edits neither phone had seen are genuinely concurrent. No clock can
+       order those; all that is owed is that both phones answer the same. */
+    await C.evaluate(() => upsert('spend',
+      { id:'k2', date:'2026-09-02', amount:11, cat:'Food' }));
+    await D.evaluate(() => upsert('spend',
+      { id:'k2', date:'2026-09-02', amount:22, cat:'Food' }));
+    await mergeInto(C, await fileFrom(D));
+    await mergeInto(D, await fileFrom(C));
+    ok('two edits made in ignorance of each other still land the same way on both',
+       (await ledgerOf(C)) === (await ledgerOf(D)),
+       await C.evaluate(() => JSON.stringify(DB.spend.find(x => x.id === 'k2'))));
+
+    await D.evaluate(() => { Date.now = window.__realNow; });
+    await C.context().close(); await D.context().close();
+  }
+
+  /* ---- 14. the clock's own rules ---- */
+  {
+    const C = await phone('dCCC');
+    ok('writes inside one millisecond are still ordered, by the counter',
+       await C.evaluate(() => {
+         const real = Date.now;
+         Date.now = () => 1800000000000;
+         S.hlc = null;
+         const a = newStamp(), b = newStamp(), c = newStamp();
+         Date.now = real;
+         return a.upd === b.upd && b.upd === c.upd &&
+                a.ctr === 0 && b.ctr === 1 && c.ctr === 2;
+       }));
+    ok('seeing an older stamp never drags the clock backwards',
+       await C.evaluate(() => {
+         const real = Date.now;
+         Date.now = () => 1000;
+         S.hlc = { ms:5000, c:3 };
+         hlcSee(1000, 0);
+         const after = Object.assign({}, S.hlc);
+         Date.now = real;
+         return after.ms === 5000 && after.c === 4;
+       }),
+       await C.evaluate(() => JSON.stringify(S.hlc)));
+    ok('seeing a newer stamp lifts the clock past it',
+       await C.evaluate(() => {
+         const real = Date.now;
+         Date.now = () => 1000;
+         S.hlc = { ms:5000, c:3 };
+         hlcSee(9000, 7);
+         const after = Object.assign({}, S.hlc);
+         Date.now = real;
+         return after.ms === 9000 && after.c === 8;
+       }));
+    ok('a restore does not take this phone clock backwards',
+       await C.evaluate(() => {
+         S.hlc = { ms:9_000_000_000_000, c:2 };
+         const realConfirm = window.confirm, realAlert = window.alert;
+         window.confirm = () => true; window.alert = () => {};
+         const file = new File([JSON.stringify({ app:'ledger', version:3,
+           saved:today(), settings:{ dev:'dZZZ', hlc:{ ms:1000, c:0 },
+           spendCats:S.spendCats }, data:{ spend:[], tomb:[] } })],
+           'x.json', { type:'application/json' });
+         importJson(file, 'replace');
+         return new Promise(res => setTimeout(() => {
+           window.confirm = realConfirm; window.alert = realAlert;
+           res(S.hlc.ms >= 9_000_000_000_000);
+         }, 120));
+       }),
+       await C.evaluate(() => JSON.stringify(S.hlc)));
+    await C.context().close();
+  }
+
+  /* ---- 15. a file stamped before the counter existed still merges ---- */
+  {
+    const C = await phone('dCCC'), D = await phone('dDDD');
+    await put(C, 'spend', { id:'old1', upd:T + 500, dev:'dCCC',
+                            date:'2026-09-01', amount:60, cat:'Food' });
+    const f = await fileFrom(C);
+    for(const r of f.data.spend) delete r.ctr;      // as version 3 wrote them
+    await D.evaluate(o => { readyForMerge(o); mergeSync(o); render(); }, f);
+    ok('a record with no counter merges, counting as counter zero',
+       await D.evaluate(() => DB.spend.length === 1 && DB.spend[0].id === 'old1'));
+    // Edit it here, then merge that same old file again: the counter-less
+    // record must not climb back over the edit that came after it.
+    ok('and an edit made after seeing it survives the old file being merged again',
+       await D.evaluate(o => {
+         upsert('spend', Object.assign({}, DB.spend[0], { amount:99 }));
+         readyForMerge(o); mergeSync(o);
+         return DB.spend.length === 1 && DB.spend[0].amount === 99;
+       }, f),
+       await D.evaluate(() => JSON.stringify(DB.spend)));
+    await C.context().close(); await D.context().close();
+  }
+
   ok('no page errors on either phone', errs.length === 0, errs.join(' | '));
 
   await br.close(); srv.close();
