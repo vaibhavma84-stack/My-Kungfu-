@@ -16,6 +16,14 @@ object Matching {
         val candidate: Candidate,
         val score: Double,
         val reasons: List<String>,
+        /**
+         * Very likely this recording, under a name the file does not use.
+         *
+         * Same artist, same length to the second, and titles with nothing in
+         * common. See [AnotherName], which is what the app offers to do about
+         * it, and the rule that sets this in [score].
+         */
+        val anotherName: Boolean = false,
     ) {
         /** High enough to apply without a person looking at it. */
         val isConfident: Boolean get() = score >= 0.80
@@ -387,7 +395,8 @@ object Matching {
            earns a sentence and a place at the top of the list, and stays well
            under the score that would let it apply itself.
         */
-        if (artistHit >= 0.75 && titleHit < 0.3 && lengthToTheSecond) {
+        val anotherName = artistHit >= 0.75 && titleHit < 0.3 && lengthToTheSecond
+        if (anotherName) {
             score += 0.10
             reasons += "the same artist and the same length to the second, " +
                     "though the titles have nothing in common -- possibly this " +
@@ -405,7 +414,7 @@ object Matching {
            and a figure shown to a person has to mean what it says.
         */
         val rounded = Math.round(score.coerceIn(0.0, 1.0) * 1000.0) / 1000.0
-        return Scored(c, rounded, reasons)
+        return Scored(c, rounded, reasons, anotherName = anotherName)
     }
 }
 

@@ -1296,3 +1296,100 @@ class AnotherNameTest {
         )
     }
 }
+
+/**
+ * The shortcut for a recording no shop sells.
+ *
+ * Asked for after the third report on the same live set: take the artist and
+ * the picture from the record that matches on length, and keep the name the
+ * file already has.
+ */
+class CreditsOnlyTest {
+
+    private val name = "Megan_Thee_Stallion__Fantasy_Pool_Party_(1080p).mp4"
+
+    private val apples = Candidate(
+        source = "iTunes", id = "1",
+        title = "Girls In The Hood & Savage Remix Performance",
+        artist = "Megan Thee Stallion", album = "Suga", date = "2020-05-04",
+        genre = "Hip-Hop/Rap", trackNumber = 4, durationMs = 269_000,
+        description = "A performance of two singles.",
+        kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+    )
+
+    @Test
+    fun `the file keeps its own name`() {
+        val parsed = FilenameParser.parse(name)
+        val tags = AnotherName.tags(apples, parsed, MediaKind.MUSIC_VIDEO)
+        assertEquals("Fantasy Pool Party", tags.title)
+    }
+
+    @Test
+    fun `and takes who made it`() {
+        val tags = AnotherName.tags(apples, FilenameParser.parse(name), MediaKind.MUSIC_VIDEO)
+        assertEquals("Megan Thee Stallion", tags.artist)
+        assertEquals("Megan Thee Stallion", tags.albumArtist)
+        assertEquals("Hip-Hop/Rap", tags.genre)
+    }
+
+    /**
+     * What it deliberately leaves behind. Every one of these describes the
+     * other release rather than this file.
+     */
+    @Test
+    fun `nothing that belongs to the other release comes with it`() {
+        val tags = AnotherName.tags(apples, FilenameParser.parse(name), MediaKind.MUSIC_VIDEO)
+        assertNull("album", tags.album)
+        assertNull("date", tags.date)
+        assertNull("track number", tags.trackNumber)
+        assertNull("description", tags.description)
+    }
+
+    @Test
+    fun `the source is recorded so the tag can be traced back`() {
+        val tags = AnotherName.tags(apples, FilenameParser.parse(name), MediaKind.MUSIC_VIDEO)
+        assertEquals("iTunes", tags.source)
+        assertEquals("1", tags.sourceId)
+    }
+
+    @Test
+    fun `the kind is the file's reading rather than the record's`() {
+        val tags = AnotherName.tags(apples, FilenameParser.parse(name), MediaKind.NEWS)
+        assertEquals(MediaKind.NEWS, tags.mediaKind)
+    }
+
+    /**
+     * The inversion this case is built on: the parser called the artist the
+     * title, and the candidate is what proves it.
+     */
+    @Test
+    fun `an inverted parse is corrected by the candidate that matched`() {
+        val parsed = FilenameParser.parse(name)
+        assertEquals("Megan Thee Stallion", parsed.title)
+        assertEquals("Fantasy Pool Party", AnotherName.titleFromTheFile(parsed, apples))
+    }
+
+    @Test
+    fun `a name read the right way round keeps its title`() {
+        val parsed = FilenameParser.parse("Adele - Hello.mp4")
+        val c = Candidate(source = "iTunes", id = "2", title = "Someone Like You", artist = "Adele")
+        assertEquals("Hello", AnotherName.titleFromTheFile(parsed, c))
+    }
+
+    @Test
+    fun `the offer is only made where it applies`() {
+        val parsed = FilenameParser.parse(name)
+        val onLength = Matching.rank(listOf(apples), parsed, durationMs = 269_000).first()
+        assertTrue("same length", onLength.anotherName)
+
+        val offLength = Matching.rank(listOf(apples), parsed, durationMs = 400_000).first()
+        assertTrue("length nothing like it", !offLength.anotherName)
+
+        val named = Matching.rank(
+            listOf(Candidate(source = "iTunes", id = "3", title = "Fantasy Pool Party",
+                artist = "Megan Thee Stallion", durationMs = 269_000, kind = "musicVideo")),
+            parsed, durationMs = 269_000,
+        ).first()
+        assertTrue("the titles do agree", !named.anotherName)
+    }
+}

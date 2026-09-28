@@ -85,6 +85,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mykungfu.mvtagger.core.AnotherName
 import com.mykungfu.mvtagger.core.Artwork
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1599,7 +1600,11 @@ private fun DetailScreen(
             if (detail.candidates.isNotEmpty()) {
                 Text("Matches", style = MaterialTheme.typography.titleMedium)
                 for (scored in detail.candidates.take(8)) {
-                    CandidateRow(scored, detail.chosen?.id == scored.candidate.id) {
+                    CandidateRow(
+                        scored,
+                        detail.chosen?.id == scored.candidate.id,
+                        onCreditsOnly = { viewModel.chooseCreditsOnly(scored) },
+                    ) {
                         viewModel.choose(scored)
                     }
                 }
@@ -1886,7 +1891,12 @@ private fun ArtworkView(artwork: Artwork?) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CandidateRow(scored: Matching.Scored, chosen: Boolean, onClick: () -> Unit) {
+private fun CandidateRow(
+    scored: Matching.Scored,
+    chosen: Boolean,
+    onCreditsOnly: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
     val c = scored.candidate
     Card(
         onClick = onClick,
@@ -1913,6 +1923,26 @@ private fun CandidateRow(scored: Matching.Scored, chosen: Boolean, onClick: () -
                 Spacer(Modifier.height(4.dp))
                 Text(
                     scored.reasons.joinToString(", ") + " · " + c.source,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            /*
+               The shortcut for a recording no shop sells.
+
+               A live set is not for sale anywhere, so the nearest record is the
+               same artist at the same length under a different name -- and
+               applying that whole would rename this performance after a single
+               it is not. This takes only the half that is safe to believe.
+            */
+            if (scored.anotherName && onCreditsOnly != null) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onCreditsOnly, modifier = Modifier.fillMaxWidth()) {
+                    Text(AnotherName.LABEL)
+                }
+                Text(
+                    AnotherName.EXPLANATION,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

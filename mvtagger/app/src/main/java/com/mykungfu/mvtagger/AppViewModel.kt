@@ -12,6 +12,7 @@ import com.mykungfu.mvtagger.core.DownloadReport
 import com.mykungfu.mvtagger.core.Downloads
 import com.mykungfu.mvtagger.core.CreditNames
 import com.mykungfu.mvtagger.core.FilmTitle
+import com.mykungfu.mvtagger.core.AnotherName
 import com.mykungfu.mvtagger.core.FilenameParser
 import com.mykungfu.mvtagger.core.Languages
 import com.mykungfu.mvtagger.core.LyricsLanguage
@@ -1378,6 +1379,47 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
         val enriched = withContext(Dispatchers.IO) { enrich(detail, candidate) }
         _state.value = _state.value.copy(detail = enriched.copy(loading = null))
+    }
+
+    /**
+     * Take who made it, and keep what the file calls it.
+     *
+     * For a recording no shop sells -- a live set, a festival performance -- the
+     * nearest record on offer is the same artist at the same length under a
+     * different name. Applying that whole renames this performance after a
+     * single it is not on, so this takes only the part that is safe to believe:
+     * the artist, the genre and the picture. See [AnotherName], which says what
+     * is deliberately left behind and why.
+     */
+    fun chooseCreditsOnly(scored: Matching.Scored) = viewModelScope.launch {
+        val detail = _state.value.detail ?: return@launch
+        val candidate = scored.candidate
+        _state.value = _state.value.copy(
+            detail = detail.copy(loading = "Fetching the artwork\u2026", chosen = candidate)
+        )
+
+        val parsed = FilenameParser.parse(detail.item.name)
+        val credits = AnotherName.tags(candidate, parsed, detail.tags.mediaKind)
+        // The file's own reading wins on everything the credits leave out, and
+        // the title it keeps is the file's, so this is an overlay of a
+        // deliberately thin bag rather than of the whole record.
+        val kept = detail.copy(tags = detail.tags.overlaidWith(credits))
+
+        val enriched = withContext(Dispatchers.IO) { artworkOnly(kept, candidate) }
+        _state.value = _state.value.copy(detail = enriched.copy(loading = null))
+    }
+
+    /**
+     * The picture, and nothing else that a lookup would normally bring.
+     *
+     * No lyrics, no language guess from a title that is not this record's, no
+     * credits lookup: none of those are about this file, which is the whole
+     * reason this path exists.
+     */
+    private fun artworkOnly(detail: Detail, candidate: Candidate): Detail {
+        if (detail.tags.artwork != null) return detail
+        val art = Lookup.artwork(candidate.artworkUrls) ?: return detail
+        return detail.copy(tags = detail.tags.copy(artwork = art))
     }
 
     private fun enrich(detail: Detail, candidate: Candidate): Detail {
