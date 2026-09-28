@@ -293,7 +293,7 @@ function fmtDate(iso){
 /* The build this page is. CI reads it out of here to name the APK and its
    release, and the Data tab prints it, so "which version is actually on the
    phone" is a question that can be answered by looking rather than guessed. */
-const APP_BUILD = 'v2';
+const APP_BUILD = 'v3';
 
 const S = { cur:'₹', locale:'en-IN', theme:'light', month:'', spendCats:[] };
 function money(n, dp){
@@ -331,14 +331,22 @@ const K = {
   spend  :'money_spend_v1',
   invest :'money_invest_v1',
   goals  :'money_goals_v1',
+  tomb   :'money_tomb_v1',
   set    :'money_settings_v1',
   backup :'money_lastBackup_',
   snooze :'money_backupSnooze'
 };
-let DB = { income:[], receipt:[], loans:[], fixed:[], spend:[], invest:[], goals:[] };
+const LISTS  = ['income','receipt','loans','fixed','spend','invest','goals'];
+/* The two places a record holds records of its own. They have to be merged in
+   their own right: a prepayment added on one phone and one added on the other
+   both have to survive, whichever copy of the loan happens to be newer. */
+const NESTED = { loans:'extras', goals:'ledger' };
+
+let DB = { income:[], receipt:[], loans:[], fixed:[], spend:[], invest:[],
+           goals:[], tomb:[] };
 
 function load(){
-  for(const name of ['income','receipt','loans','fixed','spend','invest','goals']){
+  for(const name of LISTS.concat(['tomb'])){
     try{
       const raw = localStorage.getItem(K[name]);
       const v = raw ? JSON.parse(raw) : [];
@@ -351,6 +359,7 @@ function load(){
   }catch(e){}
   if(!S.month) S.month = thisMonth();
   if(!Array.isArray(S.spendCats) || !S.spendCats.length) S.spendCats = DEFAULT_CATS.slice();
+  migrateForSync();
   document.documentElement.setAttribute('data-theme', S.theme === 'dark' ? 'dark' : 'light');
 }
 function save(name){
@@ -376,6 +385,183 @@ function save(name){
   }
 }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* =====================================================================
+   Two phones, one ledger
+   Both phones hold the whole thing. A sync file is carried across by hand —
+   AirDrop, or anything else — and merged in. There is no server and no
+   account, which is the same reason everything else here works with no
+   signal.
+
+   The rule is per record, not per file: whichever phone touched a record
+   last wins that record, and nothing else is disturbed. The old import
+   replaced the lot, which for two people is not a sync at all — whoever
+   imported second lost their own week.
+
+   Three things make the merge safe to run in any order, any number of times:
+
+     - every record carries when it was last edited, and on which phone
+     - a delete leaves a tombstone behind, or the record simply walks back in
+       from the other phone at the next merge
+     - ties break on the device id, so both phones resolve them the same way
+       and end up identical rather than each keeping its own answer
+   ===================================================================== */
+function deviceId(){
+  if(!S.dev){ S.dev = 'd' + Math.random().toString(36).slice(2,8); save('set'); }
+  return S.dev;
+}
+/* Marks a record as edited here, now. Every write goes through this. */
+function stamp(rec){ rec.upd = Date.now(); rec.dev = deviceId(); return rec; }
+
+/* When a record was created, read back out of its own id — uid() puts the
+   millisecond in the first characters. Records written before this app could
+   sync have no edit stamp, and this recovers a sensible one for them.
+
+   It matters that it is derived rather than invented: both phones read the
+   same id and get the same answer, so a ledger copied to a second phone
+   before any of this existed still merges cleanly instead of every record
+   looking newer on whichever phone was opened last. */
+function bornAt(id){
+  const ms = parseInt(String(id || '').slice(0, -5), 36);
+  return (ms > 1577836800000 && ms < Date.now() + 86400000) ? ms : 0;
+}
+/* A stable id for a nested entry that predates ids, derived from what it
+   holds. Invented ids would differ between the two phones and the same
+   prepayment would merge in twice. The position is folded in so two genuinely
+   identical entries stay two. */
+function contentId(e, ix){
+  const text = [e.date || '', e.amount || '', e.note || '', ix].join('|');
+  let h = 0x811c9dc5;
+  for(let i = 0; i < text.length; i++){
+    h ^= text.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return 'x' + h.toString(36);
+}
+function migrateForSync(){
+  for(const name of LISTS){
+    for(const r of DB[name]){
+      if(!r || typeof r !== 'object') continue;
+      if(!r.upd) r.upd = bornAt(r.id);
+      const key = NESTED[name];
+      if(key && Array.isArray(r[key])){
+        r[key].forEach((e, ix) => {
+          if(e && typeof e === 'object'){
+            if(!e.id)  e.id  = contentId(e, ix);
+            if(!e.upd) e.upd = r.upd || 0;
+          }
+        });
+      }
+    }
+  }
+}
+
+/* Which of two versions of the same record stands. Equal stamps fall back to
+   the device id, so the answer does not depend on which phone is doing the
+   merging — without that the two phones settle on different records and stay
+   different for ever. */
+function newerOf(a, b){
+  const ua = a.upd || 0, ub = b.upd || 0;
+  if(ua !== ub) return ua > ub ? a : b;
+  return String(a.dev || '') >= String(b.dev || '') ? a : b;
+}
+function tombstone(id){
+  DB.tomb = (DB.tomb || []).filter(t => t.id !== id);
+  DB.tomb.push({ id, upd: Date.now(), dev: deviceId() });
+  save('tomb');
+}
+/* A tombstone only buries a record that has not been edited since. Editing
+   something on one phone while the other deletes it brings it back, and the
+   merge report says so — silently losing an edit is worse than a record that
+   has to be deleted twice. */
+function buried(tomb, rec){
+  const t = tomb.get(rec.id);
+  return !!t && (t.upd || 0) >= (rec.upd || 0);
+}
+
+function mergeNested(name, a, b){
+  const key = NESTED[name];
+  if(!key) return null;
+  const map = new Map();
+  for(const e of (a[key] || [])) if(e && e.id) map.set(e.id, e);
+  for(const e of (b[key] || [])){
+    if(!e || !e.id) continue;
+    const have = map.get(e.id);
+    if(!have || newerOf(have, e) === e) map.set(e.id, e);
+  }
+  return Array.from(map.values());
+}
+
+/* Merges a sync file into what is on this phone. Returns what changed, so the
+   screen can say it rather than the user having to go and look. */
+function mergeSync(obj){
+  const remote = (obj && obj.data) || {};
+  const since  = S.lastMerge || 0;
+  const rep = { added:0, updated:0, kept:0, removed:0, revived:0, clashes:[] };
+
+  // Tombstones first, and from both sides, so a delete made on either phone
+  // is known before anything is decided.
+  const tomb = new Map();
+  for(const t of (DB.tomb || [])) if(t && t.id) tomb.set(t.id, t);
+  for(const t of (remote.tomb || [])){
+    if(!t || !t.id) continue;
+    const have = tomb.get(t.id);
+    if(!have || (t.upd || 0) > (have.upd || 0)) tomb.set(t.id, t);
+  }
+
+  for(const name of LISTS){
+    const key = NESTED[name];
+    const byId = new Map();
+    for(const r of DB[name]) if(r && r.id) byId.set(r.id, r);
+
+    for(const rr of (remote[name] || [])){
+      if(!rr || !rr.id) continue;
+      const lr = byId.get(rr.id);
+      if(!lr){ byId.set(rr.id, rr); rep.added++; continue; }
+
+      const nested = key ? mergeNested(name, lr, rr) : null;
+      const win = newerOf(lr, rr);
+
+      // Both phones edited this since the last merge. The newer one stands,
+      // but it is named rather than swallowed: this is somebody's salary.
+      if((lr.upd || 0) > since && (rr.upd || 0) > since &&
+         JSON.stringify(lr) !== JSON.stringify(rr)){
+        rep.clashes.push((name === 'spend' ? 'expense' : name.replace(/s$/,'')) +
+                         ': ' + (lr.name || lr.note || lr.cat || lr.id));
+      }
+      const out = Object.assign({}, win);
+      if(nested) out[key] = nested;
+      byId.set(rr.id, out);
+      if(win === rr) rep.updated++; else rep.kept++;
+    }
+
+    let out = [];
+    for(const r of byId.values()){
+      if(buried(tomb, r)){ rep.removed++; continue; }
+      if(tomb.has(r.id)) rep.revived++;          // edited after it was deleted
+      if(key && Array.isArray(r[key])){
+        r[key] = r[key].filter(e => !buried(tomb, e));
+      }
+      out.push(r);
+    }
+    DB[name] = out;
+  }
+
+  DB.tomb = Array.from(tomb.values());
+  // Categories are additive: a category one of us added is not a reason to
+  // lose one the other added. Everything else in settings — theme, the month
+  // being looked at — belongs to the phone it is on and is left alone.
+  if(obj.settings && Array.isArray(obj.settings.spendCats)){
+    for(const c of obj.settings.spendCats)
+      if(!S.spendCats.includes(c)) S.spendCats.push(c);
+  }
+  S.lastMerge = Date.now();
+  S.lastMergeWith = (obj.settings && obj.settings.dev) || '?';
+
+  for(const name of LISTS) save(name);
+  save('tomb'); save('set');
+  return rep;
+}
 
 /* =====================================================================
    The arithmetic
@@ -1064,7 +1250,7 @@ function renderLoans(){
           (l.extras||[]).map((x,ix) => '<div class="kv"><span class="k">' +
             esc(fmtDate(x.date)) + (x.note ? ' · ' + esc(x.note) : '') +
             '</span><span class="num">' + esc(money(toNum(x.amount))) +
-            ' <button class="btn sec sm" data-delextra="' + l.id + ':' + ix +
+            ' <button class="btn sec sm" data-delextra="' + l.id + ':' + x.id +
             '">&times;</button></span></div>').join('') + '</div>';
       }
       h += '<details style="margin-top:8px"><summary>Every instalment</summary>' +
@@ -1726,29 +1912,98 @@ function exportCsv(){
   download('ledger-' + today() + '.csv', csv(out));
 }
 function exportJson(){
-  download('ledger-backup-' + today() + '.json',
-    JSON.stringify({ app:'ledger', version:1, saved:today(), settings:S, data:DB }, null, 1),
+  // version 3 carries edit stamps and tombstones, which is what makes the
+  // file mergeable rather than only restorable. Older files still import:
+  // their records are stamped from their own ids on the way in.
+  download('ledger-' + today() + '-' + deviceId() + '.json',
+    JSON.stringify({ app:'ledger', version:3, saved:today(),
+                     savedAt:Date.now(), settings:S, data:DB }, null, 1),
     'application/json');
 }
-function importJson(file){
+/* An incoming file may predate edit stamps. Give its records the same stamps
+   this phone would derive for them, so the merge has something to compare. */
+function readyForMerge(obj){
+  for(const name of LISTS){
+    const list = Array.isArray(obj.data[name]) ? obj.data[name] : [];
+    for(const r of list){
+      if(!r || typeof r !== 'object') continue;
+      if(!r.upd) r.upd = bornAt(r.id);
+      const key = NESTED[name];
+      if(key && Array.isArray(r[key])){
+        r[key].forEach((e, ix) => {
+          if(e && typeof e === 'object'){
+            if(!e.id)  e.id  = contentId(e, ix);
+            if(!e.upd) e.upd = r.upd || 0;
+          }
+        });
+      }
+    }
+    obj.data[name] = list;
+  }
+  if(!Array.isArray(obj.data.tomb)) obj.data.tomb = [];
+  return obj;
+}
+function mergeReport(rep){
+  const bits = [];
+  if(rep.added)   bits.push(rep.added + ' new');
+  if(rep.updated) bits.push(rep.updated + ' updated from the other phone');
+  if(rep.kept)    bits.push(rep.kept + ' already newer here');
+  if(rep.removed) bits.push(rep.removed + ' deleted');
+  let out = bits.length ? bits.join(', ') + '.' : 'Nothing to bring across.';
+  if(rep.revived){
+    out += '\n\n' + rep.revived + ' record(s) had been deleted on one phone ' +
+           'and edited on the other. The edit was kept — delete it again here ' +
+           'if you meant it to go.';
+  }
+  if(rep.clashes.length){
+    out += '\n\nEdited on both phones since the last sync — the newer edit ' +
+           'was kept:\n• ' + rep.clashes.slice(0, 8).join('\n• ') +
+           (rep.clashes.length > 8 ? '\n• …and ' + (rep.clashes.length-8) + ' more' : '');
+  }
+  return out;
+}
+function importJson(file, mode){
   const fr = new FileReader();
   fr.onload = () => {
     let obj;
     try{ obj = JSON.parse(fr.result); }
-    catch(e){ alert('That file is not a Ledger backup — it would not parse.'); return; }
+    catch(e){ alert('That file is not a Ledger file — it would not parse.'); return; }
     if(!obj || obj.app !== 'ledger' || !obj.data){
-      alert('That file is not a Ledger backup.'); return;
+      alert('That file is not a Ledger file.'); return;
     }
-    const counts = Object.keys(obj.data)
-      .map(k => k + ' ' + (Array.isArray(obj.data[k]) ? obj.data[k].length : 0))
-      .join(', ');
-    if(!confirm('Replace everything on this phone with the backup?\n\n' + counts +
-                '\n\nSaved ' + (obj.saved || 'unknown date') + '. This cannot be undone.')) return;
-    for(const name of ['income','receipt','loans','fixed','spend','invest','goals']){
+    readyForMerge(obj);
+
+    if(mode === 'merge'){
+      const from = (obj.settings && obj.settings.dev) || 'the other phone';
+      if(from === deviceId() &&
+         !confirm('That file came from this phone, not the other one.\n\n' +
+                  'Merging it will not do any harm, but it will not bring ' +
+                  'anything across either. Go on?')) return;
+      const rep = mergeSync(obj);
+      render();
+      alert('Merged.\n\n' + mergeReport(rep));
+      return;
+    }
+
+    const counts = LISTS.map(k => k + ' ' + (obj.data[k] || []).length).join(', ');
+    if(!confirm('REPLACE everything on this phone with this file?\n\n' + counts +
+                '\n\nSaved ' + (obj.saved || 'unknown date') + '.\n\n' +
+                'Anything entered on this phone and not in the file is lost. ' +
+                'To combine two phones, use Merge instead.')) return;
+    for(const name of LISTS){
       DB[name] = Array.isArray(obj.data[name]) ? obj.data[name] : [];
       save(name);
     }
-    if(obj.settings) { Object.assign(S, obj.settings); save('set'); }
+    DB.tomb = Array.isArray(obj.data.tomb) ? obj.data.tomb : [];
+    save('tomb');
+    if(obj.settings){
+      // Not the device id: that names this phone, and two phones sharing one
+      // would make every tie between them break the wrong way for ever.
+      const keepDev = S.dev;
+      Object.assign(S, obj.settings);
+      S.dev = keepDev;
+      save('set');
+    }
     document.documentElement.setAttribute('data-theme', S.theme === 'dark' ? 'dark' : 'light');
     render();
     alert('Restored.');
@@ -1760,7 +2015,27 @@ function renderData(){
   let used = 0;
   for(const k in K) { const v = localStorage.getItem(K[k]); if(v) used += v.length; }
 
-  let h = '<div class="card"><h2>Backup</h2>' +
+  let h = '<div class="card"><h2>The other phone</h2>' +
+    '<div class="work">Both phones keep the whole ledger. Send this phone&rsquo;s ' +
+    'file across, merge it on the other one, and send one back — after that ' +
+    'both are the same. Nothing goes through a server and it works with no ' +
+    'signal: on an iPhone, <strong>AirDrop</strong> is the whole of it.</div>' +
+    kv('This phone', esc(deviceId())) +
+    kv('Last merged', S.lastMerge
+        ? esc(fmtDate(isoFromDate(new Date(S.lastMerge)))) +
+          ' with ' + esc(S.lastMergeWith || '?')
+        : 'never') +
+    '<div class="row wrap" style="margin-top:10px;gap:6px">' +
+    '<button class="btn" data-export="json">Send this phone&rsquo;s file</button>' +
+    '<label class="btn sec" style="cursor:pointer">Merge their file' +
+    '<input type="file" id="mergeFile" accept="*/*" style="display:none"></label>' +
+    '</div>' +
+    '<div class="work">Merging keeps both sides: whoever edited a thing last ' +
+    'wins that one thing, and nothing else is touched. It is safe to merge the ' +
+    'same file twice. If you both edited the same loan since the last merge, ' +
+    'it says so rather than quietly picking one.</div></div>';
+
+  h += '<div class="card"><h2>Backup</h2>' +
     '<div class="work">Everything is in this browser, on this phone, and nowhere ' +
     'else. It is not uploaded and it does not sync. Clearing the browser&rsquo;s ' +
     'website data erases it, and iOS can evict storage for a page left unopened ' +
@@ -1770,12 +2045,15 @@ function renderData(){
     '<div class="row wrap" style="margin-top:10px;gap:6px">' +
     '<button class="btn" data-export="json">Backup (JSON)</button>' +
     '<button class="btn sec" data-export="csv">Export CSV</button>' +
-    '<label class="btn sec sm" style="cursor:pointer">Restore a backup' +
+    '<label class="btn sec sm" style="cursor:pointer">Restore (replaces all)' +
     '<input type="file" id="importFile" accept="*/*" style="display:none"></label>' +
     '</div>' +
     '<div class="work">The CSV is for reading and for a spreadsheet. The JSON is ' +
     'what restores the app exactly, prepayments and goal payments included — the ' +
-    'CSV flattens those and cannot rebuild them.</div></div>';
+    'CSV flattens those and cannot rebuild them.<br><br>' +
+    '<strong>Restore replaces everything on this phone.</strong> To put two ' +
+    'phones together, use Merge above instead — restoring a file from the ' +
+    'other phone would throw away whatever was entered on this one.</div></div>';
 
   h += '<div class="card"><h2>Counts</h2>' +
     kv('Income sources', DB.income.length) +
@@ -1784,7 +2062,8 @@ function renderData(){
     kv('Fixed outgoings', DB.fixed.length) +
     kv('Expenses', DB.spend.length) +
     kv('Holdings', DB.invest.length) +
-    kv('Goals', DB.goals.length) + '</div>';
+    kv('Goals', DB.goals.length) +
+    kv('Deleted, remembered for merging', (DB.tomb||[]).length) + '</div>';
 
   h += '<div class="card"><h2>Settings</h2>' +
     '<div class="f2"><div class="f"><label>Currency symbol</label>' +
@@ -1816,7 +2095,9 @@ function renderData(){
 
   el('tab-data').innerHTML = h;
   const fi = el('importFile');
-  if(fi) fi.onchange = e => { if(e.target.files[0]) importJson(e.target.files[0]); };
+  if(fi) fi.onchange = e => { if(e.target.files[0]) importJson(e.target.files[0], 'replace'); };
+  const fm = el('mergeFile');
+  if(fm) fm.onchange = e => { if(e.target.files[0]) importJson(e.target.files[0], 'merge'); };
 }
 
 /* =====================================================================
@@ -1834,12 +2115,16 @@ function render(){
   if(TAB === 'data')   renderData();
 }
 function upsert(name, rec){
+  stamp(rec);
   const i = DB[name].findIndex(x => x.id === rec.id);
   if(i >= 0) DB[name][i] = rec; else DB[name].push(rec);
   if(save(name)) render();
 }
 function removeRec(name, id){
   DB[name] = DB[name].filter(x => x.id !== id);
+  // Without the tombstone the record walks straight back in from the other
+  // phone at the next merge, and deleting anything becomes impossible.
+  tombstone(id);
   if(save(name)) render();
 }
 function editRecord(name, fields, id, title){
@@ -1932,16 +2217,17 @@ document.addEventListener('click', e => {
         'month it is made, and the rest of the schedule is worked out again ' +
         'from there — which is the whole reason this screen exists.' }
     ], { date:today() }, r => {
-      loan.extras = (loan.extras || []).concat([{ date:r.date, amount:toNum(r.amount),
-                                                  note:r.note||'' }]);
+      loan.extras = (loan.extras || []).concat([{ id:uid(), upd:Date.now(),
+        dev:deviceId(), date:r.date, amount:toNum(r.amount), note:r.note||'' }]);
       upsert('loans', loan);
     }, null);
   }
   if(d.delextra){
-    const [id, ix] = d.delextra.split(':');
+    const [id, eid] = d.delextra.split(':');
     const loan = DB.loans.find(l => l.id === id);
     if(loan && confirm('Remove this prepayment?')){
-      loan.extras.splice(Number(ix), 1);
+      loan.extras = (loan.extras || []).filter(x => x.id !== eid);
+      tombstone(eid);          // or it returns at the next merge
       upsert('loans', loan);
     }
     return;
@@ -1953,7 +2239,8 @@ document.addEventListener('click', e => {
       { k:'date',   label:'Date',   type:'date', half:true },
       { k:'amount', label:'Amount', type:'money', half:true }
     ], { date:today() }, r => {
-      g.ledger = (g.ledger || []).concat([{ date:r.date, amount:toNum(r.amount) }]);
+      g.ledger = (g.ledger || []).concat([{ id:uid(), upd:Date.now(),
+        dev:deviceId(), date:r.date, amount:toNum(r.amount) }]);
       upsert('goals', g);
     }, null);
   }

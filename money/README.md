@@ -61,6 +61,36 @@ Nothing in it is a forecast. It is what the rate you typed produces,
 arithmetically. A fund does not return the same percentage every year and the
 calculator does not pretend it does.
 
+## Two phones, one ledger
+
+Both phones hold the whole thing. There is no server and no account — a file
+is carried across by hand, which on two iPhones means **AirDrop**.
+
+1. **Data** tab → **Send this phone's file** → AirDrop it to the other phone.
+2. On the other phone: **Data** → **Merge their file** → pick it.
+3. Send one back the same way, and merge it here too.
+
+After that round trip both phones hold the same ledger.
+
+**Merging never loses what is on the phone doing the merging.** It works
+record by record: whoever edited a thing last wins that one thing, and nothing
+else is disturbed. Adding an expense on each phone gives you both. Merging the
+same file twice does nothing the second time. Merging in either order lands on
+the same answer, so it does not matter who goes first.
+
+Two cases it tells you about rather than deciding quietly:
+
+- **Both of you edited the same thing since the last sync.** The newer edit
+  stands and the merge names what it was. This is somebody's salary; it is not
+  going to swallow that.
+- **One deleted something the other then edited.** The edit wins and the record
+  comes back, and the merge says so. Delete it again if you meant it to go.
+
+**Merge and Restore are different.** Restore *replaces* everything on the
+phone — it is for putting a backup back on a wiped phone. Using Restore with
+the other phone's file would throw away everything entered on this one. The
+button says so.
+
 ## Where the data lives
 
 In the browser's own storage, on that one device. Nothing is uploaded and
@@ -95,4 +125,7 @@ Run `tests/run.sh` before pushing.
   above.
 - **No price feed.** Share and NAV prices are the ones you type in. The card
   shows the date you wrote them down and marks a price more than a month old.
-- **One device.** Nothing syncs. The JSON backup is how data moves.
+- **Syncing is by hand.** Two phones stay level by swapping a file, not by
+  themselves. Nothing happens in the background and nothing happens over
+  Bluetooth — Safari has no Web Bluetooth, and two phones could not pair
+  through a web page even where it exists.

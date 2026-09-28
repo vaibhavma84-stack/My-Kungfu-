@@ -430,3 +430,66 @@ falls back to a plain fixed panel with the same markup.
 Both iOS paths are tested by driving the real page with `navigator.standalone`
 forced true, including the cancel and the no-share-sheet cases, because none of
 them can be reached from a desktop browser by accident.
+
+## Two phones, one ledger
+
+A household ledger is two people entering things on two phones. The question
+asked was Bluetooth; the answer is that Bluetooth is not reachable and is not
+the hard part anyway.
+
+**Why not Bluetooth.** Safari has never shipped Web Bluetooth, in a tab or on
+the home screen, so on an iPhone it does not exist. The Android WebView does
+not enable it either. Chrome on Android has it, but only as a central
+connecting to a peripheral — a phone browser cannot advertise as one, so two
+phones running this page could not see each other even there. Phone-to-phone
+Bluetooth lives in native code, and on iOS not even there for file transfer.
+
+**What replaced it.** The file, carried by hand. AirDrop between two iPhones is
+peer-to-peer, encrypted, offline and needs no pairing code — strictly better
+than the Bluetooth this was meant to be. The transport was already built: it is
+the share sheet added for the iOS export.
+
+**The hard part was the merge, and it was broken.** Import replaced everything
+on the phone. For one person restoring a backup that is right. For two people
+it is not a sync at all: whoever imported second lost their own week. Three
+things were missing and all three were needed.
+
+- **Every record carries when it was last edited, and on which phone.** Without
+  it there is nothing to compare when both phones hold a different version of
+  the same loan.
+- **A delete leaves a tombstone.** Without one the record simply walks back in
+  from the other phone at the next merge, and deleting anything becomes
+  impossible — the kind of bug that looks like the app is haunted.
+- **Ties break on the device id.** Two edits landing in the same millisecond
+  otherwise resolve differently on each phone, and the two ledgers stay
+  different for ever rather than converging. This is the one that would never
+  have been found by using it.
+
+**Derived, not invented, for anything that predates the stamps.** A record
+with no stamp gets one read back out of its own id, which `uid()` builds from
+the millisecond. Both phones read the same id and derive the same answer, so a
+ledger copied to a second phone before any of this existed still merges
+cleanly. Nested entries — prepayments, goal payments — had no ids at all, so
+theirs are derived from their contents and position: an invented id would
+differ between the phones and the same prepayment would merge in twice. An id
+that is not one of ours decodes to no date rather than a wild one, so a foreign
+record cannot win or lose every merge on a misreading.
+
+**Nested records are merged in their own right**, not carried along with
+whichever copy of the parent happened to be newer. A prepayment you added and
+one she added both have to survive, and the loan they hang off can only be one
+of the two versions.
+
+**Two outcomes are reported rather than decided quietly.** Both phones editing
+the same record since the last merge, and an edit landing after the other phone
+deleted the record. The newer one stands in both cases, but it is named. This
+is somebody's salary and somebody's loan; a merge that silently picks a winner
+is not something to run every week.
+
+**Restore and Merge are separate buttons, and Restore says what it does.**
+Restoring the other phone's file would throw away everything entered on this
+one, which is exactly the bug this whole section exists to remove.
+
+The suite for it drives two pages in two browser contexts, which is genuinely
+separate storage, and proves convergence, idempotence and order-independence
+rather than checking that one merge looked right once.
