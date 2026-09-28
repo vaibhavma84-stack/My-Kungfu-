@@ -241,6 +241,9 @@ object Matching {
     private const val TITLE = 0.45
     private const val ARTIST = 0.30
 
+    /** As high as a source can score while only agreeing with the file itself. */
+    private const val UNCONFIRMED_CEILING = 0.79
+
     fun rank(
         candidates: List<Candidate>,
         parsed: ParsedName,
@@ -395,6 +398,26 @@ object Matching {
            earns a sentence and a place at the top of the list, and stays well
            under the score that would let it apply itself.
         */
+        /*
+           A match from the place the file came from.
+
+           Most of this collection was downloaded from YouTube, so most of
+           these filenames *are* YouTube titles. A YouTube result whose name
+           matches the file therefore proves only that the file came from
+           there, which was never the question. It is agreement with itself.
+
+           The running time is the exception, and it is the reason YouTube is
+           worth asking at all: the filename does not carry a length, so a
+           length that agrees is information from outside the file. Where it
+           agrees, a YouTube answer can stand on its own like any other. Where
+           it does not, this holds it just under the score that would let it
+           write itself into a file -- top of the list, offered, waiting for a
+           person to look.
+        */
+        if (c.source == YouTubeMetadata.SOURCE && !lengthToTheSecond) {
+            score = minOf(score, UNCONFIRMED_CEILING)
+        }
+
         val anotherName = artistHit >= 0.75 && titleHit < 0.3 && lengthToTheSecond
         if (anotherName) {
             score += 0.10

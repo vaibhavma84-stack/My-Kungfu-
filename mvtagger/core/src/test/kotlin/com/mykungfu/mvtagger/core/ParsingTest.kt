@@ -1393,3 +1393,111 @@ class CreditsOnlyTest {
         assertTrue("the titles do agree", !named.anotherName)
     }
 }
+
+/**
+ * YouTube as a source, which is where most of this collection came from.
+ *
+ * Asked for after three reports on one live set ended with the shops having
+ * nothing. It is on YouTube under exactly the name the file uses, which no
+ * shop has at all.
+ */
+class YouTubeSourceTest {
+
+    @Test
+    fun `a channel naming itself first and quoting the song is read correctly`() {
+        val c = YouTubeMetadata.candidate(
+            videoTitle = "Megan Thee Stallion \"Fantasy Pool Party\"",
+            channel = "Megan Thee Stallion",
+            durationSeconds = 269,
+            thumbnailUrl = "https://i.ytimg.com/vi/2u5UTPEDGAw/maxresdefault.jpg",
+            watchUrl = "https://www.youtube.com/watch?v=2u5UTPEDGAw",
+        )
+        assertNotNull(c)
+        assertEquals("Fantasy Pool Party", c!!.title)
+        assertEquals("Megan Thee Stallion", c.artist)
+        assertEquals(269_000, c.durationMs)
+    }
+
+    @Test
+    fun `an ordinary uploader title is cleaned the way a filename is`() {
+        val c = YouTubeMetadata.candidate(
+            videoTitle = "Nora Fatehi - Im Bossy [Official Music Video] (1080p)",
+            channel = "Nora Fatehi", durationSeconds = 201,
+            thumbnailUrl = null, watchUrl = "https://youtu.be/x",
+        )
+        assertNotNull(c)
+        assertEquals("Im Bossy", c!!.title)
+        assertEquals("Nora Fatehi", c.artist)
+    }
+
+    @Test
+    fun `the uploader stands in where the title names nobody`() {
+        val c = YouTubeMetadata.candidate(
+            videoTitle = "Fantasy Pool Party", channel = "Megan Thee Stallion - Topic",
+            durationSeconds = 269, thumbnailUrl = null, watchUrl = "https://youtu.be/y",
+        )
+        assertEquals("Megan Thee Stallion", c!!.artist)
+    }
+
+    @Test
+    fun `youtube's own marks on a channel name are not part of anyone's name`() {
+        assertEquals("Adele", YouTubeMetadata.channelAsArtist("AdeleVEVO"))
+        assertEquals("Arijit Singh", YouTubeMetadata.channelAsArtist("Arijit Singh - Topic"))
+        assertEquals("T-Series", YouTubeMetadata.channelAsArtist("T-Series"))
+        assertNull(YouTubeMetadata.channelAsArtist(null))
+    }
+
+    @Test
+    fun `a result with no title is no answer at all`() {
+        assertNull(
+            YouTubeMetadata.candidate(null, "someone", 100, null, "https://youtu.be/z"),
+        )
+    }
+
+    /**
+     * The circularity rule. The filename is usually a YouTube title already, so
+     * a name that agrees is agreement with itself; a length that agrees is not.
+     */
+    @Test
+    fun `a youtube answer agreeing on nothing but the name cannot apply itself`() {
+        val parsed = FilenameParser.parse("Megan_Thee_Stallion__Fantasy_Pool_Party_(1080p).mp4")
+        val noLength = YouTubeMetadata.candidate(
+            videoTitle = "Megan Thee Stallion \"Fantasy Pool Party\"",
+            channel = "Megan Thee Stallion", durationSeconds = 0,
+            thumbnailUrl = null, watchUrl = "https://youtu.be/a",
+        )!!
+        val top = Matching.rank(listOf(noLength), parsed, durationMs = 269_000).first()
+        assertTrue("scored " + top.score, !top.isConfident)
+    }
+
+    @Test
+    fun `but one whose length agrees stands on its own`() {
+        val parsed = FilenameParser.parse("Megan_Thee_Stallion__Fantasy_Pool_Party_(1080p).mp4")
+        val withLength = YouTubeMetadata.candidate(
+            videoTitle = "Megan Thee Stallion \"Fantasy Pool Party\"",
+            channel = "Megan Thee Stallion", durationSeconds = 269,
+            thumbnailUrl = "https://i.ytimg.com/vi/a/maxresdefault.jpg",
+            watchUrl = "https://youtu.be/a",
+        )!!
+        val top = Matching.rank(listOf(withLength), parsed, durationMs = 269_000).first()
+        assertTrue("scored " + top.score, top.isConfident)
+    }
+
+    @Test
+    fun `a shop that has the record is still preferred over youtube`() {
+        // Same title and length from both; the shop wins on what it knows that
+        // YouTube does not.
+        val parsed = FilenameParser.parse("Adele - Hello.mp4")
+        val shop = Candidate(
+            source = "iTunes", id = "1", title = "Hello", artist = "Adele",
+            album = "25", date = "2015-10-23", durationMs = 295_000,
+            kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val tube = YouTubeMetadata.candidate(
+            videoTitle = "Adele - Hello", channel = "AdeleVEVO",
+            durationSeconds = 295, thumbnailUrl = null, watchUrl = "https://youtu.be/b",
+        )!!
+        val ranked = Matching.rank(listOf(tube, shop), parsed, durationMs = 295_000)
+        assertEquals(ranked.toString(), "iTunes", ranked.first().candidate.source)
+    }
+}

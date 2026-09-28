@@ -1,8 +1,13 @@
 package com.mykungfu.mvtagger
 
+import com.mykungfu.mvtagger.core.Candidate
 import com.mykungfu.mvtagger.core.Downloads
 import com.mykungfu.mvtagger.core.YouTubeLinks
+import com.mykungfu.mvtagger.core.YouTubeMetadata
 import org.schabi.newpipe.extractor.NewPipe
+import org.schabi.newpipe.extractor.search.SearchInfo
+import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
+import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
@@ -82,6 +87,44 @@ object YouTube {
     fun looksLikeYouTube(text: String): Boolean = YouTubeLinks.isYouTube(text)
 
     fun isWatchable(url: String?): Boolean = YouTubeLinks.isWatchable(url)
+
+    /**
+     * Search results, as things a file could be tagged with.
+     *
+     * The place most of this collection came from, and the only source that has
+     * a live set or a channel upload at all. Asked last and only when the shops
+     * have failed: see [Lookup.music] for why, and [YouTubeMetadata] for what
+     * is and is not believed about an answer.
+     *
+     * Returns nothing rather than throwing. A lookup that has already tried
+     * four shops should not end in an error page because YouTube changed its
+     * markup, and this is the last thing it tries.
+     */
+    fun search(query: String, limit: Int = 10): List<Candidate> {
+        if (query.isBlank()) return emptyList()
+        return try {
+            ready()
+            val handler = ServiceList.YouTube.searchQHFactory
+                .fromQuery(query.trim(), listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
+            SearchInfo.getInfo(ServiceList.YouTube, handler)
+                .relatedItems
+                .filterIsInstance<StreamInfoItem>()
+                .take(limit)
+                .mapNotNull { item ->
+                    YouTubeMetadata.candidate(
+                        videoTitle = item.name,
+                        channel = item.uploaderName,
+                        durationSeconds = item.duration,
+                        // Largest last in this list, and the biggest one is
+                        // what a cover wants.
+                        thumbnailUrl = item.thumbnails.maxByOrNull { it.height }?.url,
+                        watchUrl = item.url,
+                    )
+                }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 
     /**
      * What is at this link. Throws when the site will not say, which is a

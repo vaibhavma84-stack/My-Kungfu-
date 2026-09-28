@@ -115,6 +115,33 @@ object Lookup {
             if (index == attempts.lastIndex) break
         }
 
+        /*
+           YouTube, last, and only when the shops came up short.
+
+           It is where most of this collection was downloaded from, which makes
+           it both the most likely source to have the file and the least
+           independent one: a result that matches the filename usually matches
+           because the filename came from it. [Matching] holds an answer that
+           agrees on nothing but the name under the score that would let it
+           apply itself, and [YouTubeMetadata] cleans the title, which is a
+           filename in all but name.
+
+           Asked last because for anything a shop sells the shop's answer is
+           better -- a release date, an album, a cover that is artwork rather
+           than a video still. Asked at all because a live set, a festival
+           performance or a channel upload is in no shop anywhere, and three
+           reports on one such file ended with nothing found.
+        */
+        if ((ranked.firstOrNull()?.score ?: 0.0) < GOOD_ENOUGH_TO_STOP) {
+            for (query in attempts.take(2)) {
+                found += YouTube.search(query, limit = 8)
+            }
+            ranked = Matching.rank(
+                found.distinctBy { it.source + ":" + it.id },
+                parsed, durationMs, preferredLanguage,
+            )
+        }
+
         val deduped = found.distinctBy { it.source + ":" + it.id }
         return MusicResult(ranked = ranked, all = deduped)
     }
