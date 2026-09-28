@@ -562,6 +562,76 @@ const stepUpClosed = (A, s, ratePa, m, years) => {
        return shown && hidden;
      }));
 
+  /* ---- spending categories ---- */
+  ok('no category is listed in two groups, and none is repeated',
+     await p.evaluate(() => {
+       const flat = CAT_GROUPS.reduce((a,g) => a.concat(g.c), []);
+       return new Set(flat).size === flat.length &&
+              flat.length === DEFAULT_CATS.length;
+     }),
+     await p.evaluate(() => {
+       const flat = CAT_GROUPS.reduce((a,g) => a.concat(g.c), []);
+       return flat.filter((c,i) => flat.indexOf(c) !== i).join(',') || 'none';
+     }));
+  ok('the picker offers every category exactly once, inside its group',
+     await p.evaluate(() => {
+       const d = document.createElement('select');
+       d.innerHTML = catOptions('Rent');
+       const vals = Array.from(d.querySelectorAll('option')).map(o => o.value);
+       return d.querySelectorAll('optgroup').length >= 6 &&
+              vals.length === S.spendCats.length &&
+              new Set(vals).size === vals.length &&
+              d.value === 'Rent';
+     }));
+  /* Opening an old expense to change its amount must not quietly re-file it
+     under whatever happens to be first in the list. */
+  ok('a category dropped from the list is still selectable on records that use it',
+     await p.evaluate(() => {
+       const d = document.createElement('select');
+       d.innerHTML = catOptions('Camel feed');
+       return d.value === 'Camel feed' &&
+              /no longer in your list/.test(d.textContent);
+     }));
+  ok('a category of your own appears under Yours',
+     await p.evaluate(() => {
+       const keep = S.spendCats.slice();
+       S.spendCats = S.spendCats.concat(['Camel feed']);
+       const d = document.createElement('select');
+       d.innerHTML = catOptions('Camel feed');
+       const grp = Array.from(d.querySelectorAll('optgroup'))
+                        .find(g => g.label === 'Yours');
+       const found = !!grp && grp.textContent.indexOf('Camel feed') >= 0;
+       S.spendCats = keep;
+       return found;
+     }));
+  ok('an older ledger keeps its categories and gains the new ones, once',
+     await p.evaluate(() => {
+       const real = localStorage.getItem('money_settings_v1');
+       localStorage.setItem('money_settings_v1', JSON.stringify(
+         { spendCats:['Rent','Car','Utilities'], theme:'light' }));
+       // A real boot starts with no catsV in memory; load() only layers the
+       // stored settings on top of it. Clear it so this is that, and not a
+       // second load inside an app that has already run one.
+       delete S.catsV;
+       load();
+       const got = S.spendCats.slice(), v = S.catsV;
+       localStorage.setItem('money_settings_v1', real); load();
+       return ['Rent','Car','Utilities'].every(c => got.includes(c)) &&
+              got.includes('Festivals') && got.includes('Joining travel') &&
+              v === 2;
+     }));
+  ok('and cutting the list down afterwards sticks',
+     await p.evaluate(() => {
+       const real = localStorage.getItem('money_settings_v1');
+       localStorage.setItem('money_settings_v1', JSON.stringify(
+         { spendCats:['Rent','Fuel'], catsV:2, theme:'light' }));
+       load();
+       const got = S.spendCats.slice();
+       localStorage.setItem('money_settings_v1', real); load();
+       return got.join() === 'Rent,Fuel';
+     }),
+     await p.evaluate(() => S.spendCats.length));
+
   ok('the page reports a build, which CI reads to name the APK',
      /^v\d/.test(await p.evaluate(() => APP_BUILD)),
      await p.evaluate(() => APP_BUILD));

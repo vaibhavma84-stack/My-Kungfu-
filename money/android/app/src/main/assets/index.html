@@ -293,7 +293,7 @@ function fmtDate(iso){
 /* The build this page is. CI reads it out of here to name the APK and its
    release, and the Data tab prints it, so "which version is actually on the
    phone" is a question that can be answered by looking rather than guessed. */
-const APP_BUILD = 'v3';
+const APP_BUILD = 'v4';
 
 const S = { cur:'₹', locale:'en-IN', theme:'light', month:'', spendCats:[] };
 function money(n, dp){
@@ -359,6 +359,15 @@ function load(){
   }catch(e){}
   if(!S.month) S.month = thisMonth();
   if(!Array.isArray(S.spendCats) || !S.spendCats.length) S.spendCats = DEFAULT_CATS.slice();
+  /* A ledger set up before the list grew keeps everything it had and gains the
+     new ones once. Additive, like the merge between two phones: a category
+     someone added is never a reason to lose one they had. Trimming the list
+     afterwards sticks, because this only ever runs again if the version
+     number moves. */
+  if((S.catsV || 1) < 2){
+    for(const c of DEFAULT_CATS) if(!S.spendCats.includes(c)) S.spendCats.push(c);
+    S.catsV = 2;
+  }
   migrateForSync();
   document.documentElement.setAttribute('data-theme', S.theme === 'dark' ? 'dark' : 'light');
 }
@@ -571,8 +580,59 @@ function mergeSync(obj){
    number renders exactly as convincingly as a right one.
    ===================================================================== */
 
-const DEFAULT_CATS = ['Rent','Car','Fuel','Groceries','Food','Utilities','Phone',
-  'Medical','Family','Travel','Insurance','Education','Clothes','Other'];
+/* Spending categories, grouped.
+
+   Grouped because a flat list this long is a scroll on a phone and nobody
+   reads to the bottom of it — the first plausible line gets picked and the
+   figures quietly stop meaning anything. The groups are only for the picker;
+   what is stored on an expense is the plain name, so nothing depends on which
+   group a category sits in and moving one breaks nothing.
+
+   The list is meant to be cut down. Most households use fifteen of these.
+   Settings takes the ones you do not want out, and anything typed in there
+   that is not below appears in the picker under "Yours". */
+const CAT_GROUPS = [
+  { g:'Home', c:['Rent','Maintenance','Electricity','Water','Cooking gas',
+                 'Internet','Phone','Repairs','Household help','Furniture'] },
+  { g:'Food', c:['Groceries','Vegetables & fruit','Eating out','Food delivery'] },
+  { g:'Getting about', c:['Fuel','Car','Parking & tolls','Taxi & auto',
+                          'Bus & train','Flights','Travel'] },
+  { g:'Family', c:['School fees','Tuition & coaching','Books & stationery',
+                   'Children','Parents','Family','Gifts','Festivals','Donations'] },
+  { g:'Health', c:['Medical','Medicines','Dental','Gym & fitness'] },
+  { g:'Personal', c:['Clothes','Grooming','Entertainment','Subscriptions',
+                     'Hobbies','Education'] },
+  // This ledger belongs to a ship's officer. Joining travel, a visa, a renewed
+  // certificate and a calling card are real money that would otherwise all end
+  // up filed under Other, which is the same as not recording it.
+  { g:'At sea', c:['Joining travel','Documents & visa','Courses & certificates',
+                   'Uniform & PPE','Ship phone & internet'] },
+  { g:'Money', c:['Insurance','Taxes','Bank charges','Professional fees'] },
+  { g:'', c:['Other'] }
+];
+const DEFAULT_CATS = CAT_GROUPS.reduce((a,g) => a.concat(g.c), []);
+
+/* The picker. A category already on a record but no longer in the list still
+   has to be selectable, or opening an old expense to change its amount would
+   silently re-file it under whatever happens to be first. */
+function catOptions(sel){
+  const out = [], known = new Set();
+  for(const grp of CAT_GROUPS){
+    const list = grp.c.filter(c => S.spendCats.includes(c));
+    list.forEach(c => known.add(c));
+    if(!list.length) continue;
+    out.push(grp.g ? '<optgroup label="' + esc(grp.g) + '">' + opts(list, sel) +
+                     '</optgroup>'
+                   : opts(list, sel));
+  }
+  const yours = S.spendCats.filter(c => !known.has(c));
+  if(yours.length) out.push('<optgroup label="Yours">' + opts(yours, sel) + '</optgroup>');
+  if(sel && !S.spendCats.includes(sel)){
+    out.unshift('<option value="' + esc(sel) + '" selected>' + esc(sel) +
+                ' — no longer in your list</option>');
+  }
+  return out.join('');
+}
 
 const FREQ = {                       // how many times a year it happens
   monthly:{n:12, label:'monthly'},
@@ -944,7 +1004,8 @@ function drawFields(){
     const v = rec[f.k] === undefined || rec[f.k] === null ? '' : rec[f.k];
     let input;
     if(f.type === 'select'){
-      input = '<select data-k="' + f.k + '">' + opts(f.options, String(v)) + '</select>';
+      input = '<select data-k="' + f.k + '">' +
+        (f.cats ? catOptions(String(v)) : opts(f.options, String(v))) + '</select>';
     }else if(f.type === 'textarea'){
       input = '<textarea data-k="' + f.k + '" rows="2">' + esc(v) + '</textarea>';
     }else if(f.type === 'check'){
@@ -1280,7 +1341,7 @@ const FIXED_FIELDS = [
   { k:'freq',   label:'How often', type:'select', half:true,
     options:[{v:'monthly',t:'Monthly'},{v:'quarterly',t:'Quarterly'},
              {v:'half',t:'Half-yearly'},{v:'yearly',t:'Yearly'},{v:'once',t:'One-off'}] },
-  { k:'cat',    label:'Category', type:'select', half:true, options:DEFAULT_CATS },
+  { k:'cat',    label:'Category', type:'select', half:true, cats:true },
   { k:'start',  label:'First due', type:'date', half:true },
   { k:'end',    label:'Last due',  type:'date', half:true, hint:'(blank = ongoing)' },
   { k:'note',   label:'Note', type:'textarea' }
@@ -1289,7 +1350,7 @@ function spendFields(){
   return [
     { k:'date',   label:'Date',   type:'date', half:true },
     { k:'amount', label:'Amount', type:'money', half:true },
-    { k:'cat',    label:'Category', type:'select', options:S.spendCats },
+    { k:'cat',    label:'Category', type:'select', cats:true },
     { k:'note',   label:'What for', ph:'Diesel, groceries, service…' }
   ];
 }
@@ -2075,8 +2136,13 @@ function renderData(){
     opts([{v:'light',t:'Light'},{v:'dark',t:'Dark'}], S.theme) + '</select></div>' +
     '<div class="f"><label>Spending categories</label>' +
     '<textarea data-set="spendCatsText" rows="3">' + esc(S.spendCats.join(', ')) +
-    '</textarea><div class="work">Separated by commas. Removing one leaves the ' +
-    'expenses already filed under it alone.</div></div>' +
+    '</textarea><div class="work">Separated by commas. ' +
+    '<strong>Cut this down to the ones you actually use</strong> — a picker ' +
+    'nobody reads to the bottom of gets the first plausible line, and the ' +
+    'figures stop meaning anything. Removing one leaves the expenses already ' +
+    'filed under it alone, and it stays selectable on those.<br>' +
+    'Anything here that is not one of the built-in ones appears under ' +
+    '&ldquo;Yours&rdquo; in the picker.</div></div>' +
     '<button class="btn sm" data-savesettings="1">Save settings</button></div>';
 
   h += '<div class="card"><h2>This copy</h2>' +

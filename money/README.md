@@ -42,6 +42,7 @@ The APK and the website are separate stores and never see each other's data.
 | **Income** | as many sources as you have, each on its own cycle: monthly salary, quarterly rent, a yearly bonus. What is due, and what actually arrived |
 | **Loans** | as many loans as you carry. Reducing-balance schedule, interest to date, the month it clears, and prepayments that recalculate the rest of it |
 | **Spend** | fixed outgoings that arrive whether you look or not (rent, insurance, fees), and the day-to-day ledger by category |
+| | **50 categories in nine groups** — home, food, getting about, family, health, personal, at sea, money. Cut the list down in Settings to the ones you use; anything you type in yourself appears under "Yours" |
 | **Invest** | equity, mutual funds, bonds, fixed deposits and recurring deposits, each valued its own way — plus the projection and step-up calculator |
 | **Goals** | a target, a date, and what it would take each month to get there |
 | **Data** | the backup, the settings, and the counts |

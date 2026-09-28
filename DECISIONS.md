@@ -493,3 +493,26 @@ one, which is exactly the bug this whole section exists to remove.
 The suite for it drives two pages in two browser contexts, which is genuinely
 separate storage, and proves convergence, idempotence and order-independence
 rather than checking that one merge looked right once.
+
+## Spending categories
+
+Fifty of them, in nine groups, and the groups exist only for the picker — what
+is stored on an expense is the plain name, so moving a category between groups
+breaks nothing and nothing depends on where one sits.
+
+- **Grouped because a flat list that long is a scroll.** Nobody reads to the
+  bottom of one; the first plausible line gets picked and the figures quietly
+  stop meaning anything, which is worse than having fewer categories.
+- **Meant to be cut down.** Most households use fifteen. Settings takes the
+  rest out and the trim sticks, because the one-time top-up only runs again if
+  its version number moves.
+- **An "At sea" group.** Joining travel, a visa, a renewed certificate, a
+  calling card. Real money for the person this was built for, and all of it
+  would otherwise land under Other, which is the same as not recording it.
+- **The top-up is additive**, like the merge between two phones: a ledger set
+  up before the list grew keeps everything it had and gains the new ones once.
+  A category someone added is never a reason to lose one they had.
+- **A category no longer in the list stays selectable on records that already
+  use it.** Without that, opening an old expense to correct its amount would
+  silently re-file it under whatever happened to be first in the picker — a
+  data change nobody asked for, made while doing something else.
