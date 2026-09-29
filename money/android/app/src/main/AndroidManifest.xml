@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- No permissions at all. Everything runs from local assets, nothing is
+         fetched, nothing is sent, and there is no camera or location here. An
+         app holding a person's salary, loans and holdings should be able to
+         show an empty permission list, and this one can. -->
+
+    <!-- allowBackup is off deliberately, and it is the one place this app
+         differs from the deck log.
+
+         With it on, Android's auto backup copies the app's data directory —
+         which is where the WebView keeps localStorage, which is where every
+         figure in this app lives — to the user's Google Drive, on a schedule,
+         with no prompt. The app tells the user on its own Data tab that
+         nothing is uploaded and nothing syncs. That has to be true. Export is
+         the backup here, as it says it is.
+
+         The cost is real and is stated in the README: lose the phone and the
+         data goes with it unless it was exported. That is the trade this app
+         already asks the user to make.
+
+         data_extraction_rules.xml says the same thing for Android 12 and
+         later, which reads it instead of fullBackupContent. -->
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:hardwareAccelerated="true"
+        android:theme="@style/AppTheme"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
+            android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

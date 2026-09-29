@@ -250,3 +250,356 @@ It is built around one company's documents and one specific ship.
 - Play Store also needs an App Bundle rather than an APK, a release keystore, a
   privacy policy, and — for a new personal account — a closed test with 12
   testers for 14 days.
+
+---
+
+# The Ledger app (`money/`)
+
+A second app in the same repository: income, loans, day-to-day spending,
+investments and goals. Built to the deck log's rules — one HTML file, no
+libraries, nothing fetched — for the same reason, and it earns them again on
+its own terms: a price feed that quietly went stale is worse than no price
+feed, and this is a screen people make decisions on.
+
+## Why a separate app rather than another tab
+
+The deck log is a work app. Someone else may be looking at it on the bridge.
+Personal finances do not belong in it, and the 48 MB `index.html` does not need
+another tab.
+
+## The trap that comes with the separate folder, and the one that does not
+
+**`localStorage` is per origin, not per path.** On GitHub Pages the deck log at
+the site root and the Ledger at `/money/` are one origin, so they share one
+store and one 5 MB quota. Every Ledger key is prefixed `money_`, nothing here
+touches a `gasplanet_` key, and a test asserts it. The quota is genuinely
+shared; the Data tab shows how much of it has gone.
+
+**Service worker scope is per path, and that was a trap.** The root worker's
+scope is `./`, which covers `/money/`. The narrower worker wins once it is
+installed — but on a first visit it is not installed yet, and the hand-written
+root worker of the time answered *every* navigation in its scope with the deck
+log's own `index.html`. The money app would have opened as the deck log, and a
+`/money/` exclusion was added to stop it.
+
+That exclusion is gone again, and deliberately. By the time this merged, both
+`sw.js` and `docs/sw.js` had been replaced by workers generated from
+`build-site.py` (which lives in the other repository), and those match cached
+responses by **exact URL** — `caches.match(req)`, not `caches.match('./index.html')`.
+Such a worker has no cached entry for `/money/` and falls through to the
+network, so it cannot hand the deck log back for a Ledger navigation. Keeping
+the exclusion would have meant editing a generated file marked *do not edit
+here*, to fix something that is no longer broken; it would have been
+overwritten at the next publish anyway.
+
+What the generated worker *does* do is navigate every page in its scope when it
+activates a new build, reloading any that does not answer within 1.2 seconds.
+The Ledger is in that scope and the deck log cannot know it exists, so the
+Ledger answers that message itself. Otherwise a deck log publish could reload
+this app over a half-typed expense.
+
+## The arithmetic, and why it is written the way it is
+
+Every instrument runs through **one month-by-month loop** rather than a closed
+form per instrument.
+
+- A **prepayment part way through a loan** has no closed form, and prepayment
+  is the whole reason anyone opens that screen.
+- A **step-up SIP** has no closed form worth trusting — the instalment changes
+  every twelve months.
+- One loop that serves the loan, the FD, the RD and the SIP is one place for a
+  mistake to live, rather than five formulas to keep in step with each other.
+
+The monthly growth factor is written once, `g = (1 + r/(100n))^(n/12)`, with
+`n` the compounds a year. That is what makes the FD in the calculator and the
+FD in the portfolio the same arithmetic rather than two things that happen to
+agree today.
+
+The tests re-derive every figure from the published closed form, written out in
+the test file against its own definition, and compare. It is the only check
+that can catch a wrong one: the UI renders a wrong EMI exactly as convincingly
+as a right one. This is the `factor-check.py` argument, applied to money.
+
+## Things that are the way they are on purpose
+
+- **Indian banks compound a term deposit quarterly.** It is set on the card, not
+  assumed. At 7% over five years, quarterly against yearly is real money.
+- **An RD is a sum over its instalments**, each compounded for the months it has
+  left to run. The single-rate shortcut — everything compounding for the whole
+  term — is out by thousands over a five-year RD, always in the bank's favour.
+  A test pins the app away from it.
+- **The return quoted is money-weighted, not the pot divided by what went in.**
+  The first version divided the final value by everything ever paid in and took
+  a root, which reported 5.84% on a run that returned 12.68%: it treats the last
+  instalment as though it had been there since the first day. The figure is now
+  the rate that balances the actual payments against the final value, solved by
+  bisection. On a flat rate it comes back as exactly that rate, every period —
+  which is the check that it is right, and is asserted.
+- **An instalment is paid at the start of its month.** The loop grows it by that
+  month's factor, so its cash flow sits at month *k*−1, not *k*. Placing it a
+  month late read the return about a quarter point high — the sort of error
+  nobody would ever spot on the screen.
+- **An EMI at or below the first month's interest is named, not looped.** The
+  balance never falls; the card says so rather than printing a century of
+  instalments.
+- **A prepayment larger than the balance is trimmed.** It clears the loan; it
+  does not run it into credit.
+- **An FD is worth exactly its maturity value on its maturity date.** Elapsed
+  time is counted in months, because deposits are quoted in months. Measuring it
+  in average-length years left "worth today" a few rupees under "at maturity" on
+  the day itself, and two figures on one card disagreeing is how trust in all of
+  them goes.
+- **A rate a day needs enough days behind it.** On the 1st of a month, one
+  expense divided by one elapsed day and multiplied out gave a month-end figure
+  larger than the year's income. The span now also covers any expense dated
+  later in the month, and below five days no rate is quoted at all.
+- **Rent is not a day-to-day expense.** It arrives whether you look or not, like
+  an EMI, so fixed outgoings are their own list with their own cycle. The
+  day-to-day ledger is for the spending that varies, which is the only spending
+  worth reading a rate into.
+- **A yearly bonus is not a twelfth of itself every month.** Both figures are
+  shown: the average, for planning, and the month it actually lands in.
+- **A quarterly item is anchored on its own start month**, not on the calendar
+  quarter. One started in February falls in February, May, August, November.
+- **The pie is six hues and then "Other".** Colours are assigned in a fixed
+  order and a category never gets recoloured because another one dropped out —
+  a glance month to month has to mean something. Both palettes were checked by
+  script for colour-blind separation against this app's own card colours rather
+  than eyeballed, and every slice is labelled and repeated in the list beneath,
+  so no slice is told apart by its colour alone.
+- **The prices are the ones you wrote down, and the card says when.** There is
+  no feed. A price more than a month old is marked as old rather than shown as
+  current.
+- **Nothing in the calculator is a forecast**, and it says so. A fund does not
+  return the same percentage every year.
+
+## Ledger on Android
+
+The same WebView-shell approach as the deck log, and mostly the same file. Its
+own Gradle project at `money/android/`, its own workflow, its own release tag.
+
+- **The release tag is `ledger-latest`, not `latest`.** The deck log's workflow
+  deletes and recreates `latest` on every one of its builds. Sharing the tag
+  would have meant each app's build quietly replacing the other's download, and
+  the symptom would have been someone installing the deck log expecting Ledger.
+- **Its own signing key, committed, and verified before publishing.** Same
+  reasoning as the deck log — a build signed by a different key cannot install
+  as an upgrade, and the only way in is to uninstall. There it costs the jobs
+  and photos. Here it costs every loan, holding and expense. The check reuses
+  `android/verify-signing.py` rather than a copy of it.
+- **`check-resources.py` takes a project directory now** and is run against both.
+  It also checks `mipmap/` references, which it previously skipped: a manifest
+  naming a launcher icon that is not there is an aapt error like any other, and
+  costs the same full build cycle to find. There is still no Android SDK in the
+  environment this is developed in, so CI remains the only compiler and the
+  script is the only thing standing between a typo and a wasted cycle.
+- **The shell is smaller than the deck log's on purpose.** No camera, no
+  location, no widgets, no print — no photographs and no map in this app. The
+  permission list is empty, which for an app holding a person's salary and
+  holdings is worth having.
+- **`allowBackup` is off, and this is the one real disagreement with the deck
+  log.** Android's auto backup copies the app data directory — where the WebView
+  keeps localStorage, where all of this lives — to the user's Google Drive, on a
+  schedule, with no prompt. The app's own Data tab says nothing is uploaded and
+  nothing syncs; that has to be true rather than nearly true.
+  `data_extraction_rules.xml` says the same for Android 12 and later, which
+  reads it instead of `fullBackupContent`. The cost is stated plainly in the
+  README: lose the phone and the data goes with it unless it was exported.
+- **The page-to-shell contract is pinned by a test on the page's side.** The
+  shell catches a click on `<a download>` and reads the blob back, because a
+  WebView ignores that click entirely — no error, no file, nothing. If the
+  export is ever rewritten to save some other way, the APK silently loses the
+  ability to back anything up, and nothing on the phone would say so. The test
+  fails instead.
+- **`APP_BUILD` in the page is what CI names the release after**, and the Data
+  tab prints it, so "which version is actually on this phone" is answered by
+  looking rather than guessed.
+
+## Ledger on iPhone
+
+The web app **is** the iPhone app — Safari, Add to Home Screen, full screen,
+offline, its own icon. There is no native wrapper and no App Store listing,
+which would need a Mac, Xcode and a paid Apple Developer account, and would buy
+nothing this does not already do.
+
+Two things had to be fixed before that was true rather than nearly true.
+
+- **A home-screen app on iOS cannot save a file by clicking `<a download>`.**
+  It does nothing: no file, no error, nothing — the same silence as an Android
+  WebView, for a different reason, and with no shell here to catch it. Export
+  is the backup in this app, so on iOS standalone the export goes through the
+  **share sheet** instead, which saves to Files or sends it on. Safari in an
+  ordinary tab is fine, so this is kept to the one case that needs it rather
+  than changing how every platform saves.
+- **The backup date was stamped unconditionally, at the moment of the click.**
+  On an iPhone home-screen app that meant the app recorded a backup that had
+  not happened, went quiet for another fourteen days, and the first anyone
+  would know is when the phone was wiped. It is now stamped only where the file
+  is known to have gone somewhere — and cancelling the share sheet is a
+  decision, not a backup. A backup reminder that lies is worse than none, which
+  is the whole argument for having the reminder in the first place.
+
+Also: `<dialog>` and `showModal` landed in Safari 15.4. An older iPad aboard
+would have reached a button that did nothing with no clue why, so the editor
+falls back to a plain fixed panel with the same markup.
+
+Both iOS paths are tested by driving the real page with `navigator.standalone`
+forced true, including the cancel and the no-share-sheet cases, because none of
+them can be reached from a desktop browser by accident.
+
+## Two phones, one ledger
+
+A household ledger is two people entering things on two phones. The question
+asked was Bluetooth; the answer is that Bluetooth is not reachable and is not
+the hard part anyway.
+
+**Why not Bluetooth.** Safari has never shipped Web Bluetooth, in a tab or on
+the home screen, so on an iPhone it does not exist. The Android WebView does
+not enable it either. Chrome on Android has it, but only as a central
+connecting to a peripheral — a phone browser cannot advertise as one, so two
+phones running this page could not see each other even there. Phone-to-phone
+Bluetooth lives in native code, and on iOS not even there for file transfer.
+
+**What replaced it.** The file, carried by hand. AirDrop between two iPhones is
+peer-to-peer, encrypted, offline and needs no pairing code — strictly better
+than the Bluetooth this was meant to be. The transport was already built: it is
+the share sheet added for the iOS export.
+
+**The hard part was the merge, and it was broken.** Import replaced everything
+on the phone. For one person restoring a backup that is right. For two people
+it is not a sync at all: whoever imported second lost their own week. Three
+things were missing and all three were needed.
+
+- **Every record carries when it was last edited, and on which phone.** Without
+  it there is nothing to compare when both phones hold a different version of
+  the same loan.
+- **A delete leaves a tombstone.** Without one the record simply walks back in
+  from the other phone at the next merge, and deleting anything becomes
+  impossible — the kind of bug that looks like the app is haunted.
+- **Ties break on the device id.** Two edits landing in the same millisecond
+  otherwise resolve differently on each phone, and the two ledgers stay
+  different for ever rather than converging. This is the one that would never
+  have been found by using it.
+
+**Derived, not invented, for anything that predates the stamps.** A record
+with no stamp gets one read back out of its own id, which `uid()` builds from
+the millisecond. Both phones read the same id and derive the same answer, so a
+ledger copied to a second phone before any of this existed still merges
+cleanly. Nested entries — prepayments, goal payments — had no ids at all, so
+theirs are derived from their contents and position: an invented id would
+differ between the phones and the same prepayment would merge in twice. An id
+that is not one of ours decodes to no date rather than a wild one, so a foreign
+record cannot win or lose every merge on a misreading.
+
+**Nested records are merged in their own right**, not carried along with
+whichever copy of the parent happened to be newer. A prepayment you added and
+one she added both have to survive, and the loan they hang off can only be one
+of the two versions.
+
+**Two outcomes are reported rather than decided quietly.** Both phones editing
+the same record since the last merge, and an edit landing after the other phone
+deleted the record. The newer one stands in both cases, but it is named. This
+is somebody's salary and somebody's loan; a merge that silently picks a winner
+is not something to run every week.
+
+**Restore and Merge are separate buttons, and Restore says what it does.**
+Restoring the other phone's file would throw away everything entered on this
+one, which is exactly the bug this whole section exists to remove.
+
+The suite for it drives two pages in two browser contexts, which is genuinely
+separate storage, and proves convergence, idempotence and order-independence
+rather than checking that one merge looked right once.
+
+## Spending categories
+
+Fifty of them, in nine groups, and the groups exist only for the picker — what
+is stored on an expense is the plain name, so moving a category between groups
+breaks nothing and nothing depends on where one sits.
+
+- **Grouped because a flat list that long is a scroll.** Nobody reads to the
+  bottom of one; the first plausible line gets picked and the figures quietly
+  stop meaning anything, which is worse than having fewer categories.
+- **Meant to be cut down.** Most households use fifteen. Settings takes the
+  rest out and the trim sticks, because the one-time top-up only runs again if
+  its version number moves.
+- **An "At sea" group.** Joining travel, a visa, a renewed certificate, a
+  calling card. Real money for the person this was built for, and all of it
+  would otherwise land under Other, which is the same as not recording it.
+- **The top-up is additive**, like the merge between two phones: a ledger set
+  up before the list grew keeps everything it had and gains the new ones once.
+  A category someone added is never a reason to lose one they had.
+- **A category no longer in the list stays selectable on records that already
+  use it.** Without that, opening an old expense to correct its amount would
+  silently re-file it under whatever happened to be first in the picker — a
+  data change nobody asked for, made while doing something else.
+
+## The clock the merge runs on
+
+Wall-clock last-write-wins has a failure that looks exactly like the app
+losing data, and it was in here until a second implementation of this same app
+— written in Swift, in another repository, in another session — turned out to
+have solved it first.
+
+Her phone runs ten minutes slow. I edit a loan at 09:55 and send it over. She
+merges it, then edits the same loan at 10:05 — her phone stamps that 09:55 by
+its own reckoning, or earlier, and my older edit wins. Her change disappears
+and nothing anywhere says why.
+
+The fix is a **hybrid logical clock**: a counter carried beside the time, and
+advanced whenever a stamp is *seen* rather than only when one is made. Having
+merged my 09:55, her phone will not issue anything below it again, so her
+later edit sorts after mine however wrong her clock is.
+
+What that guarantees, precisely: **an edit made after seeing another edit
+always wins.** Two edits made without either phone having seen the other are
+genuinely concurrent, and no clock orders those — the device id decides, and
+the only thing that matters there is that both phones decide the same way. The
+README says it in those terms rather than claiming the clock is fixed.
+
+Three things follow and are all tested:
+
+- **Merging absorbs the highest stamp in the incoming file before anything is
+  decided.** Without that half the counter is decoration.
+- **Restoring a backup never takes this phone's clock backwards.** Adopting
+  the file's clock would let the phone re-issue stamps it had already used.
+- **A record with no counter counts as zero**, so files written before this
+  existed still merge, and an edit made after seeing one still beats it.
+
+The suite forces one phone's `Date.now` ten minutes behind and drives the
+whole scenario, including the control — that the slow phone's own clock really
+does read earlier than the edit it has just taken in, which is what makes the
+case real rather than hypothetical.
+
+Worth recording plainly: this came from reading the other implementation, not
+from finding it here. Two people building the same app twice is usually waste;
+this is the part that paid for itself.
+
+## Getting Ledger onto a phone
+
+GitHub Pages for this repository serves **main, folder `/docs`** — `docs/index.html`
+is the deck log the phones actually run. So an app living at `money/` on a
+branch is not installable at all, however finished it is. The six runtime files
+are published to `docs/money/` by `money/publish.sh`, and `publish-check.py`
+fails the suite if the published copy has drifted from the source.
+
+That check exists because the failure is silent in the worst way: every test
+passes against `money/index.html` while the phone keeps serving last week's
+build, and nothing on either side says so.
+
+Only those six files are published. The tests, the Android project and its
+signing key stay out of `docs/` — there is no reason a browser should be able
+to fetch them, and the check fails if anything else appears there.
+
+**Two workers on one origin, again.** `docs/sw.js` is generated by
+`build-site.py` (which lives in the other repository) and its scope covers
+`/money/`. It is safe as it stands: it matches cached responses by exact URL,
+so it cannot hand the deck log back for a Ledger navigation the way the
+root-level `sw.js` would have. Root `sw.js` still carries its `/money/`
+exclusion for anyone serving from the root, which is the configuration that
+would have broken.
+
+What it does do is **navigate every page in its scope when it activates a new
+build** — it messages each one and reloads any that does not answer within
+1.2 seconds. The Ledger is in that scope and the deck log cannot know it
+exists, so the Ledger answers for itself and is left alone. Otherwise a deck
+log publish could reload this app over a half-typed expense.

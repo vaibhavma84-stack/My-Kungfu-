@@ -1,0 +1,102 @@
+name: Build Ledger APK
+
+on:
+  push:
+    paths:
+      - 'money/**'
+      - '.github/workflows/android-ledger.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use the current app page inside the APK
+        run: |
+          cp money/index.html money/android/app/src/main/assets/index.html
+          # Which commit this APK actually came from. The build name alone
+          # cannot tell two commits apart when a fix is pushed after the
+          # version bump.
+          echo "${GITHUB_SHA}" > money/android/app/src/main/assets/BUILD_SHA
+
+      # There is no Android SDK in the environment this is developed in, so CI
+      # is the only compiler. This catches the mistakes that would otherwise
+      # cost a full build cycle to find: malformed XML, an unescaped
+      # apostrophe in a string, a manifest naming a resource or a class that
+      # is not there.
+      - name: Check resources before spending a build on them
+        run: python3 android/check-resources.py money/android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Read the build number the page reports
+        id: ver
+        run: |
+          name=$(grep -o "APP_BUILD = '[^']*'" money/index.html | head -1 | cut -d"'" -f2)
+          echo "name=${name:-dev}" >> "$GITHUB_OUTPUT"
+          echo "Page reports build: ${name:-dev}"
+
+      - name: Build debug APK
+        working-directory: money/android
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          BUILD_NAME: ${{ steps.ver.outputs.name }}
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      # Signing is invisible from the outside: a wrongly signed APK builds
+      # green, publishes fine, and only fails on the phone — where the app has
+      # to be uninstalled to take the update, taking every loan, holding and
+      # expense with it. The deck log lost data to exactly this. Checked before
+      # anything is published, using that app's own checker rather than a copy
+      # of it that could drift.
+      - name: Check the APK is signed by the expected key
+        working-directory: money/android
+        run: |
+          python3 ../../android/verify-signing.py \
+            app/build/outputs/apk/debug/app-debug.apk \
+            ledger-debug.keystore android
+
+      - name: Name the APK by date
+        id: name
+        run: echo "stamp=$(date +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ledger-${{ steps.name.outputs.stamp }}-apk
+          path: money/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      # Actions artifacts are zipped and need a signed-in browser, which the
+      # GitHub mobile app cannot do. A release asset is a plain direct
+      # download, so the phone can fetch the APK itself from a fixed URL.
+      #
+      # The tag is ledger-latest, NOT latest: the deck log's workflow deletes
+      # and recreates the tag "latest" on every build of its own, so sharing it
+      # would mean each app's build quietly replaced the other's download.
+      - name: Publish the APK as the latest Ledger release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp money/android/app/build/outputs/apk/debug/app-debug.apk Ledger.apk
+          gh release delete ledger-latest --yes --cleanup-tag || true
+          gh release create ledger-latest Ledger.apk \
+            --title "Ledger ${{ steps.ver.outputs.name }}" \
+            --notes "Build ${{ steps.ver.outputs.name }} (versionCode ${{ github.run_number }}), from ${{ github.sha }} on ${{ steps.name.outputs.stamp }}.
+
+          Check it installed: the Data tab should report build ${{ steps.ver.outputs.name }}.
+
+          Install straight from the phone: tap Ledger.apk below, then allow
+          installing from this source when Android asks."
