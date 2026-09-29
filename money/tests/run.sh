@@ -18,6 +18,9 @@ for t in "$here"/*-test.js; do
   if out=$(node "$t" 2>&1); then echo "${out##*$'\n'}"; else echo "FAILED"; echo "$out" | grep FAIL | head -20; fail=1; fi
 done
 
+printf '%-22s ' "publish-check"
+if out=$(python3 "$here/publish-check.py" 2>&1); then echo "${out##*$'\n'}"; else echo "FAILED"; echo "$out" | grep -E "MISSING|NOT PUBLISHED|DRIFTED|SHOULD NOT" | head -8; fail=1; fi
+
 echo
 [ $fail -eq 0 ] && echo "all suites passed" || echo "something failed"
 exit $fail

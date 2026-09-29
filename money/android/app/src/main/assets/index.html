@@ -301,7 +301,7 @@ function fmtDate(iso){
 /* The build this page is. CI reads it out of here to name the APK and its
    release, and the Data tab prints it, so "which version is actually on the
    phone" is a question that can be answered by looking rather than guessed. */
-const APP_BUILD = 'v6';
+const APP_BUILD = 'v7';
 
 const S = { cur:'₹', locale:'en-IN', theme:'light', month:'', spendCats:[] };
 function money(n, dp){
@@ -2717,6 +2717,19 @@ show('month');
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+  /* The deck log's worker sits one level up and its scope covers this folder.
+     When it activates a new build it messages every page in that scope and,
+     if a page does not answer, navigates it — which would reload this one,
+     possibly over a half-typed expense. It cannot know this page exists, so
+     this page answers for itself: acknowledged, and not reloaded.
+
+     Its own updates are picked up on the next launch either way, which is how
+     this app has always taken them. */
+  navigator.serviceWorker.addEventListener('message', e => {
+    if(e.data && e.data.type === 'sw-updated' && e.ports && e.ports[0]){
+      try{ e.ports[0].postMessage({ ok:true, app:'ledger' }); }catch(err){}
+    }
   });
 }
 </script>
