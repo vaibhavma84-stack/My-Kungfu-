@@ -9,9 +9,19 @@ device.
 
 ## Putting it on a phone
 
+The app is served from `docs/money/`, because GitHub Pages for this repository
+is set to **main, folder `/docs`**. So the URL is:
+
+```
+https://vaibhavma84-stack.github.io/My-Kungfu-/money/
+```
+
+It only exists there once `docs/money/` is on **main** — a feature branch is
+not published.
+
 ### iPhone and iPad
 
-1. Open `…/money/` in **Safari** — it has to be Safari, and you have to be
+1. Open that URL in **Safari** — it has to be Safari, and you have to be
    **connected** for that first visit, which caches the whole app on the device.
 2. Share → **Add to Home Screen**.
 3. From then on it opens from the icon, full screen, with no signal needed.
@@ -118,12 +128,20 @@ spreadsheet; it flattens prepayments and goal payments and cannot rebuild them.
 
 ## Changing the app
 
-Edit `index.html`, then bump the `CACHE` constant at the top of `sw.js`
-(`ledger-v1` → `-v2`). Without that bump, devices keep serving the old cached
-copy. Updates are picked up on the launch *after* the one that downloads them,
-since pages are served from cache first.
+1. Edit `index.html`.
+2. Bump `APP_BUILD` at the top of its script. CI names the APK release after
+   it and the Data tab prints it, so you can tell what a phone is running.
+3. Bump `CACHE` in `sw.js` (`ledger-v7` → `-v8`). Without it, devices keep
+   serving the old cached copy. Updates are picked up on the launch *after*
+   the one that downloads them, since pages are served from cache first.
+4. Run `publish.sh`. It copies the six runtime files into `docs/money/`, which
+   is what Pages actually serves. **Forgetting this is silent** — every test
+   passes against `money/index.html` while the phone keeps running last week's
+   build.
+5. Run `tests/run.sh`, which fails if the published copy has drifted.
 
-Run `tests/run.sh` before pushing.
+The Android workflow copies `index.html` into the APK on every build, so the
+phone app and the web version cannot drift either.
 
 ## Known limits
 
