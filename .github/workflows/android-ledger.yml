@@ -37,7 +37,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # packages must be named explicitly. The action's default list includes
+      # 'tools', which Google removed from the SDK repository, and sdkmanager
+      # exits 1 on it — about twenty seconds in, long before Gradle runs. The
+      # deck log's workflow hit this and carries the same line; this one was
+      # written without it and failed all nine of its builds in a row.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
 
       - uses: gradle/actions/setup-gradle@v4
 
