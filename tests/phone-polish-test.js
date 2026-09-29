@@ -114,12 +114,14 @@ function ok(name, cond, got){
       const bar = document.querySelector('.jobs-toolbar');
       return [...bar.children]
         .filter(el => getComputedStyle(el).display !== 'none' &&
-                       el.className.indexOf('view-switch') === -1)
+                       el.className.indexOf('view-switch') === -1 &&
+                       el.className.indexOf('toolbar-fullrow') === -1)
         .map(el => Math.round(el.getBoundingClientRect().width));
     });
     // grid-auto-flow keeps DOM order, so consecutive pairs are the rows --
     // no need to bucket by pixel position, which one rounding error away
-    // splits a row of two into two rows of one.
+    // splits a row of two into two rows of one. A lone button spans the row
+    // (.toolbar-fullrow) instead of needing a partner, same as view-switch.
     ok('an even number of items follow the view-switch, so nothing is left alone',
        items.length % 2 === 0, items.length);
     const pairs = [];
