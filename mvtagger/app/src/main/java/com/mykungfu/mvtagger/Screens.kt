@@ -303,11 +303,43 @@ private fun ToDoContent(state: UiState, viewModel: AppViewModel, onAddSource: ()
         }
     }
 
+    /*
+       The pile a bulk run leaves behind, on its own.
+
+       Auto-tagging searches, finds something, and where nothing scores well
+       enough records "Not sure enough to do this one automatically" -- and
+       those files went back into the list mixed with everything else. After a
+       two-hundred-file run that pile is the whole of the remaining job, and
+       finding it meant reading every row.
+    */
+    val waiting = state.items.count { it.status == ItemStatus.MATCHED }
+    if (waiting > 0) {
+        Row(
+            Modifier.padding(16.dp, 0.dp, 16.dp, 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = state.todoFilter == ToDoFilter.EVERYTHING,
+                onClick = { viewModel.showTodoFilter(ToDoFilter.EVERYTHING) },
+                label = { Text("Everything") },
+            )
+            FilterChip(
+                selected = state.todoFilter == ToDoFilter.NEEDS_A_LOOK,
+                onClick = { viewModel.showTodoFilter(ToDoFilter.NEEDS_A_LOOK) },
+                label = { Text(waiting.toString() + " need a look") },
+            )
+        }
+    }
+
+    val shown = if (state.todoFilter == ToDoFilter.NEEDS_A_LOOK) {
+        state.items.filter { it.status == ItemStatus.MATCHED }
+    } else state.items
+
     LazyColumn(
         contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(state.items, key = { it.id }) { item ->
+        items(shown, key = { it.id }) { item ->
             val ticking = state.todoSelection.isNotEmpty()
             ItemRow(
                 item = item,
@@ -1799,6 +1831,26 @@ private fun DetailScreen(
                 } else {
                     OutlinedButton(onClick = { viewModel.skip(detail.item) }) { Text("Skip") }
                 }
+            }
+
+            /*
+               Straight on to the next one waiting.
+
+               What makes a pile of two hundred finishable: dealing with one and
+               going back to the list to find the next is the step that makes it
+               feel endless, and the list has already worked out which files are
+               waiting.
+            */
+            val stillWaiting = state.items.count {
+                it.status == ItemStatus.MATCHED && it.id != detail.item.id
+            }
+            if (!detail.editingExisting && stillWaiting > 0) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { viewModel.openNextToLook() },
+                    enabled = detail.loading == null,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Next of the " + stillWaiting + " waiting") }
             }
             Spacer(Modifier.height(24.dp))
         }

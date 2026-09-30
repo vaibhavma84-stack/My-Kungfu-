@@ -152,6 +152,17 @@ data class Detail(
 enum class MainTab { TO_DO, COLLECTION, YOUTUBE }
 
 /**
+ * Which of the to-do list is being shown.
+ *
+ * [NEEDS_A_LOOK] is the pile a bulk run leaves behind: the files where nothing
+ * scored well enough to apply on its own. They were mixed in with everything
+ * else, and after a two-hundred-file run that pile is the entire remaining job
+ * -- so it is worth being able to see only it, and to work through it without
+ * going back to the list between each one.
+ */
+enum class ToDoFilter { EVERYTHING, NEEDS_A_LOOK }
+
+/**
  * Which way the finished library is being looked at.
  *
  * Browsing is the shelf. The other two are questions about the whole
@@ -192,6 +203,7 @@ data class UiState(
      */
     val pendingUrl: String? = null,
     val tab: MainTab = MainTab.TO_DO,
+    val todoFilter: ToDoFilter = ToDoFilter.EVERYTHING,
     /** Everything in the output folder, read from the tags inside the files. */
     val collection: List<Entry> = emptyList(),
     val collectionKind: MediaKind = MediaKind.MUSIC_VIDEO,
@@ -278,6 +290,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun showTab(tab: MainTab) {
         _state.value = _state.value.copy(tab = tab)
         if (tab == MainTab.COLLECTION && !_state.value.collectionScanned) scanCollection()
+    }
+
+    fun showTodoFilter(filter: ToDoFilter) {
+        _state.value = _state.value.copy(todoFilter = filter)
+    }
+
+    /**
+     * The files a bulk run could not settle, in the order they are listed.
+     *
+     * [ItemStatus.MATCHED] is what auto-tagging records when it searched, found
+     * something, and was not sure enough to write it: "Not sure enough to do
+     * this one automatically." Those are the ones worth a person's eyes, and
+     * after a long run they are the whole of what is left.
+     */
+    fun needsALook(): List<Item> = _state.value.items.filter { it.status == ItemStatus.MATCHED }
+
+    /**
+     * Open the next one waiting, so a pile can be worked through in one sitting.
+     *
+     * Counted from the file on screen rather than from the top, so saving one
+     * and asking for the next does not start again at the beginning. When the
+     * one just dealt with has left the pile -- which is what saving it does --
+     * its position is still where the next one is, so the search is for the
+     * first waiting file at or after where it was.
+     */
+    fun openNextToLook() = viewModelScope.launch {
+        val waiting = needsALook()
+        if (waiting.isEmpty()) {
+            _state.value = _state.value.copy(
+                detail = null,
+                message = "Nothing else is waiting to be looked at.",
+            )
+            return@launch
+        }
+        val here = _state.value.detail?.item?.id
+        val all = _state.value.items
+        val from = all.indexOfFirst { it.id == here }
+        val next = if (from < 0) waiting.first() else {
+            all.drop(from + 1).firstOrNull { it.status == ItemStatus.MATCHED }
+                ?: waiting.first()
+        }
+        open(next)
     }
 
     fun setCollectionKind(kind: MediaKind) {
