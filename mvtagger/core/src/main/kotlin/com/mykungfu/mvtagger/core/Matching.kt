@@ -250,8 +250,10 @@ object Matching {
         /** Length of the actual video, when known: the strongest signal there is. */
         durationMs: Int? = null,
         preferredLanguage: String? = null,
+        /** What a person has already settled about files like this one. */
+        known: Learned.Known = Learned.Known(),
     ): List<Scored> = candidates
-        .map { score(it, parsed, durationMs, preferredLanguage) }
+        .map { score(it, parsed, durationMs, preferredLanguage, known) }
         .sortedByDescending { it.score }
 
     private fun score(
@@ -259,6 +261,7 @@ object Matching {
         parsed: ParsedName,
         durationMs: Int?,
         preferredLanguage: String?,
+        known: Learned.Known = Learned.Known(),
     ): Scored {
         var score = 0.0
         val reasons = ArrayList<String>()
@@ -436,6 +439,35 @@ object Matching {
            that is exactly at the threshold has to count as at the threshold,
            and a figure shown to a person has to mean what it says.
         */
+        /*
+           What a person has already decided, which outranks anything measured.
+
+           A wrong answer that scores well scores well every time -- "Butter
+           (Megan Thee Stallion Remix)" was top for a live set and no ranking
+           rule would ever have learned otherwise. But somebody can say so once,
+           and once said it is not a probability to be weighed against others.
+           So a rejection is absolute, and the reason says whose decision it
+           was, because a score of nothing with no explanation is the kind of
+           behaviour this app is written to avoid.
+        */
+        if (Learned.idOf(c) in known.rejected) {
+            return Scored(c, 0.0, listOf("you said this is not the one"), anotherName = false)
+        }
+
+        /*
+           And the artist settled for this uploader before.
+
+           The first field of a downloaded name is usually the channel, and a
+           channel does not change who it is between uploads. So a match
+           accepted for one of its files names the artist for the rest -- which
+           is worth as much as the artist check itself, because it is not a
+           guess from a string but somebody's answer.
+        */
+        if (!known.artist.isNullOrBlank() && tokenOverlap(known.artist, c.artist) >= 0.6) {
+            score += 0.12
+            reasons += "the artist you chose for this uploader before"
+        }
+
         val rounded = Math.round(score.coerceIn(0.0, 1.0) * 1000.0) / 1000.0
         return Scored(c, rounded, reasons, anotherName = anotherName)
     }

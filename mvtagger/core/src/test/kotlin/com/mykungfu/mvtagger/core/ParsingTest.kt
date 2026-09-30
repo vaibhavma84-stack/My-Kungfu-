@@ -1501,3 +1501,140 @@ class YouTubeSourceTest {
         assertEquals(ranked.toString(), "iTunes", ranked.first().candidate.source)
     }
 }
+
+/**
+ * Remembering a correction, so the same fix is not needed twice.
+ *
+ * Five reports in one afternoon were five separate failures on five files, and
+ * the sixth file from the same channel would have failed identically. A
+ * collection is a few dozen channels uploading under a few conventions.
+ */
+class LearnedTest {
+
+    private val guru =
+        "Guru_Randhawa__Nachle_Na_Video___DIL_JUUNGLEE___Neeti_M.mp4"
+    private val megan = "Megan_Thee_Stallion__Fantasy_Pool_Party_(1080p).mp4"
+
+    private fun candidate(title: String, artist: String?, id: String = title) = Candidate(
+        source = "iTunes", id = id, title = title, artist = artist,
+        kind = "song", mediaKind = MediaKind.MUSIC_VIDEO,
+    )
+
+    @Test
+    fun `the handle is the field the uploader wrote first`() {
+        val key = Learned.uploaderKey(FilenameParser.parse(guru), guru)
+        assertEquals("guru randhava", key)
+    }
+
+    @Test
+    fun `and it is the first field even where the parser swapped the halves`() {
+        // The whole reason this reads the raw name: for this file the parser
+        // called the artist the title, and the *first* field is still the
+        // channel.
+        val key = Learned.uploaderKey(FilenameParser.parse(megan), megan)
+        // Folded, which is why "thee" reads as "thi": see Transliterate.
+        assertEquals("megan thi stalion", key)
+    }
+
+    @Test
+    fun `two spellings of one channel are one handle`() {
+        val a = "Guru Randhawa - Azul.mp4"
+        val b = "Guru Randhava - Something Else.mp4"
+        assertEquals(
+            Learned.uploaderKey(FilenameParser.parse(a), a),
+            Learned.uploaderKey(FilenameParser.parse(b), b),
+        )
+    }
+
+    @Test
+    fun `a name with no fields is nobody's channel`() {
+        // One whole title names one recording, not a source of them.
+        val name = "Bohemian Rhapsody.mp4"
+        assertNull(Learned.uploaderKey(FilenameParser.parse(name), name))
+    }
+
+    @Test
+    fun `the artist settled before helps the next file from that channel`() {
+        val parsed = FilenameParser.parse("Guru Randhawa - Some New Song.mp4")
+        val right = candidate("Some New Song", "Guru Randhawa & Someone", id = "1")
+        val stranger = candidate("Some New Song", "An Entirely Different Person", id = "2")
+
+        val blind = Matching.rank(listOf(stranger, right), parsed)
+        val taught = Matching.rank(
+            listOf(stranger, right), parsed,
+            known = Learned.Known(artist = "Guru Randhawa"),
+        )
+        assertEquals(taught.toString(), "1", taught.first().candidate.id)
+        assertTrue(
+            "no credit given",
+            taught.first { it.candidate.id == "1" }.score >
+                    blind.first { it.candidate.id == "1" }.score,
+        )
+        assertTrue(
+            taught.first().reasons.toString(),
+            taught.first().reasons.any { it.contains("chose for this uploader before") },
+        )
+    }
+
+    /**
+     * A rejection is a decision rather than a measurement, so it is absolute.
+     */
+    @Test
+    fun `a rejected candidate scores nothing whatever else agrees`() {
+        val parsed = FilenameParser.parse("Adele - Hello.mp4")
+        val perfect = Candidate(
+            source = "iTunes", id = "1", title = "Hello", artist = "Adele",
+            durationMs = 295_000, kind = "musicVideo", mediaKind = MediaKind.MUSIC_VIDEO,
+        )
+        val top = Matching.rank(
+            listOf(perfect), parsed, durationMs = 295_000,
+            known = Learned.Known(rejected = setOf("iTunes:1")),
+        ).first()
+        assertEquals(0.0, top.score, 0.0001)
+        assertTrue(top.reasons.toString(), top.reasons.any { it.contains("not the one") })
+    }
+
+    @Test
+    fun `and it sinks below everything that was not rejected`() {
+        val parsed = FilenameParser.parse("Adele - Hello.mp4")
+        val rejected = candidate("Hello", "Adele", id = "1")
+        val other = candidate("Hello", "Somebody Else", id = "2")
+        val ranked = Matching.rank(
+            listOf(rejected, other), parsed,
+            known = Learned.Known(rejected = setOf("iTunes:1")),
+        )
+        assertEquals(ranked.toString(), "2", ranked.first().candidate.id)
+    }
+
+    @Test
+    fun `rejecting one release does not reject another`() {
+        val parsed = FilenameParser.parse("Adele - Hello.mp4")
+        val ranked = Matching.rank(
+            listOf(candidate("Hello", "Adele", id = "1"), candidate("Hello", "Adele", id = "2")),
+            parsed, known = Learned.Known(rejected = setOf("iTunes:1")),
+        )
+        assertEquals(ranked.toString(), "2", ranked.first().candidate.id)
+        assertEquals(0.0, ranked.last().score, 0.0001)
+    }
+
+    @Test
+    fun `knowing nothing scores exactly as before`() {
+        val parsed = FilenameParser.parse("Adele - Hello.mp4")
+        val c = candidate("Hello", "Adele")
+        assertEquals(
+            Matching.rank(listOf(c), parsed).first().score,
+            Matching.rank(listOf(c), parsed, known = Learned.Known()).first().score,
+            0.0001,
+        )
+    }
+
+    @Test
+    fun `a recording handle is about the recording rather than the channel`() {
+        val one = Learned.recordingKey(FilenameParser.parse(megan), megan)
+        val other = "Megan_Thee_Stallion__Body_(1080p).mp4"
+        assertTrue(
+            one + " vs " + Learned.recordingKey(FilenameParser.parse(other), other),
+            one != Learned.recordingKey(FilenameParser.parse(other), other),
+        )
+    }
+}

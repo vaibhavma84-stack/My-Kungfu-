@@ -13,6 +13,7 @@ import com.mykungfu.mvtagger.core.Downloads
 import com.mykungfu.mvtagger.core.CreditNames
 import com.mykungfu.mvtagger.core.FilmTitle
 import com.mykungfu.mvtagger.core.AnotherName
+import com.mykungfu.mvtagger.core.Learned
 import com.mykungfu.mvtagger.core.FilenameParser
 import com.mykungfu.mvtagger.core.Languages
 import com.mykungfu.mvtagger.core.LyricsLanguage
@@ -1297,6 +1298,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    /**
+     * What a person has already settled about files like this one.
+     *
+     * Two things, and both of them were said out loud: the artist accepted for
+     * this uploader before, and the candidates dismissed for this recording.
+     * See [Learned] for what each is keyed on.
+     */
+    private fun learnedAbout(item: Item): Learned.Known {
+        val parsed = FilenameParser.parse(item.name)
+        return Learned.Known(
+            artist = store.artistFor(Learned.uploaderKey(parsed, item.name)),
+            rejected = store.rejected(Learned.recordingKey(parsed, item.name)),
+        )
+    }
+
+    /**
+     * Not this one -- kept, so it never comes back to the top of this list.
+     *
+     * A wrong answer that scores well scores well every time, and no ranking
+     * rule was ever going to work out on its own that a BTS single is not a
+     * Megan Thee Stallion live set. A person can say so once.
+     */
+    fun rejectCandidate(scored: Matching.Scored) = viewModelScope.launch {
+        val detail = _state.value.detail ?: return@launch
+        val parsed = FilenameParser.parse(detail.item.name)
+        store.reject(
+            Learned.recordingKey(parsed, detail.item.name),
+            Learned.idOf(scored.candidate),
+        )
+        // Scored again rather than filtered, so the list the person is looking
+        // at is the list the app would produce from scratch.
+        val again = Matching.rank(
+            detail.candidates.map { it.candidate },
+            parsed,
+            detail.durationMs,
+            settings.preferredLanguage,
+            learnedAbout(detail.item),
+        )
+        _state.value = _state.value.copy(
+            detail = detail.copy(
+                candidates = again,
+                chosen = detail.chosen?.takeIf { it.id != scored.candidate.id },
+            )
+        )
+    }
+
     private fun search(detail: Detail): Pair<List<Matching.Scored>, List<Candidate>> {
         // So the report describes this lookup rather than the last one.
         Net.forget()
@@ -1305,13 +1352,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return when (item.kind) {
             MediaKind.MUSIC_VIDEO -> {
                 val parsed = FilenameParser.parse(item.name)
-                val r = Lookup.music(parsed, detail.durationMs, settings.preferredLanguage)
+                val r = Lookup.music(
+                    parsed, detail.durationMs, settings.preferredLanguage, learnedAbout(item),
+                )
                 r.ranked to r.all
             }
             MediaKind.MOVIE -> {
                 val found = Lookup.movie(media, tmdbApiKey = settings.tmdbApiKey)
                 val parsed = FilenameParser.parse(item.name)
-                Matching.rank(found, parsed, detail.durationMs) to found
+                Matching.rank(found, parsed, detail.durationMs, known = learnedAbout(item)) to found
             }
             MediaKind.TV_EPISODE -> {
                 /*
@@ -1355,7 +1404,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             MediaKind.PODCAST -> {
                 val show = detail.tags.showName?.trim()?.ifBlank { null } ?: media.name
                 val found = Lookup.podcast(show)
-                Matching.rank(found, FilenameParser.parse(item.name), null) to found
+                Matching.rank(
+                    found, FilenameParser.parse(item.name), null,
+                    known = learnedAbout(item),
+                ) to found
             }
 
             // Nothing online knows a workout, a lesson or last night's
@@ -1378,7 +1430,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
 
         val enriched = withContext(Dispatchers.IO) { enrich(detail, candidate) }
+        rememberTheArtist(detail.item, candidate)
         _state.value = _state.value.copy(detail = enriched.copy(loading = null))
+    }
+
+    /**
+     * The artist this uploader turned out to be, kept for its next upload.
+     *
+     * Only from an accepted match, never from a guess, and never from a
+     * candidate with no artist to speak of.
+     */
+    private fun rememberTheArtist(item: Item, candidate: Candidate) {
+        val parsed = FilenameParser.parse(item.name)
+        store.rememberArtist(Learned.uploaderKey(parsed, item.name), candidate.artist)
     }
 
     /**
@@ -1711,11 +1775,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val detail = Detail(item, seedFromName(item, existing), durationMs = duration)
                 val (ranked, alternatives) = search(detail)
                 val best = ranked.firstOrNull()
+                // A rejection has already dropped its candidate to nothing, so
+                // nothing rejected can be applied here by accident.
+
 
                 if (best == null || best.score < settings.autoApplyThreshold) {
                     null
                 } else {
                     val enriched = enrich(detail.copy(alternatives = alternatives), best.candidate)
+                    rememberTheArtist(item, best.candidate)
                     TagJob.save(
                         context = getApplication<Application>(),
                         sourceTree = item.treeUri,

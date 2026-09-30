@@ -216,6 +216,56 @@ class Store(context: Context) {
         return if (name.isEmpty()) null else "channel:" + name
     }
 
+    // --- what a correction taught it -----------------------------------------
+
+    /*
+       Kept because a person said so, which is the only kind of memory here.
+
+       Nothing used to be learned from being put right: a fix helped one file
+       and the next one from the same channel, named by the same habit, failed
+       the same way. See [Learned] for what is keyed on what and why.
+    */
+    fun artistFor(uploaderKey: String?): String? {
+        val key = uploaderKey?.takeIf { it.isNotBlank() } ?: return null
+        return prefs.getString("artist:" + key, null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun rememberArtist(uploaderKey: String?, artist: String?) {
+        val key = uploaderKey?.takeIf { it.isNotBlank() } ?: return
+        val name = artist?.trim()?.takeIf { it.isNotBlank() } ?: return
+        prefs.edit().putString("artist:" + key, name).apply()
+    }
+
+    /** Candidates a person has said are not this recording. */
+    fun rejected(recordingKey: String?): Set<String> {
+        val key = recordingKey?.takeIf { it.isNotBlank() } ?: return emptySet()
+        val raw = prefs.getString("rejected:" + key, null) ?: return emptySet()
+        return raw.split('\n').filter { it.isNotBlank() }.toSet()
+    }
+
+    fun reject(recordingKey: String?, candidateId: String) {
+        val key = recordingKey?.takeIf { it.isNotBlank() } ?: return
+        if (candidateId.isBlank()) return
+        // Capped, so a person who dismisses everything for one file does not
+        // grow a preference entry without end.
+        val kept = (rejected(key) + candidateId).toList().takeLast(40)
+        prefs.edit().putString("rejected:" + key, kept.joinToString("\n")).apply()
+    }
+
+    fun unreject(recordingKey: String?) {
+        val key = recordingKey?.takeIf { it.isNotBlank() } ?: return
+        prefs.edit().remove("rejected:" + key).apply()
+    }
+
+    /** Everything learned, thrown away. For the Settings screen. */
+    fun forgetCorrections() {
+        val edit = prefs.edit()
+        for (key in prefs.all.keys) {
+            if (key.startsWith("artist:") || key.startsWith("rejected:")) edit.remove(key)
+        }
+        edit.apply()
+    }
+
     // --- per-file outcomes ---------------------------------------------------
 
     private fun outcomeKey(id: String) = "outcome:" + id

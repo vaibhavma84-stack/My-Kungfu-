@@ -8,6 +8,7 @@ import com.mykungfu.mvtagger.core.Candidate
 import com.mykungfu.mvtagger.core.Credits
 import com.mykungfu.mvtagger.core.ITunes
 import com.mykungfu.mvtagger.core.Languages
+import com.mykungfu.mvtagger.core.Learned
 import com.mykungfu.mvtagger.core.LrcLib
 import com.mykungfu.mvtagger.core.Lyrics
 import com.mykungfu.mvtagger.core.Matching
@@ -75,9 +76,24 @@ object Lookup {
         parsed: ParsedName,
         durationMs: Int? = null,
         preferredLanguage: String? = null,
+        /** What a person has already settled about files like this one. */
+        known: Learned.Known = Learned.Known(),
         storefronts: List<String> = ITunes.STOREFRONTS,
     ): MusicResult {
-        val attempts = parsed.queries
+        /*
+           The artist this uploader turned out to be, asked for first.
+
+           It is not a guess from a string: somebody accepted it for an earlier
+           file from the same channel. So "<that artist> <this title>" is the
+           most likely question there is about this file, and it goes in front
+           of everything the filename suggested.
+        */
+        val settled = known.artist?.trim()?.takeIf { it.isNotBlank() }
+        val taught = if (settled != null && !parsed.title.isNullOrBlank()) {
+            listOf((settled + " " + parsed.title).trim())
+        } else emptyList()
+
+        val attempts = (taught + parsed.queries).distinct()
             .ifEmpty { listOfNotNull(parsed.query.takeIf { it.isNotBlank() }) }
         if (attempts.isEmpty()) return MusicResult(emptyList(), emptyList())
 
@@ -108,7 +124,7 @@ object Lookup {
 
             ranked = Matching.rank(
                 found.distinctBy { it.source + ":" + it.id },
-                parsed, durationMs, preferredLanguage,
+                parsed, durationMs, preferredLanguage, known,
             )
             val best = ranked.firstOrNull()?.score ?: 0.0
             if (best >= GOOD_ENOUGH_TO_STOP) break
@@ -138,7 +154,7 @@ object Lookup {
             }
             ranked = Matching.rank(
                 found.distinctBy { it.source + ":" + it.id },
-                parsed, durationMs, preferredLanguage,
+                parsed, durationMs, preferredLanguage, known,
             )
         }
 

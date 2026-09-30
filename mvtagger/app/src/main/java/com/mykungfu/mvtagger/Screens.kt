@@ -1604,6 +1604,7 @@ private fun DetailScreen(
                         scored,
                         detail.chosen?.id == scored.candidate.id,
                         onCreditsOnly = { viewModel.chooseCreditsOnly(scored) },
+                        onReject = { viewModel.rejectCandidate(scored) },
                     ) {
                         viewModel.choose(scored)
                     }
@@ -1895,12 +1896,24 @@ private fun CandidateRow(
     scored: Matching.Scored,
     chosen: Boolean,
     onCreditsOnly: (() -> Unit)? = null,
+    onReject: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val c = scored.candidate
+    val rejected = scored.score <= 0.0 &&
+            scored.reasons.any { it.contains("not the one") }
     Card(
+        // Long press to say it is not the one, which is the same gesture the
+        // file list uses. Kept rather than only hidden: a wrong answer that
+        // scores well scores well every time, so saying so once has to last.
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onReject != null) {
+                    Modifier.combinedClickable(onLongClick = onReject, onClick = onClick)
+                } else Modifier
+            ),
         colors = if (chosen) CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
         ) else CardDefaults.cardColors(),
@@ -1923,6 +1936,14 @@ private fun CandidateRow(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     scored.reasons.joinToString(", ") + " · " + c.source,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (rejected) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (!rejected && onReject != null) {
+                Text(
+                    "Hold to say this is not the one",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
