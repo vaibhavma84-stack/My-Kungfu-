@@ -6,6 +6,7 @@ import android.net.Uri
 import com.mykungfu.mvtagger.core.FilenameParser
 import com.mykungfu.mvtagger.core.LibraryFiles
 import com.mykungfu.mvtagger.core.Matroska
+import com.mykungfu.mvtagger.core.SafeToDelete
 import com.mykungfu.mvtagger.core.MediaKind
 import com.mykungfu.mvtagger.core.Mp4Metadata
 import com.mykungfu.mvtagger.core.Organiser
@@ -161,15 +162,18 @@ object TagJob {
 
         // Only now, with the new file written and checked, is it safe to
         // consider removing the old one.
-        val deleted = settings.deleteOriginalAfterSaving &&
-                created.uri != sourceUri &&
-                verifyWritten(context, created.uri, sourceUri, embedded, tags) &&
-                Saf.delete(resolver, sourceUri)
+        val verdict = if (settings.deleteOriginalAfterSaving) {
+            verifyWritten(context, created.uri, sourceUri, embedded, tags)
+        } else null
+        val deleted = verdict?.ok == true && Saf.delete(resolver, sourceUri)
 
         val deleteNote = when {
             deleted -> " The original was deleted."
-            settings.deleteOriginalAfterSaving ->
-                " The original was KEPT: the new file could not be verified."
+            verdict?.ok == true -> " The original was KEPT: it could not be deleted."
+            // Say which check refused. "Could not be verified" with nothing
+            // after it invites somebody to switch the check off.
+            verdict != null ->
+                " The original was KEPT: " + (verdict.why ?: "the new file could not be verified") + "."
             else -> ""
         }
 
@@ -316,7 +320,7 @@ object TagJob {
             )
         }
 
-        if (!verifyWritten(context, created.uri, sourceUri, embedded = true, tags = tags)) {
+        if (!verifyWritten(context, created.uri, sourceUri, embedded = true, tags = tags).ok) {
             Saf.delete(resolver, created.uri)
             return Outcome(
                 false,
@@ -381,28 +385,38 @@ object TagJob {
         source: Uri,
         embedded: Boolean,
         tags: VideoTags,
-    ): Boolean {
+    ): SafeToDelete.Verdict {
         val resolver = context.contentResolver
-        val written = Saf.querySize(resolver, target) ?: return false
-        if (written <= 0) return false
 
-        val original = Saf.querySize(resolver, source)
-        if (original != null && original > 0) {
-            // Repackaging legitimately loses subtitle and attachment tracks, so
-            // some shrinkage is expected; half the size is not.
-            if (written < original / 2) return false
-        }
+        /*
+           Reads here, the judgement in core.
 
-        if (!embedded) return true
+           Only Android can ask a provider how big a document is or open one to
+           read its atoms back, so those stay. What is done with the answers is
+           the irreversible part, and it moved to [SafeToDelete] where this
+           sandbox can run it: every refusal in it has a test, which is not
+           something that was ever true while it lived here.
 
-        // Reading the tags back proves the box tree is walkable, which is the
-        // thing that would be broken if the write went wrong.
-        return runCatching {
+           A failure to read is passed on as null rather than as a false. The
+           difference matters: null means nobody could find out, and [SafeToDelete]
+           treats not knowing as a refusal, which is the whole point.
+        */
+        val back = if (!embedded) null else runCatching {
             Saf.UriSource(resolver, target).use { Mp4Metadata.read(it) }
-        }.map { back ->
-            val wanted = tags.title?.trim()
-            wanted.isNullOrEmpty() || back.title?.trim() == wanted
-        }.getOrDefault(false)
+        }.getOrNull()
+
+        return SafeToDelete.check(
+            SafeToDelete.Written(
+                size = Saf.querySize(resolver, target),
+                originalSize = Saf.querySize(resolver, source),
+                embedded = embedded,
+                wantedTitle = tags.title,
+                // Only where something was read at all; an unreadable file has
+                // to be told apart from one with no title in it.
+                titleReadBack = back?.let { it.title ?: "" },
+                isDifferentFile = target != source,
+            )
+        )
     }
 
     /**
