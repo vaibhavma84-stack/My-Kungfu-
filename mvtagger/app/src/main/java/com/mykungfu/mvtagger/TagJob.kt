@@ -255,10 +255,13 @@ object TagJob {
                    inside untouched, which is exactly what was reported as the
                    artwork still not being embedded.
 
-                   Once, though. The attachment goes on the end and there is no
-                   way to replace one in place without rewriting the whole file
-                   and moving every position recorded in it, so a file that
-                   already carries one is left as it is and says so.
+                   And as often as asked. It used to be once: the attachment
+                   goes on the end, and replacing one looked to need the whole
+                   file rewritten, so a file that already had a cover was left
+                   alone -- which meant the cover could never be changed.
+                   Matroska's Void element is the way round it, and the old
+                   attachment is now blanked in place before the new one is
+                   appended. See [Matroska.replaceable].
                 */
                 val attachedNow = writeMatroskaOnce(context, outputTree, documentId, currentName, tags)
 
@@ -499,8 +502,32 @@ object TagJob {
         val segment = Matroska.segmentOf(head) ?: return false
         val resized = Matroska.resized(segment, additions.size.toLong()) ?: return false
 
+        /*
+           What a previous run left behind, blanked rather than duplicated.
+
+           This app puts its additions at the very end, so the tail is where a
+           second run finds the first run's. Blanking them costs no bytes -- a
+           Void is written in exactly the space the old element filled -- so the
+           length arithmetic above is unaffected, and a file corrected ten times
+           carries one cover rather than ten.
+
+           Only what is wholly inside the window read, and only what parses as
+           the element it claims to be: see [Matroska.replaceable] for why that
+           check is as strict as it is.
+        */
+        val size = Saf.querySize(resolver, target)
+        val tail = Saf.readTail(resolver, target, COVER_TAIL_BYTES)
+        val blank = if (tail != null && size != null) {
+            val tailAt = size - tail.size
+            runCatching {
+                Matroska.replaceable(tail, tailAt).mapNotNull { region ->
+                    Matroska.voidOf(region.length)?.let { region.at to it }
+                }
+            }.getOrDefault(emptyList())
+        } else emptyList()
+
         if (!Saf.appendAndPatch(
-                resolver, target, additions, segment.sizeAt.toLong(), resized
+                resolver, target, additions, segment.sizeAt.toLong(), resized, blank
             )
         ) return false
 
@@ -508,8 +535,8 @@ object TagJob {
         // length that no longer matches what is there is worse than no cover.
         val after = Saf.readHead(resolver, target, Matroska.HEAD_BYTES)
             ?.let { Matroska.segmentOf(it) }
-        val size = Saf.querySize(resolver, target)
-        return after != null && size != null && after.dataAt + after.size == size
+        val now = Saf.querySize(resolver, target)
+        return after != null && now != null && after.dataAt + after.size == now
     }
 
     /**
@@ -616,10 +643,6 @@ object TagJob {
     ): Boolean {
         if (!Matroska.isMatroska(fileName)) return false
         val uri = Saf.documentUri(outputTree, documentId)
-        val already = Saf.readTail(context.contentResolver, uri, COVER_TAIL_BYTES)
-            ?.let { runCatching { Matroska.hasAttachments(it) }.getOrDefault(false) }
-            ?: false
-        if (already) return false
         return runCatching { writeMatroska(context, uri, fileName, tags) }.getOrDefault(false)
     }
 

@@ -193,3 +193,139 @@ class MatroskaTest {
         assertEquals("image/png", Matroska.coverIn(png)!!.mime)
     }
 }
+
+/**
+ * Replacing a cover in an MKV rather than adding a second one.
+ *
+ * Appending was safe and only half an answer: tag a file twice and it carried
+ * two `cover.jpg` attachments, players took the first, and the correction had
+ * no effect. The app knew and refused to try, so a cover could never be
+ * changed. Matroska's own Void element is the way out -- padding that every
+ * parser skips, written over the old element in exactly its bytes, so nothing
+ * moves and no recorded position is invalidated.
+ */
+class MatroskaReplaceTest {
+
+    private fun jpeg(size: Int, fill: Byte): Artwork {
+        val bytes = ByteArray(size) { fill }
+        bytes[0] = 0xFF.toByte()
+        bytes[1] = 0xD8.toByte()
+        return Artwork(bytes, "image/jpeg")
+    }
+
+    private val first = VideoTags(title = "First", artwork = jpeg(400, 0x11))
+    private val second = VideoTags(title = "Second", artwork = jpeg(300, 0x22))
+
+    @Test
+    fun `a void element fills exactly the bytes it is given`() {
+        for (total in 2L..300L) {
+            val filler = Matroska.voidOf(total)
+            assertNotNull("no void for " + total, filler)
+            assertEquals("wrong length for " + total, total.toInt(), filler!!.size)
+            assertEquals("not a void", 0xEC, filler[0].toInt() and 0xFF)
+        }
+    }
+
+    @Test
+    fun `a single byte cannot be blanked and says so`() {
+        assertNull(Matroska.voidOf(1))
+        assertNull(Matroska.voidOf(0))
+    }
+
+    @Test
+    fun `a void declares the length it actually occupies`() {
+        // The whole point: a parser steps over exactly this element and lands
+        // on whatever follows, so the declared length has to be the real one.
+        for (total in longArrayOf(2, 3, 100, 128, 129, 200, 20_000)) {
+            val filler = Matroska.voidOf(total)!!
+            val size = Matroska.readSize(filler, 1)
+            assertNotNull("unreadable length for " + total, size)
+            assertEquals(
+                "declared length wrong for " + total,
+                total, (1 + size!!.width + size.value),
+            )
+        }
+    }
+
+    @Test
+    fun `what a previous run wrote is found so it can be replaced`() {
+        val additions = Matroska.additions(first)
+        val found = Matroska.replaceable(additions, 1000L)
+        // The attachments and the tags, both of them.
+        assertEquals(found.toString(), 2, found.size)
+        // Between them they account for every byte written.
+        assertEquals(1000L, found.first().at)
+        assertEquals(
+            additions.size.toLong(),
+            found.sumOf { it.length },
+        )
+    }
+
+    @Test
+    fun `voiding the old one leaves the new cover the only one readable`() {
+        val before = Matroska.additions(first)
+        val work = before.copyOf()
+        for (region in Matroska.replaceable(work, 0L)) {
+            Matroska.voidOf(region.length)!!.copyInto(work, region.at.toInt())
+        }
+        // The old picture is gone from the blanked stretch...
+        assertNull(Matroska.coverIn(work))
+        // ...and a file that is the blanked stretch plus the new additions has
+        // exactly the new cover in it.
+        val after = work + Matroska.additions(second)
+        val cover = Matroska.coverIn(after)
+        assertNotNull(cover)
+        assertEquals(300, cover!!.bytes.size)
+        assertEquals(0x22.toByte(), cover.bytes[10])
+    }
+
+    /**
+     * The dangerous case. Reading a false positive gives a nonsense picture;
+     * voiding one writes padding over somebody's video.
+     */
+    @Test
+    fun `four bytes of video that look like an element id are not believed`() {
+        // A cluster's worth of noise with the Attachments id sitting in it and
+        // a plausible length after it, which is what a long file will contain
+        // by accident sooner or later.
+        val noise = ByteArray(4096) { (it * 37 % 251).toByte() }
+        noise[500] = 0x19; noise[501] = 0x41; noise[502] = 0xA4.toByte(); noise[503] = 0x69
+        noise[504] = 0x88.toByte()  // a one-byte length saying eight
+        assertTrue(
+            "noise was taken for an element",
+            Matroska.replaceable(noise, 0L).isEmpty(),
+        )
+    }
+
+    @Test
+    fun `an element running off the end of the window is left alone`() {
+        val additions = Matroska.additions(first)
+        // Cut it short: what is here no longer tiles, so it is not believed.
+        val clipped = additions.copyOf(additions.size / 2)
+        assertTrue(
+            Matroska.replaceable(clipped, 0L).toString(),
+            Matroska.replaceable(clipped, 0L).none { it.at + it.length > clipped.size },
+        )
+    }
+
+    @Test
+    fun `a file with no additions has nothing to replace`() {
+        assertTrue(Matroska.replaceable(ByteArray(1024), 0L).isEmpty())
+        assertTrue(Matroska.replaceable(ByteArray(0), 0L).isEmpty())
+    }
+
+    @Test
+    fun `blanking changes no byte outside the stretch it was given`() {
+        val before = Matroska.additions(first)
+        val padded = ByteArray(64) { 0x5A } + before + ByteArray(64) { 0x5A }
+        val work = padded.copyOf()
+        for (region in Matroska.replaceable(work, 0L)) {
+            Matroska.voidOf(region.length)!!.copyInto(work, region.at.toInt())
+        }
+        for (i in 0 until 64) assertEquals("front byte " + i, 0x5A.toByte(), work[i])
+        for (i in padded.size - 64 until padded.size) {
+            assertEquals("tail byte " + i, 0x5A.toByte(), work[i])
+        }
+        assertEquals("length changed", padded.size, work.size)
+    }
+}

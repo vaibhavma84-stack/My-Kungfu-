@@ -64,6 +64,9 @@ object Matroska {
     private val TAG_NAME = bytes(0x45, 0xA3)
     private val TAG_STRING = bytes(0x44, 0x87)
 
+    /** Padding. Every parser skips it, which is what makes replacing possible. */
+    private val VOID = bytes(0xEC)
+
     /** How much of the front of a file is needed to find the Segment. */
     const val HEAD_BYTES = 256
 
@@ -204,6 +207,102 @@ object Matroska {
                 }
             }
             from = at + 1
+        }
+        return null
+    }
+
+    /**
+     * A stretch of the file a new run should blank rather than duplicate.
+     *
+     * Positions are absolute, so the caller can write to them without knowing
+     * where its window came from.
+     */
+    class Region(val at: Long, val length: Long)
+
+    /**
+     * Replacing a cover instead of adding a second one.
+     *
+     * Appending was safe and only half an answer. Tag an MKV twice and it ends
+     * up with two Attachments elements, each holding a `cover.jpg`: players
+     * take the first they find, so the second correction had no effect, and the
+     * file grew by the size of a picture every time. The app knew this and gave
+     * up rather than make it worse -- "a file that already carries one is left
+     * as it is" -- which meant a cover could never be changed.
+     *
+     * Matroska has the answer built in. A Void element is padding that every
+     * parser skips, and one can be written over an element already there, in
+     * exactly the bytes it occupies. Nothing moves, so nothing that records a
+     * position -- the SeekHead, the Cues -- is invalidated, which is the same
+     * reason appending was safe. The old element becomes padding, the new one
+     * goes on the end, and the file has one cover again.
+     *
+     * ## Why this validates so hard
+     *
+     * Reading a false positive hands back a nonsense picture. *Voiding* one
+     * writes padding over somebody's video. So a candidate is only believed
+     * when it parses as the thing it claims to be: its children must be the
+     * element type it should contain, and they must tile its length exactly,
+     * ending neither short nor long. Four bytes of video that happen to equal
+     * an element id will not survive that.
+     */
+    fun replaceable(window: ByteArray, windowAt: Long): List<Region> {
+        val out = ArrayList<Region>()
+        for ((id, child) in listOf(ATTACHMENTS to ATTACHED_FILE, TAGS to TAG)) {
+            var from = 0
+            while (true) {
+                val at = indexOf(window, id, from) ?: break
+                from = at + 1
+                val size = readSize(window, at + id.size) ?: continue
+                if (size.value <= 0) continue
+                val payloadAt = at + id.size + size.width
+                val end = payloadAt + size.value
+                if (end > window.size) continue
+                if (!tilesWith(window, payloadAt, end.toInt(), child)) continue
+                out += Region(windowAt + at, (end - at).toLong())
+            }
+        }
+        return out.sortedBy { it.at }
+    }
+
+    /**
+     * Whether this payload is exactly a run of [child] elements and nothing else.
+     *
+     * "Exactly" is the whole point: a length that runs out mid-element, or
+     * leaves a byte over, means the thing was never an element of this kind.
+     */
+    private fun tilesWith(data: ByteArray, from: Int, end: Int, child: ByteArray): Boolean {
+        var at = from
+        var seen = 0
+        while (at < end) {
+            if (!startsWith(data, at, child)) return false
+            val size = readSize(data, at + child.size) ?: return false
+            if (size.value < 0) return false
+            val next = at + child.size + size.width + size.value
+            if (next > end) return false
+            at = next.toInt()
+            seen++
+        }
+        return at == end && seen > 0
+    }
+
+    /**
+     * A Void element filling exactly [totalBytes], or null if it cannot.
+     *
+     * Two bytes is the smallest there is -- the id and a zero length -- so a
+     * single byte cannot be blanked and the caller has to leave it alone. No
+     * element this replaces is ever that small.
+     */
+    fun voidOf(totalBytes: Long): ByteArray? {
+        if (totalBytes < 2) return null
+        for (width in 1..8) {
+            val payload = totalBytes - 1 - width
+            if (payload < 0) continue
+            val size = sizeBytes(payload, width) ?: continue
+            val out = ByteArray(totalBytes.toInt())
+            out[0] = VOID[0]
+            size.copyInto(out, 1)
+            // The rest stays zero, which is what padding is.
+            return out
         }
         return null
     }

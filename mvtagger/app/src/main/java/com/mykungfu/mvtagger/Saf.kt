@@ -313,10 +313,26 @@ object Saf {
         append: ByteArray,
         patchAt: Long,
         patch: ByteArray,
+        /**
+         * Stretches to overwrite in place before appending, each already the
+         * exact length of what is there.
+         *
+         * This is how a cover gets replaced rather than added a second time:
+         * Matroska's Void element is written over the old one, occupying the
+         * same bytes, so nothing after it moves. Same call as the append so
+         * that a file is opened once and either gets all of it or none.
+         */
+        blank: List<Pair<Long, ByteArray>> = emptyList(),
     ): Boolean = runCatching {
         resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
             java.io.FileOutputStream(pfd.fileDescriptor).use { stream ->
                 val channel = stream.channel
+                // Blanking first: if the append fails there is a file with
+                // padding where a cover was, which still plays. The other
+                // order can leave two covers, which is the fault being fixed.
+                for ((at, bytes) in blank) {
+                    channel.write(java.nio.ByteBuffer.wrap(bytes), at)
+                }
                 channel.position(channel.size())
                 channel.write(java.nio.ByteBuffer.wrap(append))
                 channel.write(java.nio.ByteBuffer.wrap(patch), patchAt)
