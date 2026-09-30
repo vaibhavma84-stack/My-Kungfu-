@@ -60,6 +60,12 @@ class MainActivity : AppCompatActivity() {
         checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
         checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
+    // Answered either way and never referenced again -- checkAndNotify already
+    // catches a refusal (SecurityException) and just stays quiet, the same way
+    // a "no" on location leaves the map working without a position dot.
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     private val fileChooser =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val cb = filePathCallback ?: return@registerForActivityResult
@@ -147,6 +153,13 @@ class MainActivity : AppCompatActivity() {
                 if (web.canGoBack()) web.goBack() else { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
             }
         })
+
+        NotificationHelper.ensureChannel(this)
+        DailyCheckReceiver.schedule(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
 
         web.loadUrl("file:///android_asset/index.html")
     }
@@ -289,6 +302,10 @@ class MainActivity : AppCompatActivity() {
                 TodayWidget.refreshAll(applicationContext)
                 MonthWidget.refreshAll(applicationContext)
             }
+            // A phone that was off at 05:30 still gets today's reminder once
+            // it is back on and the app happens to be opened, rather than
+            // waiting for tomorrow's alarm.
+            NotificationHelper.catchUpIfDue(applicationContext)
         }
 
         /** Ticks made on the widget while the app was closed. */
