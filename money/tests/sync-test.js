@@ -210,6 +210,41 @@ const put = (pg, list, rec) => pg.evaluate(({list,rec}) => {
   ok('the loans are still identical across the two phones',
      (await ledgerOf(A)) === (await ledgerOf(B)));
 
+  /* ---- 7d. balances and holding transactions merge like everything else ---- */
+  await put(A, 'accts', { id:'ac1', upd:T+300, dev:'dAAA', kind:'bank', name:'SBI',
+    bals:[{ id:'ba_a', upd:T+300, dev:'dAAA', d:'2026-09-01', amount:120000 }] });
+  await put(B, 'accts', { id:'ac1', upd:T+310, dev:'dBBB', kind:'bank', name:'SBI',
+    bals:[{ id:'ba_b', upd:T+310, dev:'dBBB', d:'2026-09-20', amount:95000 }] });
+  await mergeInto(A, await fileFrom(B));
+  await mergeInto(B, await fileFrom(A));
+  ok('a balance written on each phone gives both, in date order',
+     (await A.evaluate(() => DB.accts[0].bals.map(b => b.d))).join() ===
+       '2026-09-01,2026-09-20',
+     (await A.evaluate(() => JSON.stringify(DB.accts[0].bals.map(b => b.d)))));
+  ok('and both phones then read the same balance for the same day',
+     await A.evaluate(() => balanceAt(DB.accts[0], '2026-09-25').amount) ===
+     await B.evaluate(() => balanceAt(DB.accts[0], '2026-09-25').amount));
+
+  await put(A, 'invest', { id:'v9', upd:T+320, dev:'dAAA', kind:'equity',
+    name:'Infosys', txns:[{ id:'tx_a', upd:T+320, dev:'dAAA', d:'2026-02-01',
+      kind:'buy', units:100, price:1400 }] });
+  await put(B, 'invest', { id:'v9', upd:T+330, dev:'dBBB', kind:'equity',
+    name:'Infosys', txns:[{ id:'tx_b', upd:T+330, dev:'dBBB', d:'2026-07-01',
+      kind:'buy', units:50, price:1700 }] });
+  await mergeInto(A, await fileFrom(B));
+  await mergeInto(B, await fileFrom(A));
+  ok('a purchase made on each phone gives one holding of both',
+     await A.evaluate(() => {
+       const u = holdingUnits(DB.invest.find(h => h.id === 'v9'));
+       return u.units === 150 && Math.abs(u.cost - (100*1400 + 50*1700)) < 0.01;
+     }),
+     await A.evaluate(() => JSON.stringify(holdingUnits(DB.invest.find(h=>h.id==='v9')))));
+  ok('and the two phones agree on the units and the average',
+     await A.evaluate(() => holdingUnits(DB.invest.find(h=>h.id==='v9')).buy) ===
+     await B.evaluate(() => holdingUnits(DB.invest.find(h=>h.id==='v9')).buy));
+  ok('the ledgers are still identical after all of that',
+     (await ledgerOf(A)) === (await ledgerOf(B)));
+
   /* ---- 8. the order the two phones merge in cannot change the answer ---- */
   {
     const C = await phone('dCCC'), D = await phone('dDDD');

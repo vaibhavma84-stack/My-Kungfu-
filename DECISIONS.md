@@ -652,3 +652,85 @@ is the obvious failure of a fast path.
   way to see spending rising. Twelve months, fixed and day-to-day together,
   against the average of the months that have anything in them — and the note
   says the current month reads low because it is still filling up.
+
+## Cash, and a net worth that is not missing most of it
+
+Net worth was investments plus goal pots minus loans. It left out the bank,
+which is usually the largest liquid thing anybody owns — so the figure at the
+top of every screen was incomplete, and the month's "left over" evaporated
+into nothing rather than landing anywhere. A budget can be built without cash
+in it; a ledger cannot.
+
+Accounts are typed, dated balance snapshots — the same bargain as a share
+price, and for the same reason. There is no bank link here and there is not
+going to be one.
+
+- **A credit card is money owed**, so its balance counts against you however
+  it was typed, positive or negative. Entering it as a positive number is the
+  natural thing to do and must not silently add to what you own.
+- **An account never counted is left out, not treated as zero.** Zero is a
+  claim; absent is the truth.
+- **The oldest balance dates the whole figure.** Past twenty days the card
+  says so, because a net worth resting on a three-month-old bank balance
+  reads as current and is not.
+
+## What is held, worked out from what was actually done
+
+Units and average cost were two typed fields. Buying more meant doing a
+weighted average in your head and typing the answer in as fact, with nothing
+in the app able to check it — and no record afterwards of what had happened.
+
+A holding now takes a dated list of purchases and sales, and works both out.
+The typed pair still stands where there is no list, so nothing already entered
+had to change.
+
+- **Charges are part of what it cost**, so they belong in the average.
+- **A sale takes units out at the average** and books the difference as
+  realised, rather than disturbing the average of what is left.
+- **Only what is held can be sold.** A quantity larger than the holding is
+  trimmed, with a warning first — the alternative is negative units, which
+  would quietly poison the value of the whole portfolio.
+- **Cost is averaged, not FIFO.** Average cost is how a holding is carried;
+  FIFO is how tax on a sale is reckoned, and this app does not do tax. Saying
+  which it is matters more than which it picked, so the card says.
+
+## Coming up
+
+Nothing in the app ever volunteered anything. An FD maturing, a goal quietly
+gone off track, a price three months old, a loan whose EMI has stopped
+covering its interest — all of it could only be found by opening the right tab
+and reading carefully. One card on the Month view, sorted by when, with the
+things that are already wrong pulled to the top.
+
+## A fixed outgoing that has actually been paid
+
+Rent showed as due and was never recorded as paid, so what the app called
+day-to-day spending and what had actually left the account drifted apart.
+Marking it paid files it as an ordinary expense — and **stops it counting as
+due**, or the month would carry the rent twice. That is the whole reason
+`fixedDue` exists beside `dueIn`, and a test pins the month's total to be
+unmoved by marking something paid.
+
+## The nag for the other phone
+
+Backups nagged at fourteen days; sync nagged never, so two phones drifted
+quietly and the longer they drifted the more there was to read through at the
+next merge. It nags at twenty-one days — but only once the phones have been
+put together at least once, because before that there is no second phone and
+a reminder to sync with nobody is noise.
+
+## Throwing things away
+
+Nothing was ever discarded: a tombstone for every delete, a price a day for
+every holding, a portfolio reading a day, in about 5 MB shared with the deck
+log. A year-two problem rather than a month-two one, and the failure mode is
+the app refusing to save — so it is handled before it arrives.
+
+- **A tombstone is kept a year.** Dropping one sooner could let a deleted
+  record walk back in from a phone that had not synced since. A year is the
+  margin, and it is why the number is not smaller.
+- **History is daily for six months, weekly before that.** What a share did
+  last week matters to the day; what it did in March two years ago does not,
+  and a weekly point draws the same line.
+- **A short history is left alone**, so nothing is thinned before there is
+  anything to thin.

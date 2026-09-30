@@ -881,6 +881,195 @@ const stepUpClosed = (A, s, ratePa, m, years) => {
     save('spend'); save('fixed'); save('tomb'); render();
   });
 
+  /* ---- cash, and a net worth that includes it ---- */
+  await p.evaluate(() => { DB.accts=[]; DB.invest=[]; DB.goals=[]; DB.loans=[];
+    save('accts'); save('invest'); save('goals'); save('loans'); });
+  ok('a balance is whatever was last written down on or before the day asked for',
+     await p.evaluate(() => {
+       const a = { id:'a1', kind:'bank', name:'SBI', bals:[
+         { id:'b1', d:'2026-01-10', amount:50000 },
+         { id:'b3', d:'2026-09-01', amount:120000 },
+         { id:'b2', d:'2026-05-05', amount:80000 } ]};
+       return balanceAt(a,'2026-01-09').amount === 0 &&
+              balanceAt(a,'2026-01-10').amount === 50000 &&
+              balanceAt(a,'2026-05-04').amount === 50000 &&
+              balanceAt(a,'2026-12-31').amount === 120000 &&
+              balanceAt(a,'2026-12-31').d === '2026-09-01';
+     }));
+  ok('a credit card balance counts against you, however it was typed',
+     await p.evaluate(() => {
+       const c = { id:'c1', kind:'card', bals:[{ id:'x', d:'2026-09-01', amount:18000 }] };
+       const n = { id:'c2', kind:'card', bals:[{ id:'y', d:'2026-09-01', amount:-18000 }] };
+       return acctSigned(c,'2026-09-02').amount === -18000 &&
+              acctSigned(n,'2026-09-02').amount === -18000;
+     }));
+  ok('an account never counted is left out rather than treated as zero',
+     await p.evaluate(() => {
+       DB.accts = [{ id:'a1', kind:'bank', bals:[{id:'b',d:'2026-09-01',amount:100000}] },
+                   { id:'a2', kind:'bank', bals:[] }];
+       save('accts');
+       const c = cashTotal('2026-09-05');
+       return c.total === 100000 && c.any === true && c.oldest === '2026-09-01';
+     }));
+  ok('net worth now carries the cash, which it never used to',
+     await p.evaluate(() => {
+       DB.accts = [{ id:'a1', kind:'bank', bals:[{id:'b',d:today(),amount:250000}] },
+                   { id:'a2', kind:'card', bals:[{id:'c',d:today(),amount:30000}] }];
+       DB.invest = []; DB.goals = []; DB.loans = [];
+       for(const k of ['accts','invest','goals','loans']) save(k);
+       const nw = netWorth();
+       return nw.cash === 220000 && nw.net === 220000;
+     }),
+     await p.evaluate(() => JSON.stringify(netWorth())));
+  ok('a closed account drops out of the total',
+     await p.evaluate(() => {
+       DB.accts[1].closed = true; save('accts');
+       return netWorth().cash === 250000;
+     }));
+
+  /* ---- what is held, from what was actually done ---- */
+  ok('units and average cost come out of the purchases, charges included',
+     await p.evaluate(() => {
+       const h = { id:'h', kind:'equity', units:0, buy:0, txns:[
+         { id:'t1', d:'2026-01-10', kind:'buy', units:100, price:1000, charges:200 },
+         { id:'t2', d:'2026-06-10', kind:'buy', units:50,  price:1600, charges:100 } ]};
+       const u = holdingUnits(h);
+       // (100*1000+200 + 50*1600+100) / 150
+       return u.units === 150 && Math.abs(u.cost - 180300) < 0.01 &&
+              Math.abs(u.buy - 1202) < 0.01 && u.from === 'txns';
+     }),
+     await p.evaluate(() => JSON.stringify(holdingUnits({ kind:'equity', txns:[
+       { id:'t1', d:'2026-01-10', kind:'buy', units:100, price:1000, charges:200 },
+       { id:'t2', d:'2026-06-10', kind:'buy', units:50, price:1600, charges:100 }]}))));
+  ok('a sale takes units out at the average and books the gain',
+     await p.evaluate(() => {
+       const h = { kind:'equity', txns:[
+         { id:'t1', d:'2026-01-10', kind:'buy',  units:100, price:1000 },
+         { id:'t2', d:'2026-06-10', kind:'sell', units:40,  price:1500, charges:50 } ]};
+       const u = holdingUnits(h);
+       return u.units === 60 && Math.abs(u.cost - 60000) < 0.01 &&
+              Math.abs(u.buy - 1000) < 0.01 &&
+              Math.abs(u.realised - (40*1500 - 50 - 40*1000)) < 0.01;
+     }));
+  ok('selling more than is held sells only what is held',
+     await p.evaluate(() => {
+       const u = holdingUnits({ kind:'equity', txns:[
+         { id:'t1', d:'2026-01-10', kind:'buy',  units:10, price:100 },
+         { id:'t2', d:'2026-02-10', kind:'sell', units:999, price:150 } ]});
+       return u.units === 0 && u.cost === 0 && u.sold === 10;
+     }));
+  ok('transactions are applied in date order however they were entered',
+     await p.evaluate(() => {
+       const a = holdingUnits({ kind:'equity', txns:[
+         { id:'t2', d:'2026-06-10', kind:'sell', units:40, price:1500 },
+         { id:'t1', d:'2026-01-10', kind:'buy',  units:100, price:1000 } ]});
+       return a.units === 60 && Math.abs(a.buy - 1000) < 0.01;
+     }));
+  ok('a holding with no transactions still uses the two typed figures',
+     await p.evaluate(() => {
+       const u = holdingUnits({ kind:'equity', units:120, buy:1420 });
+       return u.units === 120 && u.buy === 1420 && u.from === 'typed' &&
+              Math.abs(u.cost - 170400) < 0.01;
+     }));
+  ok('and the value on the card follows the transactions once there are any',
+     await p.evaluate(() => {
+       const v = unitValue({ kind:'equity', units:999, buy:99, price:1500, txns:[
+         { id:'t1', d:'2026-01-10', kind:'buy', units:10, price:1000 } ]});
+       return v.units === 10 && v.value === 15000 && v.cost === 10000;
+     }));
+
+  /* ---- a fixed outgoing that has been paid ---- */
+  ok('marking rent paid files it as an expense and stops it counting twice',
+     await p.evaluate(() => {
+       const m = thisMonth();
+       DB.spend = []; DB.fixed = [{ id:'f1', name:'House rent', amount:38000,
+         freq:'monthly', cat:'Rent', start: monthAdd(m,-6)+'-01' }];
+       save('spend'); save('fixed');
+       S.month = m; show('spend');
+       const before = monthFigures(m);
+       document.querySelector('[data-paid]').click();
+       const after = monthFigures(m);
+       return before.fixed === 38000 && before.spend === 0 &&
+              after.fixed === 0 && after.spend === 38000 &&
+              after.out === before.out;              // the total cannot move
+     }),
+     await p.evaluate(() => JSON.stringify(monthFigures(thisMonth()))));
+  ok('and undoing it takes the expense back out',
+     await p.evaluate(() => {
+       document.querySelector('[data-unpaid]').click();
+       const f = monthFigures(thisMonth());
+       return DB.spend.length === 0 && f.fixed === 38000 && f.spend === 0;
+     }));
+
+  /* ---- what is about to happen ---- */
+  ok('an FD maturing soon is raised, and one far off is not',
+     await p.evaluate(() => {
+       DB.loans=[]; DB.goals=[]; DB.fixed=[]; DB.accts=[];
+       const soon = new Date(Date.now() + 30*86400000);
+       DB.invest = [
+         { id:'fd1', kind:'fd', name:'SBI', principal:500000, rate:7, months:12,
+           comp:'4', start: isoFromDate(new Date(soon.getFullYear()-1, soon.getMonth(), 1)) },
+         { id:'fd2', kind:'fd', name:'Far', principal:100000, rate:7, months:120,
+           comp:'4', start: today() }];
+       for(const k of ['loans','goals','fixed','accts','invest']) save(k);
+       const up = comingUp();
+       return up.some(u => /SBI/.test(u.what) && /matures/.test(u.what)) &&
+              !up.some(u => /Far/.test(u.what));
+     }),
+     await p.evaluate(() => JSON.stringify(comingUp().map(u => u.what))));
+  ok('a goal past its date is raised first, as urgent',
+     await p.evaluate(() => {
+       DB.invest = [];
+       DB.goals = [{ id:'g1', name:'Emergency fund', target:100000,
+                     by:'2020-01-01', ledger:[] }];
+       save('invest'); save('goals');
+       const up = comingUp();
+       return up.length > 0 && up[0].urgent === true &&
+              /past its date/.test(up[0].what);
+     }));
+  ok('with nothing pending it says nothing rather than inventing something',
+     await p.evaluate(() => {
+       DB.goals=[]; DB.invest=[]; DB.loans=[]; DB.fixed=[]; DB.accts=[];
+       for(const k of ['goals','invest','loans','fixed','accts']) save(k);
+       return comingUp().length === 0;
+     }));
+
+  /* ---- pruning ---- */
+  ok('a tombstone older than a year goes; a recent one stays',
+     await p.evaluate(() => {
+       const old = Date.now() - 400*86400000, recent = Date.now() - 10*86400000;
+       DB.tomb = [{ id:'old', upd:old }, { id:'new', upd:recent }];
+       save('tomb'); prune();
+       return DB.tomb.length === 1 && DB.tomb[0].id === 'new';
+     }));
+  ok('history stays daily for six months and thins to weekly before that',
+     await p.evaluate(() => {
+       const hist = [];
+       for(let k = 0; k < 500; k++)
+         hist.push({ id:'p'+k, d: isoFromDate(new Date(Date.now() - k*86400000)),
+                     p: 100 + k });
+       DB.invest = [{ id:'h1', kind:'equity', hist }];
+       save('invest'); prune();
+       const kept = DB.invest[0].hist;
+       const cut = isoFromDate(new Date(Date.now() - 180*86400000));
+       const recent = kept.filter(x => x.d >= cut).length;
+       const older  = kept.filter(x => x.d <  cut).length;
+       return kept.length < 500 && recent >= 175 && older > 30 && older < 60;
+     }),
+     await p.evaluate(() => DB.invest[0] ? DB.invest[0].hist.length : 'gone'));
+  ok('a short history is left alone entirely',
+     await p.evaluate(() => {
+       DB.invest = [{ id:'h2', kind:'equity', hist:[
+         { id:'a', d:'2020-01-01', p:1 }, { id:'b', d:'2020-02-01', p:2 } ]}];
+       save('invest'); prune();
+       return DB.invest[0].hist.length === 2;
+     }));
+  await p.evaluate(() => {
+    DB.invest=[]; DB.tomb=[]; DB.accts=[]; DB.spend=[]; DB.fixed=[];
+    for(const k of ['invest','tomb','accts','spend','fixed']) save(k);
+    render();
+  });
+
   /* ---- spending categories ---- */
   ok('no category is listed in two groups, and none is repeated',
      await p.evaluate(() => {

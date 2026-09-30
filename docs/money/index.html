@@ -311,7 +311,7 @@ function fmtDate(iso){
 /* The build this page is. CI reads it out of here to name the APK and its
    release, and the Data tab prints it, so "which version is actually on the
    phone" is a question that can be answered by looking rather than guessed. */
-const APP_BUILD = 'v8';
+const APP_BUILD = 'v9';
 
 const S = { cur:'₹', locale:'en-IN', theme:'light', month:'', spendCats:[] };
 function money(n, dp){
@@ -350,20 +350,22 @@ const K = {
   invest :'money_invest_v1',
   goals  :'money_goals_v1',
   snap   :'money_snap_v1',
+  accts  :'money_accts_v1',
   tomb   :'money_tomb_v1',
   set    :'money_settings_v1',
   backup :'money_lastBackup_',
   snooze :'money_backupSnooze'
 };
-const LISTS  = ['income','receipt','loans','fixed','spend','invest','goals','snap'];
+const LISTS  = ['income','receipt','loans','fixed','spend','invest','goals','snap','accts'];
 /* The two places a record holds records of its own. They have to be merged in
    their own right: a prepayment added on one phone and one added on the other
    both have to survive, whichever copy of the loan happens to be newer. */
-const NESTED = { loans:['extras','rates'], goals:['ledger'], invest:['hist'] };
+const NESTED = { loans:['extras','rates'], goals:['ledger'],
+                 invest:['hist','txns'], accts:['bals'] };
 function nestedKeys(name){ return NESTED[name] || []; }
 
 let DB = { income:[], receipt:[], loans:[], fixed:[], spend:[], invest:[],
-           goals:[], snap:[], tomb:[] };
+           goals:[], snap:[], accts:[], tomb:[] };
 
 function load(){
   for(const name of LISTS.concat(['tomb'])){
@@ -389,6 +391,7 @@ function load(){
     S.catsV = 2;
   }
   migrateForSync();
+  prune();
   document.documentElement.setAttribute('data-theme', S.theme === 'dark' ? 'dark' : 'light');
 }
 function save(name){
@@ -509,6 +512,56 @@ function contentId(e, ix){
   }
   return 'x' + h.toString(36);
 }
+/* ---------- keeping the store from growing for ever ----------
+   localStorage is about 5 MB and it is shared with the deck log. Nothing here
+   was ever thrown away: a tombstone for every delete, a price a day for every
+   holding, a portfolio reading a day. It is a year-two problem rather than a
+   month-two one, and the failure mode is the app refusing to save — so it is
+   dealt with before it arrives rather than after.
+
+   A tombstone is kept a year. Both phones will have merged long before that;
+   dropping one earlier could let a deleted record walk back in from a phone
+   that had not synced since. A year is the margin, and it is the reason the
+   number is not smaller.
+
+   History is kept day by day for six months and weekly before that. What a
+   share did last week matters to the day; what it did in March two years ago
+   does not, and a weekly point draws the same line. */
+function prune(){
+  const cut = (days) => isoFromDate(new Date(Date.now() - days*86400000));
+  const yearAgo = Date.now() - 365*86400000;
+  const fine = cut(180);
+  let touched = {};
+
+  const before = (DB.tomb||[]).length;
+  DB.tomb = (DB.tomb||[]).filter(t => (t.upd||0) >= yearAgo);
+  if(DB.tomb.length !== before) touched.tomb = true;
+
+  const thin = (rows) => {
+    if(!Array.isArray(rows) || rows.length < 40) return rows;
+    const keep = [], seen = new Set();
+    for(const r of rows.slice().sort((a,b) => (a.d||'').localeCompare(b.d||''))){
+      if((r.d||'') >= fine){ keep.push(r); continue; }
+      const d = dateFromIso(r.d);
+      const wk = d ? r.d.slice(0,4) + '-' + Math.floor(d.getTime()/604800000) : r.d;
+      if(seen.has(wk)) continue;
+      seen.add(wk); keep.push(r);
+    }
+    return keep;
+  };
+  for(const h of DB.invest){
+    if(!Array.isArray(h.hist)) continue;
+    const n = h.hist.length;
+    h.hist = thin(h.hist);
+    if(h.hist.length !== n) touched.invest = true;
+  }
+  const sn = (DB.snap||[]).length;
+  DB.snap = thin(DB.snap || []);
+  if(DB.snap.length !== sn) touched.snap = true;
+
+  for(const k in touched) save(k);
+}
+
 function migrateForSync(){
   for(const name of LISTS){
     for(const r of DB[name]){
@@ -759,6 +812,10 @@ function fallsIn(item, m){
   return monthDiff(start, m) % step === 0;
 }
 function dueIn(item, m){ return fallsIn(item, m) ? toNum(item.amount) : 0; }
+/* Once a fixed outgoing has been marked paid for a month it becomes an
+   ordinary expense in the ledger, so it must stop counting as due as well —
+   otherwise the month's total carries the rent twice. */
+function fixedDue(f, m){ return (f.paid || []).includes(m) ? 0 : dueIn(f, m); }
 
 /* ---------- loans ----------
    Reducing balance, interest charged monthly on the opening balance:
@@ -937,19 +994,59 @@ function rdValue(rd, atIso){
    what was paid. Coupon is on face value, never on the price paid — a bond
    bought at 96 still pays its coupon on 100. */
 function bondValue(b){
-  const units = toNum(b.units) || 0, face = toNum(b.face) || 0;
-  const buy = toNum(b.buy) || face, price = toNum(b.price) || buy;
-  return { cost: units*buy, value: units*price,
-           coupon: units * face * toNum(b.coupon) / 100,
-           matures: b.maturity || null };
+  const t = holdingUnits(b);
+  const face = toNum(b.face) || 0;
+  const price = toNum(b.price) || t.buy || face;
+  return { cost: t.cost, value: t.units*price,
+           coupon: t.units * face * toNum(b.coupon) / 100,
+           matures: b.maturity || null,
+           units:t.units, avg:t.buy, realised:t.realised, from:t.from };
 }
+/* ---------- how many units, and what they cost ----------
+   Either from a list of purchases and sales, or from the two figures typed on
+   the card when there is no list.
+
+   The typed pair is what this started with, and it asks you to do a weighted
+   average in your head every time you buy more, then type the answer in as
+   fact with nothing able to check it. A list of what you actually did works
+   it out instead, and survives being wrong about it later.
+
+   Cost is averaged, not FIFO. Average cost is how a holding is carried;
+   FIFO is how the tax on a sale is worked out, and this app does not do tax.
+   Saying which one it is matters more than which one it picked. */
+function holdingUnits(h){
+  const txns = Array.isArray(h.txns)
+    ? h.txns.slice().sort((a,b) => (a.d||'').localeCompare(b.d||'')) : [];
+  if(!txns.length){
+    const units = toNum(h.units), buy = toNum(h.buy);
+    return { units, buy, cost: units*buy, realised:0, sold:0, from:'typed' };
+  }
+  let units = 0, cost = 0, realised = 0, sold = 0;
+  for(const t of txns){
+    const u = Math.abs(toNum(t.units)), p = toNum(t.price), c = toNum(t.charges);
+    if(t.kind === 'sell'){
+      const avg = units > 0 ? cost / units : 0;
+      const n = Math.min(u, units);           // cannot sell what is not held
+      realised += n*p - c - avg*n;
+      units -= n; cost -= avg*n; sold += n;
+    }else{
+      units += u; cost += u*p + c;            // charges are part of what it cost
+    }
+  }
+  if(units < 1e-9){ units = 0; cost = 0; }
+  return { units, buy: units > 0 ? cost/units : 0, cost, realised, sold, from:'txns' };
+}
+
 /* Equity and mutual funds: units x the price last written down, and the date
    it was written down, so a stale figure is visibly stale rather than
    quietly wrong. */
 function unitValue(h){
-  const units = toNum(h.units), buy = toNum(h.buy), price = toNum(h.price) || buy;
-  const cost = units*buy, value = units*price;
-  return { cost, value, gain:value-cost, gainPct: cost ? (value-cost)/cost*100 : 0 };
+  const t = holdingUnits(h);
+  const price = toNum(h.price) || t.buy;
+  const value = t.units * price;
+  return { cost:t.cost, value, gain:value-t.cost,
+           gainPct: t.cost ? (value-t.cost)/t.cost*100 : 0,
+           units:t.units, avg:t.buy, realised:t.realised, sold:t.sold, from:t.from };
 }
 /* One holding, whatever its kind, reduced to cost / value / income. */
 function holdingValue(h, atIso){
@@ -1341,7 +1438,7 @@ function monthFigures(m){
   const prepay    = DB.loans.reduce((s,l) => s + (l.extras||[])
                       .filter(x => ym(x.date) === m)
                       .reduce((t,x) => t + toNum(x.amount), 0), 0);
-  const fixed     = DB.fixed.reduce((s,f) => s + dueIn(f, m), 0);
+  const fixed     = DB.fixed.reduce((s,f) => s + fixedDue(f, m), 0);
   const spendRows = DB.spend.filter(x => ym(x.date) === m);
   const spend     = spendRows.reduce((s,x) => s + toNum(x.amount), 0);
   const saved     = DB.goals.reduce((s,g) => s + (g.ledger||[])
@@ -1358,6 +1455,49 @@ function monthFigures(m){
   return { m, incomeDue, received, emi, prepay, fixed, spend, spendRows, saved,
            invested, out, left: incomeDue - out };
 }
+/* ---------- what is actually in the bank ----------
+   Typed, dated, and never guessed — the same bargain as a share price. There
+   is no bank link here and there is not going to be one.
+
+   Until this existed, net worth was investments plus goal pots minus loans,
+   which leaves out the largest liquid thing most people own, and left the
+   month's "left over" evaporating into nothing. A budget can be built without
+   it; a ledger cannot. */
+const ACCT_KINDS = { bank:'Bank', cash:'Cash', card:'Credit card', other:'Other' };
+
+function balanceAt(a, atIso){
+  const on = atIso || today();
+  const bals = (a.bals || []).filter(b => (b.d || '') <= on)
+    .sort((x,y) => (x.d||'').localeCompare(y.d||''));
+  const last = bals[bals.length-1];
+  return last ? { amount: toNum(last.amount), d: last.d } : { amount: 0, d: null };
+}
+/* A credit card balance is money owed, not money held. */
+function acctSigned(a, atIso){
+  const b = balanceAt(a, atIso);
+  return { amount: a.kind === 'card' ? -Math.abs(b.amount) : b.amount, d: b.d };
+}
+function cashTotal(atIso){
+  let total = 0, oldest = null, any = false;
+  for(const a of DB.accts){
+    if(a.closed) continue;
+    const b = acctSigned(a, atIso);
+    if(b.d === null) continue;
+    any = true;
+    total += b.amount;
+    if(!oldest || b.d < oldest) oldest = b.d;
+  }
+  return { total, oldest, any };
+}
+/* How long ago the stalest balance was written down. A net worth resting on a
+   figure from three months ago should say so rather than read as current. */
+function cashStaleDays(){
+  const c = cashTotal();
+  if(!c.oldest) return null;
+  const d = dateFromIso(c.oldest);
+  return d ? Math.floor((new Date() - d) / 86400000) : null;
+}
+
 function netWorth(atIso){
   let assets = 0, cost = 0;
   for(const h of DB.invest){
@@ -1368,10 +1508,127 @@ function netWorth(atIso){
   const pots = DB.goals.reduce((s,g) => s + goalSaved(g), 0);
   const m = ym(atIso || today());
   const debt = DB.loans.reduce((s,l) => s + (l.closed ? 0 : loanAt(l, m).balance), 0);
-  return { assets, cost, pots, debt, net: assets + pots - debt };
+  const cash = cashTotal(atIso).total;
+  return { assets, cost, pots, cash, debt, net: cash + assets + pots - debt };
 }
 function goalSaved(g){
   return (g.ledger||[]).reduce((s,x) => s + toNum(x.amount), 0);
+}
+
+const ACCT_FIELDS = [
+  { k:'name', label:'Account', ph:'SBI savings, wallet, HDFC card…' },
+  { k:'kind', label:'Kind', type:'select', options:Object.keys(ACCT_KINDS)
+      .map(k => ({ v:k, t:ACCT_KINDS[k] })) },
+  { k:'note', label:'Note', type:'textarea' },
+  { k:'closed', label:'Closed — leave out of the totals', type:'check' }
+];
+/* Every balance in one go, like the prices. Checking four accounts one editor
+   at a time is how balances end up three months old, and a net worth resting
+   on a three-month-old figure is not a net worth. */
+function balancesEditor(){
+  const list = DB.accts.filter(a => !a.closed);
+  if(!list.length){ alert('Add an account first.'); return; }
+  const fields = [
+    { k:'d', label:'Balances as at', type:'date' },
+    { k:'n', type:'note', label:'Leave a box empty to leave that one alone. ' +
+      'A credit card balance is what you owe — enter it as a positive number ' +
+      'and it will count against you.' }
+  ];
+  const rec = { d: today() };
+  for(const a of list){
+    const b = balanceAt(a);
+    fields.push({ k:'b_' + a.id, type:'money',
+      label:(a.name || ACCT_KINDS[a.kind]) + ' · ' + (ACCT_KINDS[a.kind]||a.kind),
+      hint: b.d ? 'was ' + money(b.amount) + ' on ' + fmtDate(b.d) : 'never counted' });
+    rec['b_' + a.id] = b.d ? b.amount : '';
+  }
+  editor('Update balances', fields, rec, r => {
+    let n = 0;
+    for(const a of list){
+      const v = r['b_' + a.id];
+      if(v === '' || v === undefined) continue;
+      a.bals = Array.isArray(a.bals) ? a.bals : [];
+      const at = a.bals.find(x => x.d === r.d);
+      if(at){
+        if(toNum(at.amount) === toNum(v)) continue;
+        at.amount = toNum(v); Object.assign(at, newStamp());
+      }else{
+        a.bals.push(Object.assign({ id:uid() }, newStamp(),
+          { d:r.d, amount:toNum(v) }));
+        a.bals.sort((x,y) => (x.d||'').localeCompare(y.d||''));
+      }
+      stamp(a); n++;
+    }
+    if(!n){ alert('Nothing changed.'); return; }
+    if(save('accts')) render();
+  }, null);
+}
+
+/* ---------- what is about to happen ----------
+   Nothing in this app volunteered anything. An FD maturing, an instalment
+   due, a goal quietly gone off track, a price three months old — all of it
+   could only be found by opening the right tab and reading carefully. One
+   card, sorted by when, so the app can say something without being asked. */
+function comingUp(){
+  const out = [];
+  const now = today(), m = thisMonth();
+  const inDays = n => isoFromDate(new Date(Date.now() + n*86400000));
+  const soon = inDays(60);
+  const add = (when, what, note, urgent) => out.push({ when, what, note, urgent });
+
+  for(const l of DB.loans){
+    if(l.closed) continue;
+    const a = amortise(l);
+    if(a.never){
+      add(now, (l.name||'A loan') + ' is not being repaid',
+          'The EMI no longer covers the interest.', true);
+    }else if(a.payoff && a.payoff <= monthAdd(m, 3)){
+      add(a.payoff + '-01', (l.name||'Loan') + ' clears',
+          'Last instalment in ' + monthName(a.payoff) + '.', false);
+    }
+  }
+  for(const h of DB.invest){
+    if(h.closed) continue;
+    if(h.kind === 'fd'){
+      const v = fdValue(h);
+      if(v.matures && v.matures + '-01' <= soon && v.matures >= m)
+        add(v.matures + '-01', (h.name||'Fixed deposit') + ' matures',
+            money(v.maturity) + ' due in ' + monthName(v.matures) + '.', false);
+    }
+    if(h.kind === 'rd'){
+      const v = rdValue(h);
+      if(v.matures && v.matures + '-01' <= soon && v.matures >= m)
+        add(v.matures + '-01', (h.name||'Recurring deposit') + ' finishes',
+            money(v.maturity) + ' due in ' + monthName(v.matures) + '.', false);
+    }
+    if(h.kind === 'bond' && h.maturity && h.maturity <= soon && h.maturity >= now)
+      add(h.maturity, (h.name||'Bond') + ' matures', '', false);
+    if(PRICED[h.kind] && h.asof && h.asof < inDays(-45))
+      add(now, 'Price for ' + (h.name||KINDS[h.kind]) + ' is old',
+          'Written down ' + fmtDate(h.asof) + '.', false);
+  }
+  for(const g of DB.goals){
+    const saved = goalSaved(g), target = toNum(g.target);
+    if(!g.by || saved >= target) continue;
+    const left = monthDiff(m, ym(g.by));
+    if(left < 0)
+      add(g.by, (g.name||'Goal') + ' is past its date',
+          money(target - saved) + ' still to go.', true);
+    else if(left <= 3)
+      add(g.by, (g.name||'Goal') + ' is due in ' + (left||'under a') + ' month' +
+          (left === 1 ? '' : 's'), money(target - saved) + ' still to go.', false);
+  }
+  const stale = cashStaleDays();
+  if(stale !== null && stale > 30)
+    add(now, 'Bank balances are ' + stale + ' days old',
+        'The net worth is only as fresh as these.', false);
+  for(const f of DB.fixed){
+    if(fixedDue(f, m) > 0)
+      add(dayOfMonth(m, 28), (f.name||'Fixed outgoing') + ' not marked paid',
+          money(toNum(f.amount)) + ' due this month.', false);
+  }
+  return out.sort((a,b) => (a.urgent === b.urgent)
+    ? (a.when||'').localeCompare(b.when||'') : (a.urgent ? -1 : 1));
 }
 
 let PIE_VIEW = 'out';
@@ -1403,6 +1660,21 @@ function renderMonth(){
   h += kv('Left over', '<span class="' + (f.left<0?'neg':'pos') + '">' +
         esc(money(f.left)) + '</span>', 'tot');
   h += '</div>';
+
+  {
+    const up = comingUp();
+    if(up.length){
+      h += '<div class="card"><h2>Coming up</h2>' +
+        up.slice(0,8).map(u => '<div class="kv"><span class="k">' +
+          (u.urgent ? '<span class="chip out">now</span> ' : '') +
+          '<strong>' + esc(u.what) + '</strong>' +
+          (u.note ? '<br><span class="muted tiny">' + esc(u.note) + '</span>' : '') +
+          '</span><span class="num tiny muted">' + esc(fmtDate(u.when)) +
+          '</span></div>').join('') +
+        (up.length > 8 ? '<div class="work">and ' + (up.length-8) + ' more.</div>' : '') +
+        '</div>';
+    }
+  }
 
   /* The pie. Two things are worth seeing as a whole: where a month's money
      goes, and what the net worth is made of. Same chart, two questions. */
@@ -1441,7 +1713,38 @@ function renderMonth(){
   }
   h += '</div>';
 
+  const cash = cashTotal(), stale = cashStaleDays();
+  h += '<div class="card"><h2>Cash</h2>' +
+    (DB.accts.length
+      ? DB.accts.filter(a => !a.closed).map(a => {
+          const b = acctSigned(a);
+          return '<div class="kv" data-edit="acct" data-id="' + a.id + '">' +
+            '<span class="k">' + esc(a.name || ACCT_KINDS[a.kind] || 'Account') +
+            ' <span class="chip">' + esc(ACCT_KINDS[a.kind] || a.kind) + '</span>' +
+            (b.d ? '' : ' <span class="chip warn">never counted</span>') +
+            '</span><span class="num ' + (b.amount < 0 ? 'neg' : '') + '">' +
+            esc(money(b.amount)) + (b.d ? ' <span class="muted tiny">' +
+            esc(fmtDate(b.d)) + '</span>' : '') + '</span></div>';
+        }).join('') +
+        kv('In hand', '<span class="' + (cash.total<0?'neg':'pos') + '">' +
+           esc(money(cash.total)) + '</span>', 'tot') +
+        (stale !== null && stale > 20
+          ? '<div class="banner" style="margin-top:8px">The oldest of these ' +
+            'was written down ' + stale + ' days ago, so the total above — and ' +
+            'the net worth below — are that old too.</div>'
+          : '')
+      : '<div class="empty">No accounts yet. Without one the net worth below ' +
+        'leaves out your cash, which is usually the largest part of it.</div>') +
+    '<div class="row wrap" style="margin-top:10px;gap:6px">' +
+    (DB.accts.some(a => !a.closed)
+      ? '<button class="btn" data-balances="1">Update balances</button>' : '') +
+    '<button class="btn sec sm" data-add="acct">Add account</button></div>' +
+    '<div class="work">Typed in when you happen to look, and kept with the date ' +
+    'you looked. There is no bank link here and there is not going to be one.</div>' +
+    '</div>';
+
   h += '<div class="card"><h2>Net worth</h2>' +
+    kv('Cash in hand', esc(money(nw.cash))) +
     kv('Investments at value', esc(money(nw.assets))) +
     kv('Goal savings', esc(money(nw.pots))) +
     kv('Loans outstanding', '<span class="neg">' + esc(money(-nw.debt)) + '</span>') +
@@ -1688,7 +1991,7 @@ function monthTotals(n){
   for(let k = n - 1; k >= 0; k--){
     const m = monthAdd(thisMonth(), -k);
     let fixed = 0, day = 0;
-    for(const f of DB.fixed) fixed += dueIn(f, m);
+    for(const f of DB.fixed) fixed += fixedDue(f, m);
     for(const x of DB.spend) if(ym(x.date) === m) day += toNum(x.amount);
     out.push({ m, fixed, day, total: fixed + day });
   }
@@ -1798,12 +2101,19 @@ function renderSpend(){
 
   h += '<div class="card"><h2>Fixed outgoings</h2>' +
     (DB.fixed.length ? DB.fixed.map(x => {
-      const due = dueIn(x, m);
-      return '<div class="kv" data-edit="fixed" data-id="' + x.id + '">' +
-        '<span class="k">' + esc(x.name||'—') + ' <span class="chip">' +
+      // fixedDue, not dueIn: once it is marked paid it is no longer due, and
+      // the row has to offer Undo rather than Paid a second time.
+      const due = fixedDue(x, m);
+      const paid = (x.paid||[]).includes(m);
+      return '<div class="kv"><span class="k" data-edit="fixed" data-id="' + x.id +
+        '">' + esc(x.name||'—') + ' <span class="chip">' +
         esc((FREQ[x.freq]||FREQ.monthly).label) + '</span>' +
-        (due ? ' <span class="chip warn">due</span>' : '') + '</span>' +
-        '<span class="num">' + esc(money(toNum(x.amount))) + '</span></div>';
+        (paid ? ' <span class="chip in">paid</span>'
+              : (due ? ' <span class="chip warn">due</span>' : '')) + '</span>' +
+        '<span class="num">' + esc(money(toNum(x.amount))) +
+        (due ? ' <button class="btn sec sm" data-paid="' + x.id + '">Paid</button>'
+             : (paid ? ' <button class="btn sec sm" data-unpaid="' + x.id +
+                       '">Undo</button>' : '')) + '</span></div>';
     }).join('') : '<div class="empty">Rent, insurance, fees — the ones that arrive whether you look or not.</div>') +
     '</div>';
 
@@ -1982,14 +2292,18 @@ function renderInvest(){
       '<span class="amt">' + esc(money(v.value)) + '</span></div>';
 
     if(hd.kind === 'equity' || hd.kind === 'mf'){
-      h += '<div class="small muted">' + num(toNum(hd.units), 3) + ' ' +
+      h += '<div class="small muted">' + num(d.units, 3) + ' ' +
         (hd.kind === 'mf' ? 'units' : 'shares') + ' · cost ' +
-        esc(money(toNum(hd.buy), 2)) + ' · now ' + esc(money(toNum(hd.price) ||
-        toNum(hd.buy), 2)) + (hd.asof ? ' as at ' + esc(fmtDate(hd.asof)) : '') + '</div>' +
+        esc(money(d.avg, 2)) + ' · now ' + esc(money(toNum(hd.price) ||
+        d.avg, 2)) + (hd.asof ? ' as at ' + esc(fmtDate(hd.asof)) : '') + '</div>' +
         '<div class="small ' + (v.gain<0?'neg':'pos') + '">' + esc(money(v.gain)) +
         ' · ' + pct(d.gainPct) + '</div>' +
-        '<div class="work">' + num(toNum(hd.units),3) + ' &times; ' +
-        esc(money(toNum(hd.price)||toNum(hd.buy),2)) + ' = ' + esc(money(v.value)) + '</div>' +
+        '<div class="work">' + num(d.units,3) + ' &times; ' +
+        esc(money(toNum(hd.price)||d.avg,2)) + ' = ' + esc(money(v.value)) +
+        (d.from === 'txns' ? ' — from ' + (hd.txns||[]).length + ' transactions'
+                           : '') + '</div>' +
+        (d.realised ? '<div class="small ' + (d.realised<0?'neg':'pos') + '">' +
+          esc(money(d.realised)) + ' realised on ' + num(d.sold,3) + ' sold</div>' : '') +
         sparkline(hd.hist, 240, 34) +
         ((hd.hist||[]).length > 1
           ? '<div class="tiny muted">' + (hd.hist||[]).length + ' prices, ' +
@@ -1999,11 +2313,11 @@ function renderInvest(){
         h += '<div class="small" style="color:var(--warn)">Price is over a month old.</div>';
       }
     } else if(hd.kind === 'bond'){
-      h += '<div class="small muted">' + num(toNum(hd.units),0) + ' &times; face ' +
+      h += '<div class="small muted">' + num(d.units,0) + ' &times; face ' +
         esc(money(toNum(hd.face))) + ' · coupon ' + num(toNum(hd.coupon),2) + '%' +
         (hd.maturity ? ' · matures ' + esc(fmtDate(hd.maturity)) : '') + '</div>' +
         '<div class="small pos">' + esc(money(d.coupon)) + ' a year in coupons</div>' +
-        '<div class="work">' + num(toNum(hd.units),0) + ' &times; ' +
+        '<div class="work">' + num(d.units,0) + ' &times; ' +
         esc(money(toNum(hd.face))) + ' &times; ' + num(toNum(hd.coupon),2) +
         '% = ' + esc(money(d.coupon)) + ' a year</div>' +
         sparkline(hd.hist, 240, 34);
@@ -2029,6 +2343,27 @@ function renderInvest(){
         '<div class="work">Each instalment compounds for the months it has left: ' +
         'M = &Sigma; A(1 + r/' + ((toNum(hd.comp)||4)*100) + ')<sup>(N&minus;k+1)/' +
         (12/(toNum(hd.comp)||4)) + '</sup>. Interest ' + esc(money(d.interest)) + '.</div>';
+    }
+    if(PRICED[hd.kind]){
+      h += '<div class="row wrap" style="margin-top:8px;gap:6px">' +
+        '<button class="btn sec sm" data-txn="' + hd.id + ':buy">Bought more</button>' +
+        '<button class="btn sec sm" data-txn="' + hd.id + ':sell">Sold some</button>' +
+        '</div>';
+      if((hd.txns||[]).length){
+        h += '<details style="margin-top:6px"><summary>' + (hd.txns||[]).length +
+          ' transactions</summary>' +
+          (hd.txns||[]).slice().sort((a,b)=>(b.d||'').localeCompare(a.d||''))
+            .map(t => '<div class="kv"><span class="k">' + esc(fmtDate(t.d)) +
+              ' · <strong>' + (t.kind === 'sell' ? 'Sold' : 'Bought') + '</strong> ' +
+              num(toNum(t.units),3) + ' at ' + esc(money(toNum(t.price),2)) +
+              (toNum(t.charges) ? ' + ' + esc(money(toNum(t.charges),2)) + ' costs' : '') +
+              '</span><span><button class="btn sec sm" data-deltxn="' + hd.id +
+              ':' + t.id + '">&times;</button></span></div>').join('') +
+          '<div class="work">Units and average cost are worked out from these. ' +
+          'Cost is averaged, not first-in-first-out — that is how a holding is ' +
+          'carried; FIFO is how tax on a sale is reckoned, and this app does ' +
+          'not do tax.</div></details>';
+      }
     }
     if(hd.note) h += '<div class="small muted" style="margin-top:5px">' + esc(hd.note) + '</div>';
     h += '</div>';
@@ -2335,12 +2670,24 @@ function renderBanner(){
                DB.invest.length + DB.goals.length + DB.fixed.length;
   const snooze = localStorage.getItem(K.snooze) || '';
   let h = '';
+  /* Nagged only once the two phones have actually been put together at least
+     once. Before that there is no second phone to be out of step with, and a
+     reminder to sync with nobody is noise. */
+  if(S.lastMerge && snooze !== today()){
+    const sd = Math.floor((Date.now() - S.lastMerge) / 86400000);
+    if(sd >= 21){
+      h += '<div class="banner">The two phones were last put together ' + sd +
+        ' days ago. The longer they drift, the more there is to read through ' +
+        'when you do. <button class="btn sm" data-go="data">Sync</button> ' +
+        '<button class="btn sec sm" data-snooze="1">Not today</button></div>';
+    }
+  }
   if(rows && snooze !== today()){
     if(days === null){
-      h = '<div class="banner">Nothing has been backed up yet. This data lives ' +
+      h += '<div class="banner">Nothing has been backed up yet. This data lives ' +
         'on this phone only — <button class="btn sm" data-go="data">export it</button>.</div>';
     }else if(days >= 14){
-      h = '<div class="banner' + (days >= 30 ? ' bad' : '') + '">Last backup was ' +
+      h += '<div class="banner' + (days >= 30 ? ' bad' : '') + '">Last backup was ' +
         days + ' days ago. <button class="btn sm" data-go="data">Export now</button> ' +
         '<button class="btn sec sm" data-snooze="1">Not today</button></div>';
     }
@@ -2567,7 +2914,8 @@ function renderData(){
     'website data erases it, and iOS can evict storage for a page left unopened ' +
     'for long enough. The export is the backup.</div>' +
     kv('Last export', b ? esc(fmtDate(b)) + ' (' + days + ' days ago)' : 'never') +
-    kv('Roughly in use', num(used/1024, 0) + ' KB of about 5,000 KB') +
+    kv('In use by this app', num(used/1024, 1) + ' KB') +
+    kv('Shared with the deck log, out of about', '5,000 KB') +
     '<div class="row wrap" style="margin-top:10px;gap:6px">' +
     '<button class="btn" data-export="json">Backup (JSON)</button>' +
     '<button class="btn sec" data-export="csv">Export CSV</button>' +
@@ -2589,6 +2937,7 @@ function renderData(){
     kv('Expenses', DB.spend.length) +
     kv('Holdings', DB.invest.length) +
     kv('Goals', DB.goals.length) +
+    kv('Accounts', (DB.accts||[]).length) +
     kv('Portfolio readings', (DB.snap||[]).length) +
     kv('Deleted, remembered for merging', (DB.tomb||[]).length) + '</div>';
 
@@ -2675,7 +3024,8 @@ function editRecord(name, fields, id, title){
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-tab],[data-go],[data-go-month],[data-pie],' +
     '[data-add],[data-edit],[data-openloan],[data-prepay],[data-delextra],' +
-    '[data-ratechg],[data-delrate],[data-qcat],[data-undoadd],' +
+    '[data-ratechg],[data-delrate],[data-qcat],[data-undoadd],[data-balances],' +
+    '[data-txn],[data-deltxn],[data-paid],[data-unpaid],' +
     '[data-invkind],[data-putgoal],[data-export],[data-wipe],[data-snooze],' +
     '[data-prices],' +
     '[data-savesettings],[data-calc-kind],[data-calc-add],[data-calc="view"]');
@@ -2691,6 +3041,76 @@ document.addEventListener('click', e => {
                    renderLoans(); return; }
   if(d.snooze)   { localStorage.setItem(K.snooze, today()); renderBanner(); return; }
   if(d.prices)   { pricesEditor(); return; }
+  if(d.balances) { balancesEditor(); return; }
+
+  if(d.paid){
+    const f = DB.fixed.find(x => x.id === d.paid);
+    if(!f) return;
+    const m = S.month;
+    /* Marked paid means it becomes an ordinary expense in the ledger, and
+       stops counting as due — otherwise the month carries the rent twice. */
+    const rec = { id:uid(), date: dayOfMonth(m, new Date().getDate()),
+                  amount: toNum(f.amount), cat: f.cat || 'Other',
+                  note: f.name || 'Fixed outgoing', fromFixed: f.id };
+    f.paid = (f.paid || []).concat([m]);
+    upsert('spend', rec);
+    upsert('fixed', f);
+    return;
+  }
+  if(d.unpaid){
+    const f = DB.fixed.find(x => x.id === d.unpaid);
+    if(!f) return;
+    const m = S.month;
+    const filed = DB.spend.find(x => x.fromFixed === f.id && ym(x.date) === m);
+    if(filed) removeRec('spend', filed.id);
+    f.paid = (f.paid || []).filter(x => x !== m);
+    upsert('fixed', f);
+    return;
+  }
+  if(d.txn){
+    const [hid, kind] = d.txn.split(':');
+    const hd = DB.invest.find(x => x.id === hid);
+    if(!hd) return;
+    const held = holdingUnits(hd);
+    const what = hd.kind === 'mf' ? 'units' : hd.kind === 'bond' ? 'units' : 'shares';
+    return editor((kind === 'sell' ? 'Sold some of ' : 'Bought more ') +
+      (hd.name || KINDS[hd.kind]), [
+      { k:'d',       label:'Date', type:'date', half:true },
+      { k:'units',   label:(kind==='sell'?'How many sold':'How many bought'),
+        type:'number', step:'any', half:true },
+      { k:'price',   label:'Price each', type:'money', half:true },
+      { k:'charges', label:'Brokerage and charges', type:'money', half:true },
+      { k:'n', type:'note', label: held.from === 'typed' && held.units > 0
+        ? 'You hold ' + num(held.units,3) + ' ' + what + ' at ' +
+          money(held.buy,2) + ' on the card. Recording this makes the ' +
+          'transactions the source from now on, so add the earlier purchase ' +
+          'too or the holding will read as only what is listed here.'
+        : 'You hold ' + num(held.units,3) + ' ' + what +
+          (held.units > 0 ? ' at an average of ' + money(held.buy,2) : '') +
+          '. The average is worked out from the list, not typed.' }
+    ], { d:today(), kind, price: toNum(hd.price) || toNum(hd.buy) }, r => {
+      const u = Math.abs(toNum(r.units));
+      if(!(u > 0)){ alert('Nothing entered.'); return; }
+      if(kind === 'sell' && u > held.units + 1e-9 &&
+         !confirm('That is more than the ' + num(held.units,3) + ' ' + what +
+                  ' on record. Only what is held can be sold, so the rest ' +
+                  'will be ignored. Go on?')) return;
+      hd.txns = (hd.txns || []).concat([Object.assign({ id:uid() }, newStamp(),
+        { d:r.d, kind, units:u, price:toNum(r.price), charges:toNum(r.charges) })]);
+      upsert('invest', hd);
+    }, null);
+  }
+  if(d.deltxn){
+    const [hid, tid] = d.deltxn.split(':');
+    const hd = DB.invest.find(x => x.id === hid);
+    if(hd && confirm('Remove this transaction? The units and average cost are ' +
+                     'worked out from these, so both will change.')){
+      hd.txns = (hd.txns || []).filter(x => x.id !== tid);
+      tombstone(tid);
+      upsert('invest', hd);
+    }
+    return;
+  }
 
   if(d.qcat){
     const box = el('qAmt');
@@ -2726,6 +3146,8 @@ document.addEventListener('click', e => {
         r => upsert('spend', r), null);
     }
     if(d.add === 'goal')   return editRecord('goals', GOAL_FIELDS, null, 'goal');
+    if(d.add === 'acct')   return editor('New account', ACCT_FIELDS,
+      { id:uid(), kind:'bank' }, r => upsert('accts', r), null);
     if(d.add === 'receipt'){
       const src = DB.income.map(i => ({v:i.id, t:i.name || 'Untitled'}));
       return editor('Record a receipt', [
@@ -2752,6 +3174,7 @@ document.addEventListener('click', e => {
     if(d.edit === 'fixed')  return editRecord('fixed', FIXED_FIELDS, id, 'fixed outgoing');
     if(d.edit === 'spend')  return editRecord('spend', spendFields(), id, 'expense');
     if(d.edit === 'goal')   return editRecord('goals', GOAL_FIELDS, id, 'goal');
+    if(d.edit === 'acct')   return editRecord('accts', ACCT_FIELDS, id, 'account');
     if(d.edit === 'receipt'){
       const src = DB.income.map(i => ({v:i.id, t:i.name || 'Untitled'}));
       return editRecord('receipt', [
