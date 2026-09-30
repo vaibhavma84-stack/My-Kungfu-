@@ -16,7 +16,12 @@ import java.util.Calendar
 class DailyCheckReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, intent: Intent) {
         when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> schedule(c)
+            // A disabled reminder must stay cancelled across a reboot too --
+            // otherwise turning it off would only last until the phone next
+            // restarts, silently turning itself back on.
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                if (NotificationHelper.isEnabled(c)) schedule(c)
+            }
             else -> NotificationHelper.checkAndNotify(c)
         }
     }
@@ -24,28 +29,34 @@ class DailyCheckReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_CHECK = "com.gasplanet.decklog.DAILY_CHECK"
 
+        private fun pendingIntent(c: Context) = PendingIntent.getBroadcast(
+            c, 0,
+            Intent(c, DailyCheckReceiver::class.java).setAction(ACTION_CHECK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         fun schedule(c: Context) {
             val mgr = c.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val pending = PendingIntent.getBroadcast(
-                c, 0,
-                Intent(c, DailyCheckReceiver::class.java).setAction(ACTION_CHECK),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
             val next = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, NotificationHelper.HOUR)
-                set(Calendar.MINUTE, NotificationHelper.MINUTE)
+                set(Calendar.HOUR_OF_DAY, NotificationHelper.hour(c))
+                set(Calendar.MINUTE, NotificationHelper.minute(c))
                 set(Calendar.SECOND, 0)
                 set(Calendar.MILLISECOND, 0)
                 if (before(Calendar.getInstance())) add(Calendar.DAY_OF_MONTH, 1)
             }
-            // Inexact: a reminder that lands within an hour of 05:30 is exactly
-            // as useful, and it lets Android batch the wakeup with other apps'
-            // instead of forcing the radio up on the dot -- kinder to a phone
-            // that is also trying to save battery at sea.
+            // Inexact: a reminder that lands within an hour of the configured
+            // time is exactly as useful, and it lets Android batch the wakeup
+            // with other apps' instead of forcing the radio up on the dot --
+            // kinder to a phone that is also trying to save battery at sea.
             mgr.setInexactRepeating(
                 AlarmManager.RTC_WAKEUP, next.timeInMillis,
-                AlarmManager.INTERVAL_DAY, pending
+                AlarmManager.INTERVAL_DAY, pendingIntent(c)
             )
+        }
+
+        fun cancel(c: Context) {
+            val mgr = c.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            mgr.cancel(pendingIntent(c))
         }
     }
 }

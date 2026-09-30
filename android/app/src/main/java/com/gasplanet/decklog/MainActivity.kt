@@ -23,6 +23,7 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 
@@ -155,7 +156,10 @@ class MainActivity : AppCompatActivity() {
         })
 
         NotificationHelper.ensureChannel(this)
-        DailyCheckReceiver.schedule(this)
+        // Respects a reminder the user already turned off in Settings -- the
+        // default (enabled, 05:30) only applies until the page has published
+        // its first agenda, the same as any other setting read before that.
+        if (NotificationHelper.isEnabled(this)) DailyCheckReceiver.schedule(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -291,7 +295,10 @@ class MainActivity : AppCompatActivity() {
         /**
          * The page hands over the agenda whenever anything changes. This is the
          * only route the home-screen widgets have to the data, so it is stored
-         * and both widgets are redrawn.
+         * and both widgets are redrawn. The agenda JSON also carries the
+         * reminder's own settings (Settings screen -> "notify") -- there is no
+         * separate bridge call for it, for the same reason: this is the one
+         * channel from the page to here, so everything rides on it.
          *
          * Called on a WebView JavaScript thread, not the UI thread.
          */
@@ -302,9 +309,21 @@ class MainActivity : AppCompatActivity() {
                 TodayWidget.refreshAll(applicationContext)
                 MonthWidget.refreshAll(applicationContext)
             }
-            // A phone that was off at 05:30 still gets today's reminder once
-            // it is back on and the app happens to be opened, rather than
-            // waiting for tomorrow's alarm.
+            try {
+                val notify = JSONObject(json).optJSONObject("notify")
+                if (notify != null) {
+                    NotificationHelper.applySettings(
+                        applicationContext,
+                        notify.optBoolean("enabled", true),
+                        notify.optString("time", "05:30")
+                    )
+                }
+            } catch (e: Exception) {
+                // Malformed or missing -- leave whatever was set before alone.
+            }
+            // A phone that was off at the configured time still gets today's
+            // reminder once it is back on and the app happens to be opened,
+            // rather than waiting for tomorrow's alarm.
             NotificationHelper.catchUpIfDue(applicationContext)
         }
 

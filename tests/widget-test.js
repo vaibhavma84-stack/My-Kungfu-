@@ -226,6 +226,43 @@ function ok(name, cond, got){
      await p.evaluate(() => window.__published.length) > before,
      await p.evaluate(() => window.__published.length) + ' vs ' + before);
 
+  // ---- the daily reminder's own settings ride the same agenda payload -----
+  // There is no separate bridge call for it -- Settings changes the setting,
+  // and the very next publish (forced right there, not waiting for an
+  // unrelated task edit) is what the Android side actually reads.
+  const lastNotify = async () => {
+    const ag = await p.evaluate(() => JSON.parse(window.__published[window.__published.length - 1]));
+    return ag.notify;
+  };
+  ok('on by default, at 05:30', JSON.stringify(await lastNotify()) === JSON.stringify({ enabled: true, time: '05:30' }),
+     await lastNotify());
+
+  await p.click('#settingsBtn');
+  await p.click('[data-notify-set="off"]');
+  await p.waitForTimeout(150);
+  ok('turning it off publishes immediately, not on the next unrelated change',
+     (await lastNotify()).enabled === false, await lastNotify());
+
+  // A time input's own change event, not p.fill()'s -- fill() does not
+  // reliably fire one for type="time", and that event is exactly what the
+  // handler being tested here is wired to.
+  await p.evaluate(() => {
+    var el = document.getElementById('setNotifyTime');
+    el.value = '06:15';
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await p.waitForTimeout(150);
+  ok('and the time change publishes the same way',
+     JSON.stringify(await lastNotify()) === JSON.stringify({ enabled: false, time: '06:15' }),
+     await lastNotify());
+
+  await p.click('[data-notify-set="on"]');
+  await p.waitForTimeout(150);
+  ok('switching back on keeps the time it was left at',
+     JSON.stringify(await lastNotify()) === JSON.stringify({ enabled: true, time: '06:15' }),
+     await lastNotify());
+  await p.click('[data-set="close"]');
+
   ok('no page errors', errs.length === 0, errs.join(' | '));
   await b.close();
   console.log('');

@@ -21,12 +21,40 @@ object NotificationHelper {
     private const val NOTIFICATION_ID = 1001
     private const val PREFS = "decklog_notify"
     private const val KEY_LAST_NOTIFIED = "last_notified_date"
+    private const val KEY_ENABLED = "enabled"
+    private const val KEY_HOUR = "hour"
+    private const val KEY_MINUTE = "minute"
 
     // 05:30 local time -- before the day's work starts, so the whole list is
-    // in hand going in rather than caught up on partway through. Shared with
-    // DailyCheckReceiver's alarm.
-    const val HOUR = 5
-    const val MINUTE = 30
+    // in hand going in rather than caught up on partway through. Only the
+    // defaults now: the Settings screen can move the time or turn the
+    // reminder off, applied in applySettings below.
+    private const val DEFAULT_HOUR = 5
+    private const val DEFAULT_MINUTE = 30
+
+    private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    fun isEnabled(c: Context) = prefs(c).getBoolean(KEY_ENABLED, true)
+    fun hour(c: Context) = prefs(c).getInt(KEY_HOUR, DEFAULT_HOUR)
+    fun minute(c: Context) = prefs(c).getInt(KEY_MINUTE, DEFAULT_MINUTE)
+
+    /**
+     * Called from the same bridge call that publishes the agenda, carrying
+     * whatever the Settings screen last set -- there is no separate channel
+     * for it. Reschedules or cancels the alarm only when something actually
+     * changed, so a plain agenda refresh with the same settings does not
+     * re-arm an alarm that is already sitting at the right time.
+     */
+    fun applySettings(c: Context, enabled: Boolean, time: String) {
+        val parts = time.split(":")
+        val h = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: DEFAULT_HOUR
+        val m = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: DEFAULT_MINUTE
+        val p = prefs(c)
+        val changed = p.getBoolean(KEY_ENABLED, true) != enabled ||
+            p.getInt(KEY_HOUR, DEFAULT_HOUR) != h || p.getInt(KEY_MINUTE, DEFAULT_MINUTE) != m
+        if (!changed) return
+        p.edit().putBoolean(KEY_ENABLED, enabled).putInt(KEY_HOUR, h).putInt(KEY_MINUTE, m).apply()
+        if (enabled) DailyCheckReceiver.schedule(c) else DailyCheckReceiver.cancel(c)
+    }
 
     fun ensureChannel(c: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -43,8 +71,9 @@ object NotificationHelper {
     /** Once a day only -- an inexact alarm can land more than once close to
         the boundary, and nobody wants two copies of the same reminder. */
     fun checkAndNotify(c: Context) {
+        if (!isEnabled(c)) return
         val today = AgendaStore.todayIso()
-        val prefs = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prefs = prefs(c)
         if (prefs.getString(KEY_LAST_NOTIFIED, "") == today) return
 
         val outstanding = AgendaStore.day(c, today).jobs.filter { !it.done }
@@ -82,14 +111,15 @@ object NotificationHelper {
 
     /**
      * Runs whenever the page publishes a fresh agenda, so a phone that was off
-     * at 05:30 still gets today's reminder once it is switched back on and the
-     * app is opened -- rather than waiting for tomorrow's alarm. Gated on the
-     * time so publishing at 3am does not trigger "today"'s reminder early.
+     * at the configured time still gets today's reminder once it is switched
+     * back on and the app is opened -- rather than waiting for tomorrow's
+     * alarm. Gated on the time so publishing at 3am does not trigger "today"'s
+     * reminder early.
      */
     fun catchUpIfDue(c: Context) {
         val now = Calendar.getInstance()
         val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-        if (nowMinutes < HOUR * 60 + MINUTE) return
+        if (nowMinutes < hour(c) * 60 + minute(c)) return
         checkAndNotify(c)
     }
 }
