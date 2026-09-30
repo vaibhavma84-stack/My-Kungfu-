@@ -187,6 +187,29 @@ const put = (pg, list, rec) => pg.evaluate(({list,rec}) => {
   ok('portfolio readings merge as their own records too',
      await A.evaluate(() => Array.isArray(DB.snap)));
 
+  /* ---- 7c. a rate change entered on one phone reaches the other ---- */
+  await A.evaluate(t => {
+    const l = DB.loans.find(x => x.id === 'l2');
+    l.rates = [{ id:'rc_a', upd:t+200, dev:'dAAA', from:'2027-04-01', rate:9.9 }];
+    l.upd = t+200; save('loans');
+  }, T);
+  await B.evaluate(t => {
+    const l = DB.loans.find(x => x.id === 'l2');
+    l.rates = [{ id:'rc_b', upd:t+210, dev:'dBBB', from:'2028-10-01', rate:7.4 }];
+    l.upd = t+210; save('loans');
+  }, T);
+  await mergeInto(A, await fileFrom(B));
+  await mergeInto(B, await fileFrom(A));
+  const rc = await A.evaluate(() =>
+    DB.loans.find(l => l.id === 'l2').rates.map(r => r.from));
+  ok('a rate change entered on each phone gives both, in date order',
+     rc.join() === '2027-04-01,2028-10-01', rc.join());
+  ok('and both phones then read the same rate for the same month',
+     await A.evaluate(() => rateAt(DB.loans.find(l => l.id==='l2'), '2028-11')) ===
+     await B.evaluate(() => rateAt(DB.loans.find(l => l.id==='l2'), '2028-11')));
+  ok('the loans are still identical across the two phones',
+     (await ledgerOf(A)) === (await ledgerOf(B)));
+
   /* ---- 8. the order the two phones merge in cannot change the answer ---- */
   {
     const C = await phone('dCCC'), D = await phone('dDDD');

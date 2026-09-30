@@ -603,3 +603,52 @@ build** — it messages each one and reloads any that does not answer within
 1.2 seconds. The Ledger is in that scope and the deck log cannot know it
 exists, so the Ledger answers for itself and is left alone. Otherwise a deck
 log publish could reload this app over a half-typed expense.
+
+## A loan's rate is a list, not a number
+
+An Indian home loan floats. Holding the rate as one number meant that the day
+the bank moved it, the balance, the interest paid so far and the month the loan
+clears were all wrong from that date on — and wrong **quietly**, because the
+card went on printing a confident figure. Nothing in the app could have told
+you, and nothing would have looked odd.
+
+So the rate is a dated list, the same shape as the prepayments, and the
+schedule reads it month by month. Two things follow:
+
+- **The EMI is left alone and the tenure moves.** That is what the bank does
+  unless you ask it to re-fix the instalment, and it is what falls out of
+  running the schedule until the balance clears rather than to a fixed count.
+  The card says so where it shows the working.
+- **A rise can take the EMI below the interest part way through.** Checked
+  every month, not only at the start: otherwise the card prints a payoff a
+  century out as though it meant something. When it happens the banner names
+  the month it started and the rate that caused it.
+
+Rate changes merge between the two phones like everything else — they are a
+nested list, so one entered on each phone gives both, in date order.
+
+## Filing an expense has to be one tap
+
+Five taps at a shop counter is how a ledger stops being filled in, and once it
+stops being filled in every other figure in the app is fiction — the pies, the
+rate a day, the net worth. So the Spend tab opens with an amount box and the
+six categories most used in the last three months: type, tap, filed for today.
+
+**It carries an undo.** One-tap filing makes a mistapped category easy, and
+the undo is on the card until the next entry replaces it. Undoing leaves a
+tombstone, so the mistake does not come back at the next merge.
+
+The amount box clears itself after each entry. Leaving the figure in it would
+sooner or later file the same amount twice under different categories, which
+is the obvious failure of a fast path.
+
+## Two views the app was missing
+
+- **Search, across every month.** Only the current month is ever rendered, so
+  "what did that car service cost" was unanswerable by March. It searches the
+  note, the category and the exact amount — the last because an amount you
+  half-remember is often the only handle you have on an expense.
+- **Month by month.** Every figure in the app was single-month, so there was no
+  way to see spending rising. Twelve months, fixed and day-to-day together,
+  against the average of the months that have anything in them — and the note
+  says the current month reads low because it is still filling up.

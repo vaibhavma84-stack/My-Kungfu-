@@ -136,7 +136,9 @@ const stepUpClosed = (A, s, ratePa, m, years) => {
      await p.evaluate(() => {
        const a = amortise({ principal:1000000, rate:12, months:240, emi:5000,
                             start:'2026-01-01' });
-       return a.never === true && a.rows.length === 1 && a.payoff === null;
+       // No rows: not one instalment can be written down honestly, because
+       // none of it would reach the principal.
+       return a.never === true && a.rows.length === 0 && a.payoff === null;
      }));
   // P i (1+i)^n / ((1+i)^n - 1) is 0/0 at zero interest; it has to be P/n.
   ok('a zero-interest loan is simply the principal over the tenure',
@@ -149,6 +151,64 @@ const stepUpClosed = (A, s, ratePa, m, years) => {
        return a.rows.length === 12 && Math.abs(a.totalInt) < 1e-9 &&
               Math.abs(a.rows[11].close) < 1e-9;
      }));
+
+  /* ---- a floating rate ----
+     The rate on the card is only the rate the loan started at. When the bank
+     moves it, everything downstream is wrong from that date on, and wrong
+     quietly, which is the whole reason this exists. */
+  ok('with no rate changes the schedule is exactly what it always was',
+     await p.evaluate(l => {
+       const a = amortise(Object.assign({}, l, { emi: emiFor(l.principal, l.rate, l.months) }));
+       return a.rows.length === 240 && a.payoff === '2045-12';
+     }, L));
+  ok('the rate in force is read per month, and the changes need not be in order',
+     await p.evaluate(l => {
+       const loan = Object.assign({}, l, { rates:[
+         { id:'r1', from:'2030-04-01', rate:9.6 },
+         { id:'r2', from:'2027-07-01', rate:7.9 } ]});
+       return rateAt(loan, '2026-06') === 8.6 && rateAt(loan, '2027-06') === 8.6 &&
+              rateAt(loan, '2027-07') === 7.9 && rateAt(loan, '2030-03') === 7.9 &&
+              rateAt(loan, '2030-04') === 9.6 && rateAt(loan, '2044-01') === 9.6;
+     }, L));
+
+  const flat = await p.evaluate(l =>
+    (a => ({ months:a.rows.length, int:a.totalInt }))(
+      amortise(Object.assign({}, l, { emi: emiFor(l.principal, l.rate, l.months) }))), L);
+  const risen = await p.evaluate(l =>
+    (a => ({ months:a.rows.length, int:a.totalInt }))(
+      amortise(Object.assign({}, l, { emi: emiFor(l.principal, l.rate, l.months),
+        rates:[{ id:'r1', from:'2029-01-01', rate:10.6 }] }))), L);
+  const cut = await p.evaluate(l =>
+    (a => ({ months:a.rows.length, int:a.totalInt }))(
+      amortise(Object.assign({}, l, { emi: emiFor(l.principal, l.rate, l.months),
+        rates:[{ id:'r1', from:'2029-01-01', rate:6.6 }] }))), L);
+  ok('a rate rise with the EMI left alone pushes the payoff out',
+     risen.months > flat.months, risen.months + ' vs ' + flat.months);
+  ok('and costs more interest',
+     risen.int > flat.int, Math.round(risen.int) + ' vs ' + Math.round(flat.int));
+  ok('a rate cut clears it sooner and costs less',
+     cut.months < flat.months && cut.int < flat.int,
+     cut.months + ' vs ' + flat.months);
+
+  ok('a change dated before the loan starts simply is the rate',
+     await p.evaluate(l => {
+       const loan = Object.assign({}, l, { rates:[{ id:'r1', from:'2020-01-01', rate:7.0 }] });
+       return Math.abs(rateAt(loan, ym(l.start)) - 7.0) < 1e-9;
+     }, L));
+
+  /* A rise can take the EMI below the interest part way through. The card
+     would otherwise print a payoff a century out as though it meant something. */
+  ok('a rise that leaves the EMI short of the interest is caught mid-loan',
+     await p.evaluate(l => {
+       const a = amortise(Object.assign({}, l, {
+         emi: emiFor(l.principal, l.rate, l.months),
+         rates:[{ id:'r1', from:'2028-01-01', rate:40 }] }));
+       return a.never === true && a.payoff === null &&
+              a.rows.length > 12 && a.rows.length < 240;
+     }, L),
+     await p.evaluate(l => amortise(Object.assign({}, l, {
+       emi: emiFor(l.principal, l.rate, l.months),
+       rates:[{ id:'r1', from:'2028-01-01', rate:40 }] })).rows.length, L));
 
   /* ================= deposits ================= */
   const FD = { principal: 500000, rate: 7.1, months: 60, comp: 4,
@@ -714,6 +774,112 @@ const stepUpClosed = (A, s, ratePa, m, years) => {
      }),
      await p.evaluate(() => JSON.stringify(DB.invest.map(h => [h.id, h.price, h.asof]))));
   await p.evaluate(() => { DB.invest = []; DB.snap = []; save('invest'); save('snap'); });
+
+  /* ---- quick add, search and the month trend ---- */
+  await p.evaluate(() => {
+    DB.spend = []; DB.fixed = []; S.month = thisMonth();
+    save('spend'); save('fixed'); save('set');
+    SPEND_Q = ''; LAST_ADD = null;
+    show('spend');
+  });
+  ok('an amount and one category tap files an expense for today',
+     await p.evaluate(() => {
+       document.getElementById('qAmt').value = '450';
+       document.querySelector('[data-qcat]').click();
+       return DB.spend.length === 1 && DB.spend[0].amount === 450 &&
+              DB.spend[0].date === today();
+     }),
+     await p.evaluate(() => JSON.stringify(DB.spend)));
+  ok('the amount box is cleared, so the next one cannot double up',
+     await p.evaluate(() => el('qAmt').value === ''));
+  ok('a tap with no amount files nothing rather than a zero',
+     await p.evaluate(() => {
+       const before = DB.spend.length;
+       el('qAmt').value = '';
+       document.querySelector('[data-qcat]').click();
+       return DB.spend.length === before;
+     }));
+  ok('a mistapped category can be taken straight back',
+     await p.evaluate(() => {
+       const before = DB.spend.length;
+       document.querySelector('[data-undoadd]').click();
+       return DB.spend.length === before - 1;
+     }));
+  ok('and undoing leaves a tombstone, so it stays gone after a merge',
+     await p.evaluate(() => DB.tomb.length > 0));
+  ok('the quick categories are the ones actually used most, recently',
+     await p.evaluate(() => {
+       DB.spend = []; DB.tomb = [];
+       const m = thisMonth();
+       for(let i=0;i<5;i++) DB.spend.push({ id:'f'+i, date:m+'-0'+(i+1), amount:100, cat:'Fuel' });
+       for(let i=0;i<3;i++) DB.spend.push({ id:'g'+i, date:m+'-1'+i, amount:100, cat:'Groceries' });
+       save('spend'); save('tomb');
+       const q = quickCats();
+       return q[0] === 'Fuel' && q[1] === 'Groceries' && q.length === 6 &&
+              new Set(q).size === 6;
+     }),
+     await p.evaluate(() => quickCats().join()));
+
+  ok('search reaches expenses outside the month on screen',
+     await p.evaluate(() => {
+       DB.spend = [
+         { id:'o1', date:'2025-03-14', amount:8900, cat:'Car', note:'Clutch job' },
+         { id:'o2', date: thisMonth()+'-02', amount:120, cat:'Food', note:'Tea' }];
+       save('spend');
+       S.month = thisMonth();
+       const hits = spendSearch('clutch');
+       return hits.length === 1 && hits[0].id === 'o1';
+     }));
+  ok('search matches the category as well as the note',
+     await p.evaluate(() => spendSearch('car').length === 1));
+  ok('search finds an exact amount, which is how you look for one you remember',
+     await p.evaluate(() => spendSearch('8900').length === 1 &&
+                            spendSearch('8901').length === 0));
+  ok('an empty search returns nothing rather than everything',
+     await p.evaluate(() => spendSearch('').length === 0 &&
+                            spendSearch('   ').length === 0));
+  ok('results are newest first',
+     await p.evaluate(() => {
+       DB.spend.push({ id:'o3', date:'2026-01-01', amount:50, cat:'Car', note:'Wash' });
+       save('spend');
+       const h = spendSearch('car');
+       return h.length === 2 && h[0].id === 'o3';
+     }));
+
+  ok('the month trend covers twelve months, oldest first, ending on this one',
+     await p.evaluate(() => {
+       const r = monthTotals(12);
+       return r.length === 12 && r[11].m === thisMonth() &&
+              r[0].m === monthAdd(thisMonth(), -11);
+     }));
+  ok('a month total is the fixed outgoings and the day-to-day together',
+     await p.evaluate(() => {
+       const m = thisMonth();
+       DB.spend = [{ id:'t1', date:m+'-05', amount:4000, cat:'Food' }];
+       DB.fixed = [{ id:'x1', name:'Rent', amount:38000, freq:'monthly',
+                     start: monthAdd(m,-6)+'-01' }];
+       save('spend'); save('fixed');
+       const r = monthTotals(3);
+       const now = r[r.length-1];
+       return now.day === 4000 && now.fixed === 38000 && now.total === 42000;
+     }),
+     await p.evaluate(() => JSON.stringify(monthTotals(3))));
+  ok('the bars scale to the biggest month and mark the current one',
+     await p.evaluate(() => {
+       const rows = [{ m:'2026-07', total:10000 }, { m:'2026-08', total:20000 },
+                     { m: thisMonth(), total:5000 }];
+       const d = document.createElement('div');
+       d.innerHTML = monthBars(rows);
+       const ws = Array.from(d.querySelectorAll('.mt > i'))
+                       .map(i => parseFloat(i.style.width));
+       return ws[1] === 100 && ws[0] === 50 &&
+              d.querySelectorAll('.mbar.on').length === 1 &&
+              d.querySelector('.mbar.on').dataset.goMonth === thisMonth();
+     }));
+  await p.evaluate(() => {
+    DB.spend = []; DB.fixed = []; DB.tomb = []; SPEND_Q = ''; LAST_ADD = null;
+    save('spend'); save('fixed'); save('tomb'); render();
+  });
 
   /* ---- spending categories ---- */
   ok('no category is listed in two groups, and none is repeated',

@@ -175,6 +175,16 @@
   .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto;display:inline-block;
     margin-right:4px;vertical-align:-1px;}
   .spark{display:block;margin:6px 0 0;overflow:visible;}
+  .mbars{margin:2px 0 10px;}
+  .mbar{display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;}
+  .mbar .ml{flex:0 0 46px;font-size:11px;color:var(--ink-soft);}
+  .mbar .mt{flex:1 1 auto;height:9px;border-radius:99px;background:var(--paper-2);
+    overflow:hidden;}
+  .mbar .mt > i{display:block;height:100%;background:var(--steel);border-radius:99px;}
+  .mbar .mv{flex:0 0 auto;font-size:11px;min-width:72px;text-align:right;}
+  .mbar.on .mt > i{background:var(--hull);}
+  :root[data-theme="dark"] .mbar.on .mt > i{background:var(--focus);}
+  .mbar.on .ml,.mbar.on .mv{color:var(--ink);font-weight:600;}
   svg.line{width:100%;height:auto;display:block;margin:2px 0 0;overflow:visible;}
   svg.line .gl{stroke:var(--line);stroke-width:1;}
   svg.line .ll{font-size:9px;fill:var(--ink);
@@ -301,7 +311,7 @@ function fmtDate(iso){
 /* The build this page is. CI reads it out of here to name the APK and its
    release, and the Data tab prints it, so "which version is actually on the
    phone" is a question that can be answered by looking rather than guessed. */
-const APP_BUILD = 'v7';
+const APP_BUILD = 'v8';
 
 const S = { cur:'₹', locale:'en-IN', theme:'light', month:'', spendCats:[] };
 function money(n, dp){
@@ -349,7 +359,7 @@ const LISTS  = ['income','receipt','loans','fixed','spend','invest','goals','sna
 /* The two places a record holds records of its own. They have to be merged in
    their own right: a prepayment added on one phone and one added on the other
    both have to survive, whichever copy of the loan happens to be newer. */
-const NESTED = { loans:['extras'], goals:['ledger'], invest:['hist'] };
+const NESTED = { loans:['extras','rates'], goals:['ledger'], invest:['hist'] };
 function nestedKeys(name){ return NESTED[name] || []; }
 
 let DB = { income:[], receipt:[], loans:[], fixed:[], spend:[], invest:[],
@@ -760,7 +770,29 @@ function dueIn(item, m){ return fallsIn(item, m) ? toNum(item.amount) : 0; }
    The schedule is simulated month by month rather than solved in closed form,
    because a prepayment part-way through has no closed form — and prepayment
    is the whole reason anyone opens this screen. */
-function loanRate(loan){ return toNum(loan.rate) / 12 / 100; }
+/* The rate in force in a given month.
+
+   A home loan here is floating. The rate on the card is only the rate it
+   started at; when the bank moves it, every figure downstream — the balance,
+   the interest paid so far, the month it clears — is wrong from that date on,
+   and wrong quietly, because the card goes on printing a confident number.
+   So the rate is a dated list, exactly like the prepayments, and the schedule
+   reads it month by month.
+
+   When the rate moves, the bank's default is to keep the EMI and let the
+   tenure move. That is what falls out of running the schedule to the month
+   the balance clears, rather than to a fixed count — so it is the behaviour
+   already, and it is the one to keep. */
+function rateAt(loan, m){
+  let r = toNum(loan.rate);
+  const changes = (loan.rates || []).slice()
+    .sort((a,b) => (a.from||'').localeCompare(b.from||''));
+  for(const c of changes){
+    if(ym(c.from || '') <= m) r = toNum(c.rate); else break;
+  }
+  return r;
+}
+function loanRate(loan, m){ return rateAt(loan, m || ym(loan.start) || thisMonth()) / 12 / 100; }
 
 /* Standard EMI, used to fill the field when the lender's figure is not to
    hand: EMI = P i (1+i)^n / ((1+i)^n - 1). At zero interest it is P/n, which
@@ -776,7 +808,7 @@ function emiFor(principal, ratePa, months){
 /* Runs the loan to its end. Returns every month, so the caller can ask for a
    schedule, a balance on a date, or the interest paid so far, off one run. */
 function amortise(loan, limit){
-  const P = toNum(loan.principal), i = loanRate(loan);
+  const P = toNum(loan.principal);
   const emi = toNum(loan.emi) || emiFor(P, loan.rate, loan.months);
   const start = ym(loan.start) || thisMonth();
   const cap = limit || 1200;                       // 100 years is not a loan
@@ -788,14 +820,22 @@ function amortise(loan, limit){
   if(P <= 0) return { rows, emi, balance:0, paidInt:0, paidPri:0, paidExtra:0,
                       payoff:null, months:0, totalInt:0, never:false };
 
-  // An EMI at or below the first month's interest never touches the principal.
-  // Say so rather than looping 1200 times and printing a century.
-  const never = emi > 0 && i > 0 && emi <= P * i;
+  // An EMI at or below the month's interest never touches the principal. That
+  // can be true from the start, or become true after the bank raises the rate
+  // — which is the case worth catching, because the card would otherwise print
+  // a payoff a century away as though it meant something.
+  let never = false;
 
   for(let k = 0; k < cap && bal > 0.005; k++){
     const m = monthAdd(start, k);
+    const i = rateAt(loan, m) / 12 / 100;
     const open = bal;
     const interest = open * i;
+    if(emi > 0 && i > 0 && emi <= interest){
+      const relief = extras.filter(x => ym(x.date) === m)
+                           .reduce((t,x) => t + toNum(x.amount), 0);
+      if(relief <= 0){ never = true; break; }
+    }
     let pay = Math.min(emi, open + interest);       // last instalment is short
     const extra = extras.filter(x => ym(x.date) === m)
                         .reduce((s,x) => s + toNum(x.amount), 0);
@@ -806,7 +846,6 @@ function amortise(loan, limit){
                 pay, extra:extraUsed, close });
     paidInt += interest; paidPri += pay - interest; paidExtra += extraUsed;
     bal = close;
-    if(never) break;
   }
   const last = rows.length ? rows[rows.length-1] : null;
   return {
@@ -1518,21 +1557,27 @@ function renderLoans(){
       (l.closed ? ' <span class="chip">closed</span>' : '') +
       '<span class="amt neg">' + esc(money(at.balance)) + '</span></div>' +
       '<div class="small muted">' + esc(l.lender || '') +
-      (l.lender ? ' · ' : '') + num(toNum(l.rate),2) + '% · EMI ' +
-      esc(money(a.emi)) + ' · ' + a.months + ' instalments</div>' +
+      (l.lender ? ' · ' : '') + num(rateAt(l, m),2) + '% now' +
+      ((l.rates||[]).length ? ' (from ' + num(toNum(l.rate),2) + '%)' : '') +
+      ' · EMI ' + esc(money(a.emi)) + ' · ' + a.months + ' instalments</div>' +
       barPct(toNum(l.principal) - at.balance, toNum(l.principal)) +
       '<div class="tiny muted" style="margin-top:4px">' + paidPct.toFixed(1) +
       '% repaid · ' + (a.payoff ? 'clear by ' + esc(monthName(a.payoff))
                                 : 'never clears at this EMI') + '</div>';
 
     if(a.never){
-      h += '<div class="banner bad" style="margin-top:8px">The EMI is at or below ' +
-        'the first month&rsquo;s interest (' + esc(money(toNum(l.principal)*loanRate(l))) +
-        '), so the balance never falls. Check the EMI or the rate.</div>';
+      const stuck = a.rows.length ? a.rows[a.rows.length-1] : null;
+      h += '<div class="banner bad" style="margin-top:8px">At ' +
+        num(rateAt(l, stuck ? stuck.month : ym(l.start)), 2) + '% the EMI of ' +
+        esc(money(a.emi)) + ' no longer covers the interest' +
+        (stuck ? ' from ' + esc(monthName(stuck.month)) : '') +
+        ', so the balance stops falling. Check the EMI, or raise it to match ' +
+        'the new rate.</div>';
     }
     h += '<div class="row" style="margin-top:8px;gap:6px">' +
       '<button class="btn sec sm" data-edit="loan" data-id="' + l.id + '">Edit</button>' +
       '<button class="btn sec sm" data-prepay="' + l.id + '">Prepay</button>' +
+      '<button class="btn sec sm" data-ratechg="' + l.id + '">Rate change</button>' +
       '<button class="btn sec sm" data-openloan="' + l.id + '">' +
       (open ? 'Hide' : 'Schedule') + '</button></div>';
 
@@ -1543,10 +1588,23 @@ function renderLoans(){
         kv('Interest over the whole loan', esc(money(a.totalInt))) +
         kv('Total repaid over the whole loan',
            esc(money(toNum(l.principal) + a.totalInt)), 'tot') +
-        '<div class="work">EMI = P&nbsp;i&nbsp;(1+i)<sup>n</sup> / ((1+i)<sup>n</sup>&minus;1), ' +
-        'i = ' + num(toNum(l.rate),2) + '% &divide; 12 = ' +
-        num(loanRate(l)*100, 4) + '% a month. Interest each month is charged on ' +
-        'the opening balance.</div>';
+        '<div class="work">EMI = P&nbsp;i&nbsp;(1+i)<sup>n</sup> / ((1+i)<sup>n</sup>&minus;1). ' +
+        'Interest each month is charged on the opening balance, at the rate in ' +
+        'force that month — ' + num(rateAt(l, m),2) + '% &divide; 12 = ' +
+        num(rateAt(l, m)/12, 4) + '% for ' + esc(shortMonth(m)) +
+        ((l.rates||[]).length
+          ? '. The EMI is unchanged by a rate move, so the tenure moves instead, ' +
+            'which is what the bank does unless you ask otherwise.'
+          : '') + '</div>';
+      if((l.rates||[]).length){
+        h += '<div style="margin-top:8px" class="small"><strong>Rate changes</strong>' +
+          (l.rates||[]).slice().sort((x,y)=>(x.from||'').localeCompare(y.from||''))
+            .map(x => '<div class="kv"><span class="k">' + esc(fmtDate(x.from)) +
+              (x.note ? ' · ' + esc(x.note) : '') + '</span><span class="num">' +
+              num(toNum(x.rate),2) + '% <button class="btn sec sm" data-delrate="' +
+              l.id + ':' + x.id + '">&times;</button></span></div>').join('') +
+          '</div>';
+      }
       if((l.extras||[]).length){
         h += '<div style="margin-top:8px" class="small"><strong>Prepayments</strong>' +
           (l.extras||[]).map((x,ix) => '<div class="kv"><span class="k">' +
@@ -1595,6 +1653,57 @@ function spendFields(){
     { k:'note',   label:'What for', ph:'Diesel, groceries, service…' }
   ];
 }
+/* The categories most likely to be wanted next, most-used first over the last
+   three months, topped up from the full list. Six, because that is what fits
+   across a phone without wrapping into a wall. */
+function quickCats(){
+  const since = monthAdd(thisMonth(), -3) + '-01';
+  const count = {};
+  for(const x of DB.spend) if((x.date||'') >= since) count[x.cat] = (count[x.cat]||0) + 1;
+  const out = Object.keys(count).sort((a,b) => count[b] - count[a]).slice(0,6);
+  for(const c of S.spendCats){ if(out.length >= 6) break; if(!out.includes(c)) out.push(c); }
+  return out;
+}
+let LAST_ADD = null;   // so a mis-tapped category can be taken straight back
+
+/* Every expense, searched. The month view is the day-to-day one; this is for
+   "what did that car service cost", which is unanswerable if only the current
+   month is ever on screen. */
+let SPEND_Q = '';
+function spendSearch(q){
+  const t = q.trim().toLowerCase();
+  if(!t) return [];
+  const asNum = toNum(t);
+  return DB.spend.filter(x =>
+      String(x.note||'').toLowerCase().includes(t) ||
+      String(x.cat||'').toLowerCase().includes(t) ||
+      (asNum > 0 && Math.abs(toNum(x.amount) - asNum) < 0.005))
+    .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+}
+
+/* Spending by month, most recent last. Same shape as the portfolio readings:
+   one series, so no legend — the card's own heading says what it is. */
+function monthTotals(n){
+  const out = [];
+  for(let k = n - 1; k >= 0; k--){
+    const m = monthAdd(thisMonth(), -k);
+    let fixed = 0, day = 0;
+    for(const f of DB.fixed) fixed += dueIn(f, m);
+    for(const x of DB.spend) if(ym(x.date) === m) day += toNum(x.amount);
+    out.push({ m, fixed, day, total: fixed + day });
+  }
+  return out;
+}
+function monthBars(rows){
+  const top = Math.max.apply(null, rows.map(r => r.total)) || 1;
+  const now = thisMonth();
+  return '<div class="mbars">' + rows.map(r =>
+    '<div class="mbar' + (r.m === now ? ' on' : '') + '" data-go-month="' + r.m + '">' +
+    '<span class="ml">' + esc(shortMonth(r.m)) + '</span>' +
+    '<span class="mt"><i style="width:' + (r.total / top * 100).toFixed(1) + '%"></i></span>' +
+    '<span class="mv num">' + esc(money(r.total)) + '</span></div>').join('') + '</div>';
+}
+
 function renderSpend(){
   const m = S.month, f = monthFigures(m);
   const rows = f.spendRows.slice().sort((a,b) => (b.date||'').localeCompare(a.date||''));
@@ -1629,6 +1738,63 @@ function renderSpend(){
     '<div class="row wrap" style="margin-top:10px;gap:6px">' +
     '<button class="btn sm" data-add="spend">Add expense</button>' +
     '<button class="btn sec sm" data-add="fixed">Add fixed outgoing</button></div></div>';
+
+  /* One tap to file. Five taps at a shop counter is how a ledger stops being
+     filled in, and once it stops being filled in every other figure in this
+     app is fiction. The amount stays put between entries; the category files
+     it. Undo is here because one tap is easy to mistap. */
+  h += '<div class="card"><h2>Quick add</h2>' +
+    '<input id="qAmt" type="number" inputmode="decimal" step="0.01" ' +
+      'placeholder="Amount" value="" style="font-size:20px">' +
+    '<div class="row wrap" style="margin-top:8px;gap:6px">' +
+    quickCats().map(c => '<button class="btn sec sm" data-qcat="' + esc(c) + '">' +
+      esc(c) + '</button>').join('') + '</div>' +
+    (LAST_ADD
+      ? '<div class="kv" style="margin-top:8px"><span class="k">Added ' +
+        esc(money(toNum(LAST_ADD.amount))) + ' &middot; ' + esc(LAST_ADD.cat) +
+        '</span><span><button class="btn sec sm" data-undoadd="1">Undo</button>' +
+        '</span></div>'
+      : '<div class="work">Type the amount, tap the category. It files for ' +
+        'today. For a different date or a note, use Add expense.</div>') +
+    '</div>';
+
+  h += '<div class="card"><h2>Find an expense</h2>' +
+    '<input id="qFind" type="search" placeholder="Diesel, Car, 4200…" value="' +
+      esc(SPEND_Q) + '">' +
+    (SPEND_Q.trim()
+      ? (() => {
+          const hits = spendSearch(SPEND_Q);
+          const sum = hits.reduce((a,x) => a + toNum(x.amount), 0);
+          return kv(hits.length + ' found, across every month', esc(money(sum)), 'tot') +
+            (hits.length
+              ? hits.slice(0,60).map(x => '<div class="kv" data-edit="spend" data-id="' +
+                  x.id + '"><span class="k">' + esc(fmtDate(x.date)) + ' · <strong>' +
+                  esc(x.cat||'Other') + '</strong>' + (x.note ? ' · ' + esc(x.note) : '') +
+                  '</span><span class="num">' + esc(money(toNum(x.amount))) +
+                  '</span></div>').join('') +
+                (hits.length > 60 ? '<div class="work">Showing the newest 60.</div>' : '')
+              : '<div class="empty">Nothing matches.</div>');
+        })()
+      : '<div class="work">Searches the note, the category and the exact ' +
+        'amount, across every month you have ever recorded.</div>') +
+    '</div>';
+
+  {
+    const rows = monthTotals(12);
+    if(rows.some(r => r.total > 0)){
+      const withSpend = rows.filter(r => r.total > 0);
+      const avg = withSpend.reduce((a,r) => a + r.total, 0) / withSpend.length;
+      const thisOne = rows[rows.length-1];
+      h += '<div class="card"><h2>Month by month</h2>' + monthBars(rows) +
+        kv('Average of the months with anything in them', esc(money(avg))) +
+        kv(shortMonth(thisOne.m) + ' against that average',
+           '<span class="' + (thisOne.total > avg ? 'neg' : 'pos') + '">' +
+           esc(money(thisOne.total - avg)) + '</span>', 'tot') +
+        '<div class="work">Fixed outgoings and day-to-day together. Tap a ' +
+        'month to open it. The current month is still filling up, so it reads ' +
+        'low until the end of it.</div></div>';
+    }
+  }
 
   h += '<div class="card"><h2>Fixed outgoings</h2>' +
     (DB.fixed.length ? DB.fixed.map(x => {
@@ -2509,6 +2675,7 @@ function editRecord(name, fields, id, title){
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-tab],[data-go],[data-go-month],[data-pie],' +
     '[data-add],[data-edit],[data-openloan],[data-prepay],[data-delextra],' +
+    '[data-ratechg],[data-delrate],[data-qcat],[data-undoadd],' +
     '[data-invkind],[data-putgoal],[data-export],[data-wipe],[data-snooze],' +
     '[data-prices],' +
     '[data-savesettings],[data-calc-kind],[data-calc-add],[data-calc="view"]');
@@ -2524,6 +2691,30 @@ document.addEventListener('click', e => {
                    renderLoans(); return; }
   if(d.snooze)   { localStorage.setItem(K.snooze, today()); renderBanner(); return; }
   if(d.prices)   { pricesEditor(); return; }
+
+  if(d.qcat){
+    const box = el('qAmt');
+    const amt = box ? toNum(box.value) : 0;
+    if(!(amt > 0)){
+      if(box){ box.focus(); box.select(); }
+      return;
+    }
+    const rec = { id:uid(), date:today(), amount:amt, cat:d.qcat, note:'' };
+    LAST_ADD = rec;
+    S.month = thisMonth();          // file it where it will be seen
+    upsert('spend', rec);
+    const again = el('qAmt');
+    if(again){ again.value = ''; again.focus(); }
+    return;
+  }
+  if(d.undoadd){
+    if(LAST_ADD){
+      removeRec('spend', LAST_ADD.id);
+      LAST_ADD = null;
+      renderSpend();
+    }
+    return;
+  }
 
   if(d.add){
     if(d.add === 'income') return editRecord('income', INCOME_FIELDS, null, 'income source');
@@ -2593,6 +2784,33 @@ document.addEventListener('click', e => {
         newStamp(), { date:r.date, amount:toNum(r.amount), note:r.note||'' })]);
       upsert('loans', loan);
     }, null);
+  }
+  if(d.ratechg){
+    const loan = DB.loans.find(l => l.id === d.ratechg);
+    if(!loan) return;
+    return editor('Rate change on ' + (loan.name||'loan'), [
+      { k:'from', label:'In force from', type:'date', half:true },
+      { k:'rate', label:'New rate % a year', type:'number', half:true, step:'0.01' },
+      { k:'note', label:'Note', ph:'Repo cut, reset letter…' },
+      { k:'n', type:'note', label:'The instalment is left as it is, so the loan ' +
+        'takes longer or shorter to clear — which is what the bank does unless ' +
+        'you ask it to re-fix the EMI instead. If you did agree a new EMI, edit ' +
+        'the loan and change it there too.' }
+    ], { from:today(), rate:rateAt(loan, thisMonth()) }, r => {
+      loan.rates = (loan.rates || []).concat([Object.assign({ id:uid() },
+        newStamp(), { from:r.from, rate:toNum(r.rate), note:r.note||'' })]);
+      upsert('loans', loan);
+    }, null);
+  }
+  if(d.delrate){
+    const [id, rid] = d.delrate.split(':');
+    const loan = DB.loans.find(l => l.id === id);
+    if(loan && confirm('Remove this rate change?')){
+      loan.rates = (loan.rates || []).filter(x => x.id !== rid);
+      tombstone(rid);
+      upsert('loans', loan);
+    }
+    return;
   }
   if(d.delextra){
     const [id, eid] = d.delextra.split(':');
@@ -2675,6 +2893,14 @@ document.addEventListener('click', e => {
 /* The calculator recomputes as you type rather than on a button, because the
    question is nearly always "and what if it were 12 instead of 10". */
 document.addEventListener('input', e => {
+  if(e.target && e.target.id === 'qFind'){
+    SPEND_Q = e.target.value;
+    const pos = e.target.selectionStart;
+    renderSpend();
+    const again = el('qFind');
+    if(again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(err){} }
+    return;
+  }
   const n = e.target.closest('[data-calc]');
   if(n && n.dataset.calc !== 'view'){
     const c = Object.assign({}, CALC0, S.calc || {});
