@@ -72,11 +72,33 @@ jobs:
           BUILD_NUMBER: ${{ github.run_number }}
         run: gradle :core:test --no-daemon --stacktrace
 
+      # No --stacktrace. It was here to debug a build that would not configure,
+      # and for a compilation error it is worse than useless: Gradle prints
+      # three hundred lines of its own internals after the failure, which pushes
+      # the `e: file://...Something.kt:19:21` lines -- the only lines that say
+      # what is wrong -- past the end of any reasonable look at the log. Two
+      # failures in a row were diagnosed by reading the code instead, because
+      # the log could not be read at all.
       - name: Build debug APK
         env:
           BUILD_NUMBER: ${{ github.run_number }}
           BUILD_NAME: v${{ github.run_number }}
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+        shell: bash
+        run: |
+          # pipefail, or tee's success would hide a failed build and this would
+          # go green with no APK.
+          set -o pipefail
+          gradle :app:assembleDebug --no-daemon 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      # And again on their own at the very end, so the last thing in a failed
+      # log is the sentence a person needs.
+      - name: What the compiler actually said
+        if: failure()
+        shell: bash
+        run: |
+          echo "--- Kotlin errors, without the Gradle noise ---"
+          grep -E "^e: |^error: |^w: .*Deprecat" "$RUNNER_TEMP/build.log" | head -40 \
+            || echo "(no compiler error lines -- the failure is above, not in Kotlin)"
 
       # Same reasoning as the other app in this repo: a wrongly signed APK
       # builds green and only fails on the phone, where the fix is to uninstall

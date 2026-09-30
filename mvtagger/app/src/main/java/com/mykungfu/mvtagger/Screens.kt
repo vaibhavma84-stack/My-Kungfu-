@@ -1942,7 +1942,7 @@ private fun ArtworkView(artwork: Artwork?) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun CandidateRow(
     scored: Matching.Scored,
@@ -1954,18 +1954,20 @@ private fun CandidateRow(
     val c = scored.candidate
     val rejected = scored.score <= 0.0 &&
             scored.reasons.any { it.contains("not the one") }
+    /*
+       Long press to say it is not the one, which is the gesture the file list
+       already uses. Kept rather than only hidden: a wrong answer that scores
+       well scores well every time, so saying so once has to last.
+
+       The gestures are on the modifier and the Card is the plain one. A Card
+       handed `onClick` is clickable in its own right, so doing both would put
+       two overlapping handlers on one card; `combinedClickable` takes a null
+       long press happily, which leaves one code path for both cases.
+    */
     Card(
-        // Long press to say it is not the one, which is the same gesture the
-        // file list uses. Kept rather than only hidden: a wrong answer that
-        // scores well scores well every time, so saying so once has to last.
-        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (onReject != null) {
-                    Modifier.combinedClickable(onLongClick = onReject, onClick = onClick)
-                } else Modifier
-            ),
+            .combinedClickable(onClick = onClick, onLongClick = onReject),
         colors = if (chosen) CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
         ) else CardDefaults.cardColors(),
