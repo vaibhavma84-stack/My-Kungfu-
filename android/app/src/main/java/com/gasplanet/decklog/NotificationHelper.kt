@@ -68,6 +68,32 @@ object NotificationHelper {
         mgr.createNotificationChannel(channel)
     }
 
+    /** Returns whether the notification was actually posted, so a caller that
+        only wants to remember a successful post (checkAndNotify's once-a-day
+        mark) does not record one that permission silently swallowed. */
+    private fun post(c: Context, title: String, body: String): Boolean {
+        ensureChannel(c)
+        val open = PendingIntent.getActivity(
+            c, 0, Intent(c, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(c, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_notify)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        return try {
+            NotificationManagerCompat.from(c).notify(NOTIFICATION_ID, notification)
+            true
+        } catch (e: SecurityException) {
+            // Permission not granted -- the phone stays silent, nothing else to do.
+            false
+        }
+    }
+
     /** Once a day only -- an inexact alarm can land more than once close to
         the boundary, and nobody wants two copies of the same reminder. */
     fun checkAndNotify(c: Context) {
@@ -87,26 +113,19 @@ object NotificationHelper {
         val body = outstanding.take(3).joinToString(", ") { it.text } +
             if (outstanding.size > 3) ", …" else ""
 
-        ensureChannel(c)
-        val open = PendingIntent.getActivity(
-            c, 0, Intent(c, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val notification = NotificationCompat.Builder(c, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_notify)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setContentIntent(open)
-            .setAutoCancel(true)
-            .build()
+        if (post(c, title, body)) prefs.edit().putString(KEY_LAST_NOTIFIED, today).apply()
+    }
 
-        try {
-            NotificationManagerCompat.from(c).notify(NOTIFICATION_ID, notification)
-            prefs.edit().putString(KEY_LAST_NOTIFIED, today).apply()
-        } catch (e: SecurityException) {
-            // Permission not granted -- the phone stays silent, nothing else to do.
-        }
+    /**
+     * Settings' own "Send test notification" button -- bypasses the once-a-
+     * day guard and the outstanding-jobs check entirely, on purpose. The
+     * point is only to prove permission and channel actually work, which has
+     * to be true whether or not anything happens to be due today and
+     * whether or not today's real reminder already fired.
+     */
+    fun sendTest(c: Context) {
+        post(c, "Test notification",
+             "If you can see this, the daily reminder will reach you.")
     }
 
     /**

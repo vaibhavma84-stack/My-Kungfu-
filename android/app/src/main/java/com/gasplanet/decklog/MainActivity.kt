@@ -7,9 +7,11 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.PowerManager
 import android.print.PrintAttributes
 import android.print.PrintManager
 import android.provider.MediaStore
+import android.provider.Settings
 import android.util.Base64
 import android.Manifest
 import android.content.pm.PackageManager
@@ -66,6 +68,25 @@ class MainActivity : AppCompatActivity() {
     // a "no" on location leaves the map working without a position dot.
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    // The system never reports whether the user actually granted this from the
+    // screen it opens -- its own result code is always "cancelled" regardless
+    // -- so there is nothing meaningful to register a callback for. Settings
+    // re-checks isIgnoringBatteryOptimizations() fresh the next time it opens.
+    private fun requestIgnoreBatteryOptimizations() {
+        try {
+            startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            })
+        } catch (e: Exception) {
+            // Some OEMs block this screen outright; nothing more to do here.
+        }
+    }
 
     private val fileChooser =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -163,6 +184,16 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        // Asked once ever, not on every launch -- a system dialog on every
+        // cold start would be worse than the problem it is trying to catch.
+        // Settings carries a manual "Allow" for anyone who dismissed this or
+        // whose phone was not yet set up to ask for it.
+        val batteryPrefs = getSharedPreferences("decklog_battery", MODE_PRIVATE)
+        if (NotificationHelper.isEnabled(this) && !isIgnoringBatteryOptimizations() &&
+            !batteryPrefs.getBoolean("asked", false)) {
+            batteryPrefs.edit().putBoolean("asked", true).apply()
+            requestIgnoreBatteryOptimizations()
         }
 
         web.loadUrl("file:///android_asset/index.html")
@@ -333,6 +364,18 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun clearTicks() = AgendaStore.clearTicks(applicationContext)
+
+        /** Settings' battery-optimization note reads this to decide whether
+            to show itself at all -- nothing to do once the phone has already
+            excused the app. */
+        @JavascriptInterface
+        fun isBatteryOptimizationIgnored(): Boolean = isIgnoringBatteryOptimizations()
+
+        @JavascriptInterface
+        fun requestIgnoreBatteryOptimizations() = runOnUiThread { this@MainActivity.requestIgnoreBatteryOptimizations() }
+
+        @JavascriptInterface
+        fun sendTestNotification() = runOnUiThread { NotificationHelper.sendTest(applicationContext) }
     }
 
     companion object {

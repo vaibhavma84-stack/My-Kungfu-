@@ -22,10 +22,16 @@ function ok(name, cond, got){
   await p.addInitScript(() => {
     window.__published = [];
     window.__ticks = null;
+    window.__batteryIgnored = false;
+    window.__batteryRequested = false;
+    window.__testNotifySent = 0;
     window.AndroidBridge = {
       publishAgenda: function(json){ window.__published.push(json); },
       pendingTicks: function(){ return window.__ticks; },
-      clearTicks: function(){ window.__ticks = null; }
+      clearTicks: function(){ window.__ticks = null; },
+      isBatteryOptimizationIgnored: function(){ return window.__batteryIgnored; },
+      requestIgnoreBatteryOptimizations: function(){ window.__batteryRequested = true; },
+      sendTestNotification: function(){ window.__testNotifySent++; }
     };
   });
   await p.goto('file://' + process.env.APP_HTML);
@@ -261,6 +267,25 @@ function ok(name, cond, got){
   ok('switching back on keeps the time it was left at',
      JSON.stringify(await lastNotify()) === JSON.stringify({ enabled: true, time: '06:15' }),
      await lastNotify());
+
+  // ---- test notification and the battery-optimization note ----------------
+  ok('a test-notification button is offered', await p.isVisible('[data-set="testnotify"]'));
+  await p.click('[data-set="testnotify"]');
+  ok('clicking it calls straight through to the native side',
+     await p.evaluate(() => window.__testNotifySent) === 1,
+     await p.evaluate(() => window.__testNotifySent));
+
+  ok('not yet excused from battery optimization, so the note shows',
+     await p.isVisible('[data-set="battery"]'));
+  await p.click('[data-set="battery"]');
+  ok('and asks the native side to request the exemption',
+     await p.evaluate(() => window.__batteryRequested));
+
+  await p.click('[data-set="close"]');
+  await p.evaluate(() => { window.__batteryIgnored = true; });
+  await p.click('#settingsBtn');
+  ok('once the phone reports it is already excused, the note is not shown',
+     !(await p.isVisible('[data-set="battery"]')));
   await p.click('[data-set="close"]');
 
   ok('no page errors', errs.length === 0, errs.join(' | '));

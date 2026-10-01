@@ -18,6 +18,13 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- So the reminder can ask to be excused from battery optimization.
+         OEMs, Samsung among them (see the Samsung A55 note in build.gradle),
+         kill a scheduled alarm outright for an app that is not exempted,
+         silently: no error, no log, the reminder just stops arriving one day
+         with nothing to point at why. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
