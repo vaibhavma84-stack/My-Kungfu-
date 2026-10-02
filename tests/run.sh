@@ -24,6 +24,8 @@ printf '%-22s ' "factor-check"
 if out=$(python3 "$(dirname "$0")/factor-check.py" 2>&1); then echo "${out##*$'\n'}"; else echo "FAILED"; echo "$out" | head -8; fail=1; fi
 printf '%-22s ' "instrument-files"
 if out=$(python3 "$(dirname "$0")/instrument-files-check.py" 2>&1); then echo "${out##*$'\n'}"; else echo "FAILED"; echo "$out" | grep FAIL | head -5; fail=1; fi
+printf '%-22s ' "aria-check"
+if out=$(python3 "$(dirname "$0")/aria-check.py" 2>&1); then echo "${out##*$'\n'}"; else echo "FAILED"; echo "$out" | grep -i missing | head -5; fail=1; fi
 
 echo
 [ $fail -eq 0 ] && echo "all suites passed" || echo "something failed"

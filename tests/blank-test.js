@@ -41,6 +41,35 @@ let fails=0; const ok=(n,c,x)=>{console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':' 
   ok('a row with only a job still imports', t.some(x=>/no date at all/.test(x.job)));
   ok('weekly job shows dull yellow',
      (await p.locator('.task:not(.done)',{hasText:'Lifeboat'}).first().evaluate(e=>getComputedStyle(e).backgroundColor))==='rgb(239, 231, 194)');
+
+  // ---- re-importing the same file must not double every job -------------
+  // The same job text and due date already on the list is far more likely
+  // the same file re-imported (or an old backup reloaded by mistake) than
+  // three genuinely new jobs.
+  dl_msgs.length = 0;
+  await p.setInputFiles('#importInput', process.env.OUT+'/filled.csv');
+  await p.waitForTimeout(900);
+  ok('re-importing the same file imports nothing new',
+     dl_msgs.some(m=>/Imported 0 job/.test(m)), JSON.stringify(dl_msgs));
+  ok('and says why', dl_msgs.some(m=>/3 duplicate row/.test(m)), JSON.stringify(dl_msgs));
+  const t2 = await p.evaluate(()=>JSON.parse(localStorage.getItem('gasplanet_todo_v1')));
+  ok('still three jobs, not six', t2.length===3, t2.length);
+
+  // a file that mixes one real duplicate with one genuinely new row
+  dl_msgs.length = 0;
+  const mixed = lines[0]+'\n'+
+    '10-Sep-2026,Lifeboat engine weekly test,Weekly\n'+   // duplicate
+    '20-Sep-2026,Steering gear test,\n';                   // new
+  fs.writeFileSync(process.env.OUT+'/mixed.csv', mixed);
+  await p.setInputFiles('#importInput', process.env.OUT+'/mixed.csv');
+  await p.waitForTimeout(900);
+  ok('only the genuinely new row is imported',
+     dl_msgs.some(m=>/Imported 1 job/.test(m) && /1 duplicate row/.test(m)), JSON.stringify(dl_msgs));
+  const t3 = await p.evaluate(()=>JSON.parse(localStorage.getItem('gasplanet_todo_v1')));
+  ok('four jobs now, the duplicate still not doubled', t3.length===4, t3.length);
+  ok('the new one is actually there',
+     t3.some(x=>/Steering gear/.test(x.job)), JSON.stringify(t3.map(x=>x.job)));
+
   ok('no JS errors', errs.length===0, errs.join(' | '));
   await b.close(); srv.close();
   console.log(fails===0?'\nALL PASS':'\n'+fails+' FAILED'); process.exit(fails?1:0);

@@ -141,7 +141,29 @@ function ok(name, cond, got){
      await p.textContent('#bdNote'));
 
   // --- removal is deliberate, and the only way ------------------------------
-  p.on('dialog', d => d.accept());
+  // No confirm dialog any more -- immediate removal plus an undo toast, the
+  // same treatment every other same-shape delete in the app got this session.
+  const dialogs = []; p.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
+  // the row's own displayed name, not reg()[0] -- the list is not rendered
+  // in array order, so the first row is not necessarily the first entry
+  const removedName = await p.evaluate(() =>
+    document.querySelector('#bdListWrap .bd-row .bd-name').textContent);
+  await p.evaluate(() => {
+    const rows = [...document.querySelectorAll('#bdListWrap button[data-bd-del]')];
+    rows[0].click();
+  });
+  await p.waitForTimeout(400);
+  ok('no confirm dialog on remove any more', dialogs.length === 0, dialogs);
+  ok('Remove takes one out immediately', (await reg()).length === 3);
+  ok('the undo toast names who was removed',
+     (await p.textContent('#undoToastText')).indexOf(removedName) >= 0,
+     await p.textContent('#undoToastText'));
+  await p.click('#undoToastBtn');
+  await p.waitForTimeout(300);
+  ok('undo brings them back', (await reg()).length === 4);
+
+  // remove again, for real this time, so the rest of the file sees the
+  // register the way it did before undo was added
   await p.evaluate(() => {
     const rows = [...document.querySelectorAll('#bdListWrap button[data-bd-del]')];
     rows[0].click();
