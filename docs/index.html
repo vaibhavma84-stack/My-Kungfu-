@@ -145,6 +145,15 @@
     background:var(--paper); color:var(--ink-soft); font-weight:700; font-size:13px; cursor:pointer;
   }
   .set-choices button.on{background:var(--hull); border-color:var(--hull); color:#fff;}
+  /* Same box-constraint reasoning as .field input[type=time] elsewhere: without
+     an explicit height and -webkit-appearance:none, iOS sizes this control to
+     its own content and renders it shorter than the buttons beside it until
+     it has been focused once. */
+  .set-choices input[type="time"]{
+    flex:1.4; min-width:0; padding:0 8px; border-radius:9px; border:1.5px solid var(--line);
+    background:var(--paper); color:var(--ink); font-size:13px; height:41px;
+    -webkit-appearance:none;
+  }
   .set-note{font-size:12px; color:var(--ink-soft); line-height:1.45; margin-top:8px;}
   .storage-pill{
     font-size:11px; padding:5px 10px; border-radius:20px; font-family:ui-monospace,monospace;
@@ -1150,6 +1159,10 @@
        view-switch (its own row, full width) or a complete pair. */
     .jobs-toolbar{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
     .jobs-toolbar .view-switch{grid-column:1 / -1;}
+    /* A button added on its own, with no natural partner, spans the row
+       instead of leaving an odd cell unpaired -- same reasoning as
+       view-switch above, before Calendar had its own tab. */
+    .jobs-toolbar .toolbar-fullrow{grid-column:1 / -1;}
     .jobs-toolbar .spacer{display:none;}
     .jobs-toolbar select.filter, .jobs-toolbar .btn{width:100%; margin:0; justify-content:center;}
     header{position:static;}
@@ -1169,6 +1182,19 @@
   .note-bar .note-search{flex:1 1 160px; min-width:120px; padding:9px 10px;
     border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink);
     font-size:15px;}
+  .job-search-bar{padding:0 12px 8px;}
+  .job-search{width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:10px;
+    background:var(--card); color:var(--ink); font-size:15px;}
+  /* A brief chance to take back a delete rather than a warning dialog you have
+     to read and decide on before the tap even lands -- the job is already
+     gone from the list either way, this is just how long it stays reachable. */
+  .undo-toast{position:fixed; left:12px; right:12px; bottom:24px;
+    z-index:60; display:flex; align-items:center; gap:12px; padding:12px 16px;
+    border-radius:12px; background:var(--ink); color:var(--paper);
+    box-shadow:0 4px 16px rgba(0,0,0,.25); max-width:420px; margin:0 auto;}
+  .undo-toast .ut-text{flex:1; font-size:14px;}
+  .undo-toast .ut-undo{background:transparent; border:none; color:#8FC7FF; font-weight:600;
+    font-size:14px; padding:4px 6px; cursor:pointer;}
   .note-list{padding:0 12px 90px;}
   .note-card{background:var(--card); border:1px solid var(--line); border-radius:12px;
     padding:12px 14px; margin-bottom:10px; cursor:pointer; position:relative;}
@@ -1370,6 +1396,9 @@
 
 </div>
 
+<div class="job-search-bar">
+  <input type="search" class="job-search" id="jobSearch" placeholder="Search jobs&hellip;">
+</div>
 <div id="listWrap"></div>
 
   <div class="pa-block" id="portCallWrap">
@@ -1422,6 +1451,7 @@
   </select>
   <div class="spacer"></div>
   <button class="btn btn-ghost" id="exportBtn">Export CSV</button>
+  <button class="btn btn-ghost toolbar-fullrow" id="exportIcsBtn">Export Calendar</button>
   <button class="btn btn-ghost" id="exportAd19Btn">Export AD-19</button>
   <button class="btn btn-ghost" id="exportWrBtn">Export WR</button>
   <button class="btn btn-primary" id="weeklyReportBtn" style="padding:10px 14px;">Weekly Report</button>
@@ -1434,6 +1464,11 @@
 
 <button class="fab" id="fabAdd" title="Show job entry">+</button>
 </div><!-- /jobsSection -->
+
+<div class="undo-toast" id="undoToast" style="display:none;">
+  <span class="ut-text" id="undoToastText"></span>
+  <button class="ut-undo" id="undoToastBtn">Undo</button>
+</div>
 
 <div id="calendarSection" style="display:none;">
   <div class="view-switch" id="viewSwitch">
@@ -2656,13 +2691,16 @@
   function forgetBirthday(id){
     var e = bdayRegister.find(function(x){ return x.id === id; });
     if(!e) return;
-    if(!confirm('Remove ' + crewLine(e) + ' from the birthday register?\n\n' +
-                'This is the only thing that removes a birthday. It will no longer ' +
-                'show on the calendar or the widgets.')) return;
     bdayRegister = bdayRegister.filter(function(x){ return x.id !== id; });
-    saveBdays();
+    if(!saveBdays()){ renderBdayRegister(); return; }
     renderBdayRegister();
     render();
+    showUndoToast(crewLine(e) + ' removed from the birthday register.', function(){
+      bdayRegister.push(e);
+      saveBdays();
+      renderBdayRegister();
+      render();
+    });
   }
 
   function birthdaysOnDate(iso){
@@ -3360,12 +3398,18 @@
   function deleteNote(){
     var n = noteById(openNoteId);
     if(!n) return;
-    if(!confirm('Delete this note?' + (n.kind === 'pdf' ? '\n\nThe PDF and every mark on it go with it.' : ''))) return;
     notes = notes.filter(function(x){ return x.id !== n.id; });
-    saveNotes();
+    if(!saveNotes()){ renderNotes(); return; }
     closeNote();
-    collectPhotos();
-    collectFiles();
+    showUndoToast('Note deleted.', function(){
+      notes.push(n);
+      saveNotes();
+      renderNotes();
+    }, function(){
+      // committed -- nothing points at its photographs or PDF any more
+      collectPhotos();
+      collectFiles();
+    });
   }
 
   // ---------- CSV ----------
@@ -4677,11 +4721,50 @@
     });
   }
 
+  // ---------- undo toast ----------
+  // One pending action at a time: a second delete while the toast is still up
+  // replaces it, the same way Gmail's own undo chip behaves -- the first
+  // window closes, the new one opens. onExpire is for cleanup that must wait
+  // until the delete is actually final -- a deleted note's photos and PDF
+  // must not be handed to the collector while the note could still come
+  // back, or undo would restore a note with its pictures already gone.
+  var undoTimer = null;
+  var undoExpire = null;
+  function showUndoToast(text, restore, onExpire){
+    if(undoExpire){ var prev = undoExpire; undoExpire = null; prev(); }
+    document.getElementById('undoToastText').textContent = text;
+    document.getElementById('undoToast').style.display = 'flex';
+    if(undoTimer) clearTimeout(undoTimer);
+    undoExpire = onExpire || null;
+    document.getElementById('undoToastBtn').onclick = function(){
+      clearTimeout(undoTimer);
+      undoExpire = null;
+      hideUndoToast();
+      restore();
+    };
+    undoTimer = setTimeout(function(){
+      hideUndoToast();
+      var fn = undoExpire; undoExpire = null;
+      if(fn) fn();
+    }, 6000);
+  }
+  function hideUndoToast(){
+    document.getElementById('undoToast').style.display = 'none';
+  }
+
   function deleteTask(id){
-    if(!confirm('Delete this job? This cannot be undone.')) return;
+    var removed = tasks.find(function(x){ return x.id===id; });
+    if(!removed) return;
     tasks = tasks.filter(function(x){ return x.id!==id; });
-    saveTasks();
+    // A storage failure already reverts tasks and tells the user -- nothing
+    // was actually deleted, so there is nothing to offer an undo for.
+    if(!saveTasks()){ render(); return; }
     render();
+    showUndoToast('Job deleted.', function(){
+      tasks.push(removed);
+      saveTasks();
+      render();
+    });
   }
 
   // ---------- projected repeats ----------
@@ -4804,7 +4887,8 @@
       d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
     }
     return { v:1, built: todayISO(), ship: shipName(),
-             from: isoFromDate(from), to: isoFromDate(to), days: days };
+             from: isoFromDate(from), to: isoFromDate(to), days: days,
+             notify: getNotifySettings() };
   }
 
   // A tick made on the home screen is applied to the real job list the next
@@ -4850,9 +4934,11 @@
   }
 
   // ---------- sort & filter ----------
+  var jobFilter = '';
   function getVisibleTasks(){
     var status = document.getElementById('filterStatus').value;
     var pri = document.getElementById('filterPriority').value;
+    var q = jobFilter.trim().toLowerCase();
     var list = tasks.filter(function(t){
       // Daily-repeat jobs have their own dedicated list on the Calendar tab
       // now, not mixed into the List or any calendar view -- one home, not
@@ -4861,6 +4947,7 @@
       if(status==='open' && t.done) return false;
       if(status==='done' && !t.done) return false;
       if(pri!=='all' && t.priority!==pri) return false;
+      if(q && (t.job + ' ' + (t.remarks || '')).toLowerCase().indexOf(q) === -1) return false;
       return true;
     });
     list.sort(function(a,b){
@@ -4922,9 +5009,9 @@
     html += '    </div>';
     html += '  </div>';
     html += '  <div class="task-actions">';
-    html += '    <button class="icon-btn" data-action="edit" data-id="'+t.id+'" title="Edit">✎</button>';
-    html += '    <button class="icon-btn" data-action="addphoto" data-id="'+t.id+'" title="Add photo">📷'+(t.photos && t.photos.length ? '<span class="photo-count">'+t.photos.length+'</span>' : '')+'</button>';
-    html += '    <button class="icon-btn" data-action="delete" data-id="'+t.id+'" title="Delete">🗑</button>';
+    html += '    <button class="icon-btn" data-action="edit" data-id="'+t.id+'" title="Edit" aria-label="Edit">✎</button>';
+    html += '    <button class="icon-btn" data-action="addphoto" data-id="'+t.id+'" title="Add photo" aria-label="Add photo">📷'+(t.photos && t.photos.length ? '<span class="photo-count">'+t.photos.length+'</span>' : '')+'</button>';
+    html += '    <button class="icon-btn" data-action="delete" data-id="'+t.id+'" title="Delete" aria-label="Delete job">🗑</button>';
     html += '  </div>';
     html += '</div>';
     return html;
@@ -4993,7 +5080,7 @@
       html += '<div class="daily-row" data-id="'+t.id+'">' +
                 '<button class="tick" data-action="toggle" data-id="'+t.id+'"></button>' +
                 '<span class="daily-job-text" data-action="edit" data-id="'+t.id+'">'+escapeHtml(t.job)+'</span>' +
-                '<button class="icon-btn" data-action="delete" data-id="'+t.id+'" title="Delete">🗑</button>' +
+                '<button class="icon-btn" data-action="delete" data-id="'+t.id+'" title="Delete" aria-label="Delete job">🗑</button>' +
               '</div>';
     });
     html += '</div>';
@@ -5136,11 +5223,18 @@
     document.getElementById('crewName').focus();
   }
   function deleteCrew(id){
-    if(!confirm('Remove this crew member from the list?')) return;
+    var removed = crew.find(function(c){ return c.id===id; });
+    if(!removed) return;
     crew = crew.filter(function(c){ return c.id!==id; });
-    saveCrew();
+    if(!saveCrew()){ renderCrew(); return; }
     renderCrew();
     render();
+    showUndoToast('Crew member removed.', function(){
+      crew.push(removed);
+      saveCrew();
+      renderCrew();
+      render();
+    });
   }
   function renderCrew(){
     renderBdayRegister();
@@ -5158,7 +5252,7 @@
       html += '  <span class="crew-rank">'+escapeHtml(c.rank)+
               (c.ship ? ' <span class="crew-ship">'+escapeHtml(c.ship)+'</span>' : '')+'</span>';
       html += '  <span class="crew-dob">'+(c.dob ? fmtDate(c.dob) : '—')+'</span>';
-      html += '  <button class="icon-btn" data-crew-action="delete" data-id="'+c.id+'" title="Delete">🗑</button>';
+      html += '  <button class="icon-btn" data-crew-action="delete" data-id="'+c.id+'" title="Delete" aria-label="Remove crew member">🗑</button>';
       html += '</div>';
     });
     wrap.innerHTML = html;
@@ -5962,6 +6056,71 @@
     noteBackup('jobs');
   }
 
+  // ---------- calendar export (.ics) ----------
+  // One-way only, on purpose -- the app makes no network call on any path
+  // that matters, so it cannot sync live with Apple Calendar, Google
+  // Calendar or Fantastical. iCalendar is the one file format all of them
+  // import, so a single export covers all three: re-run it and re-import
+  // whenever the outside calendar should catch up.
+  function icsEscape(s){
+    return String(s || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      .replace(/\n/g, '\\n');
+  }
+
+  // RFC 5545 caps a content line at 75 octets and continues it with a line
+  // that starts with a single space. Counted in UTF-8 bytes, not characters,
+  // so a folded line never lands inside a multi-byte character -- ports and
+  // job names in this app are not always plain ASCII.
+  function icsFold(line){
+    var bytes = new TextEncoder().encode(line);
+    if(bytes.length <= 75) return line;
+    var out = [];
+    var start = 0, limit = 75;
+    while(start < bytes.length){
+      var end = Math.min(start + limit, bytes.length);
+      while(end < bytes.length && (bytes[end] & 0xC0) === 0x80) end--;
+      out.push(new TextDecoder().decode(bytes.slice(start, end)));
+      start = end;
+      limit = 74; // the continuation line's own leading space takes one of the 75
+    }
+    return out.join('\r\n ');
+  }
+
+  function icsUtcStamp(d){
+    function pad(n){ return (n < 10 ? '0' : '') + n; }
+    return d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + 'T' +
+           pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds()) + 'Z';
+  }
+
+  function buildICS(){
+    var lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//GAS PLANET Deck Log//EN', 'CALSCALE:GREGORIAN'];
+    var stamp = icsUtcStamp(new Date());
+    tasks.filter(function(t){ return !t.done && t.due; })
+      .sort(function(a, b){ return a.due < b.due ? -1 : a.due > b.due ? 1 : a.serial - b.serial; })
+      .forEach(function(t){
+        var desc = ['Priority: ' + t.priority.charAt(0).toUpperCase() + t.priority.slice(1)];
+        if(t.remarks) desc.push('Remarks: ' + t.remarks);
+        lines.push('BEGIN:VEVENT');
+        lines.push(icsFold('UID:' + t.id + '@gasplanet-decklog'));
+        lines.push('DTSTAMP:' + stamp);
+        lines.push('DTSTART;VALUE=DATE:' + t.due.replace(/-/g, ''));
+        lines.push(icsFold('SUMMARY:' + icsEscape(t.job)));
+        lines.push(icsFold('DESCRIPTION:' + icsEscape(desc.join('\n'))));
+        lines.push('END:VEVENT');
+      });
+    lines.push('END:VCALENDAR');
+    return lines.join('\r\n') + '\r\n';
+  }
+
+  function exportICS(){
+    var ics = buildICS();
+    downloadBlob('GasPlanet_ToDoList_' + todayISO() + '.ics', new Blob([ics], {type: 'text/calendar;charset=utf-8'}));
+    noteBackup('jobs');
+  }
+
   // Permit to Work types — Sheet4!S13:S23 of the AD19 template, the same list the
   // Job Log column M validates against, so exported values drop in without edits.
   var PTW_TYPES = [
@@ -6154,10 +6313,16 @@
   }
 
   function deleteExtra(id){
-    if(!confirm('Remove this job from the AD-19 list?')) return;
+    var removed = extras.find(function(x){ return x.id === id; });
+    if(!removed) return;
     extras = extras.filter(function(x){ return x.id !== id; });
-    saveExtras();
+    if(!saveExtras()){ renderExtras(); return; }
     renderExtras();
+    showUndoToast('Job removed from the AD-19 list.', function(){
+      extras.push(removed);
+      saveExtras();
+      renderExtras();
+    });
   }
 
   function sortedExtras(){
@@ -6196,10 +6361,10 @@
       }
       html += '  </div>';
       html += '  <div class="task-actions">';
-      html += '    <button class="icon-btn" data-extra-action="edit" data-id="' + x.id + '" title="Edit">✎</button>';
-      html += '    <button class="icon-btn" data-extra-action="addphoto" data-id="' + x.id + '" title="Add photo">📷'
+      html += '    <button class="icon-btn" data-extra-action="edit" data-id="' + x.id + '" title="Edit" aria-label="Edit">✎</button>';
+      html += '    <button class="icon-btn" data-extra-action="addphoto" data-id="' + x.id + '" title="Add photo" aria-label="Add photo">📷'
             + (x.photos && x.photos.length ? '<span class="photo-count">' + x.photos.length + '</span>' : '') + '</button>';
-      html += '    <button class="icon-btn" data-extra-action="delete" data-id="' + x.id + '" title="Delete">🗑</button>';
+      html += '    <button class="icon-btn" data-extra-action="delete" data-id="' + x.id + '" title="Delete" aria-label="Remove AD-19 job">🗑</button>';
       html += '  </div>';
       html += '</div>';
     });
@@ -8120,15 +8285,15 @@
                       return '<div class="thumb" data-iview="step:' + pr.id + ':' + st.id + ':' + j + '"><img ' + photoAttrs(src) + '></div>';
                     }).join('') + '</div>' : '') +
                  '</div>' +
-                 '<button class="icon-btn" data-ia="step-photo" data-proc="' + pr.id + '" data-step="' + st.id + '">📷</button>' +
-                 '<button class="icon-btn" data-ia="del-step" data-proc="' + pr.id + '" data-step="' + st.id + '">🗑</button>' +
+                 '<button class="icon-btn" data-ia="step-photo" data-proc="' + pr.id + '" data-step="' + st.id + '" title="Add photo" aria-label="Add photo to step">📷</button>' +
+                 '<button class="icon-btn" data-ia="del-step" data-proc="' + pr.id + '" data-step="' + st.id + '" title="Delete step" aria-label="Delete step">🗑</button>' +
                '</div>';
       }).join('');
       return '<div class="isec" style="margin-top:10px;">' +
                '<div class="isec-h"><h4 style="color:var(--ink);font-size:13px;text-transform:none;letter-spacing:0;">' +
                  escapeHtml(pr.title) + '</h4>' +
                  '<button class="btn btn-ghost" data-ia="add-step" data-proc="' + pr.id + '">+ Step</button>' +
-                 '<button class="icon-btn" data-ia="del-proc" data-proc="' + pr.id + '">🗑</button>' +
+                 '<button class="icon-btn" data-ia="del-proc" data-proc="' + pr.id + '" title="Delete procedure" aria-label="Delete procedure">🗑</button>' +
                '</div>' +
                (steps || '<div class="iempty">No steps yet.</div>') +
              '</div>';
@@ -8146,7 +8311,7 @@
                  '<div class="irn">' + escapeHtml(pt.partNo || 'no part number') +
                    (pt.qty ? '  ·  ' + escapeHtml(pt.qty) + ' held' : '') + '</div>' +
                '</div>' +
-               '<button class="icon-btn" data-ia="del-part" data-id="' + pt.id + '">🗑</button>' +
+               '<button class="icon-btn" data-ia="del-part" data-id="' + pt.id + '" title="Delete spare" aria-label="Delete spare">🗑</button>' +
              '</div>';
     }).join('');
     h += '</div>';
@@ -9615,10 +9780,10 @@
       }
       html += '  </div>';
       html += '  <div class="task-actions">';
-      html += '    <button class="icon-btn" data-wwr-action="edit" data-id="' + t.id + '" title="Edit">✎</button>';
-      html += '    <button class="icon-btn" data-wwr-action="addphoto" data-id="' + t.id + '" title="Add photo">📷'
+      html += '    <button class="icon-btn" data-wwr-action="edit" data-id="' + t.id + '" title="Edit" aria-label="Edit">✎</button>';
+      html += '    <button class="icon-btn" data-wwr-action="addphoto" data-id="' + t.id + '" title="Add photo" aria-label="Add photo">📷'
             + (t.photos && t.photos.length ? '<span class="photo-count">' + t.photos.length + '</span>' : '') + '</button>';
-      html += '    <button class="icon-btn" data-wwr-action="delete" data-id="' + t.id + '" title="Delete">🗑</button>';
+      html += '    <button class="icon-btn" data-wwr-action="delete" data-id="' + t.id + '" title="Delete" aria-label="Delete job">🗑</button>';
       html += '  </div>';
       html += '</div>';
     });
@@ -9993,7 +10158,20 @@
         alert('Could not find a "Job" column in this file. Make sure the first row has column headers, including one named "Job".');
         return;
       }
-      var imported = 0, skipped = 0;
+      // The same job text and due date already on the list is far more likely
+      // the same file imported twice (or a backup reloaded without realizing
+      // it is already there) than two genuinely separate jobs -- the same
+      // reasoning addPortCall already applies to a repeated port call.
+      // Checked against `tasks` as it grows through this loop, so a
+      // duplicate earlier in the same file is caught too, not only one
+      // already on the list before the import started.
+      function isDuplicateImport(jobText, dueVal){
+        var jLower = jobText.toLowerCase();
+        return tasks.some(function(t){
+          return t.job.toLowerCase() === jLower && (t.due || '') === (dueVal || '');
+        });
+      }
+      var imported = 0, skipped = 0, duplicates = 0;
       var serial = nextSerial();
       for(var r=1; r<rows.length; r++){
         var row = rows[r];
@@ -10006,6 +10184,7 @@
         var dueVal = col.due!==undefined ? parseDueDate(row[col.due]) : '';
         var dateCompletedVal = col.dateCompleted!==undefined ? parseDueDate(row[col.dateCompleted]) : '';
         if(done && !dateCompletedVal) dateCompletedVal = todayISO();
+        if(isDuplicateImport(jobText, dueVal)){ duplicates++; continue; }
 
         tasks.push({
           id: uid(),
@@ -10029,7 +10208,9 @@
       }
       if(!saveTasks()){ render(); return; }
       render();
-      alert('Imported '+imported+' job(s).'+(skipped ? ' Skipped '+skipped+' row(s) with no job text.' : ''));
+      alert('Imported '+imported+' job(s).'+
+            (skipped ? ' Skipped '+skipped+' row(s) with no job text.' : '')+
+            (duplicates ? ' Skipped '+duplicates+' duplicate row(s) already on the list.' : ''));
     };
     reader.readAsText(file);
   }
@@ -10038,7 +10219,26 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v60';
+  var APP_BUILD = 'v61';
+
+  // The daily "jobs due today" reminder is posted by the Android wrapper, not
+  // this page -- there is no equivalent on the web or iOS, the same way the
+  // home-screen widgets are Android-only. The setting still lives here,
+  // because this is the one settings screen the app has; it rides along on
+  // the next publishAgenda() the same way the agenda itself does, and the
+  // Android side simply has nothing to read it from anywhere else.
+  var NOTIFY_KEY = 'gasplanet_notify_v1';
+  function getNotifySettings(){
+    try{
+      var v = JSON.parse(localStorage.getItem(NOTIFY_KEY) || 'null');
+      if(v && typeof v.enabled === 'boolean' && /^\d{2}:\d{2}$/.test(v.time || '')) return v;
+    }catch(e){}
+    return { enabled: true, time: '05:30' };
+  }
+  function setNotifySettings(v){
+    lsSet(NOTIFY_KEY, JSON.stringify(v));
+    publishAgenda();   // pushes it to the Android side right away, not on the next unrelated change
+  }
 
   function systemPrefersDark(){
     try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }
@@ -10056,6 +10256,13 @@
 
   function openSettings(){
     var choice = lsGet(THEME_KEY) || 'auto';
+    var notify = getNotifySettings();
+    // Everything below is Android-only, same as the home-screen widgets --
+    // checked once here rather than inside each piece, so a plain web or
+    // iOS visit to Settings shows none of it instead of dead buttons.
+    var hasAndroidNotify = !!(window.AndroidBridge && AndroidBridge.sendTestNotification);
+    var batteryOK = hasAndroidNotify && AndroidBridge.isBatteryOptimizationIgnored &&
+      AndroidBridge.isBatteryOptimizationIgnored();
     var bg = document.createElement('div');
     bg.className = 'modal-bg';
     bg.innerHTML =
@@ -10071,6 +10278,23 @@
               }).join('') +
             '</div>' +
             '<div class="set-note">Auto follows the phone\'s own setting. Dark is easier at night on the bridge; the weekly report stays light either way, since it is printed.</div>' +
+          '</div>' +
+          '<div class="set-group">' +
+            '<h4>Daily reminder</h4>' +
+            '<div class="set-choices">' +
+              [['on','On'],['off','Off']].map(function(v){
+                return '<button data-notify-set="' + v[0] + '"' + ((notify.enabled === (v[0] === 'on')) ? ' class="on"' : '') + '>' + v[1] + '</button>';
+              }).join('') +
+              '<input type="time" id="setNotifyTime" value="' + escapeHtml(notify.time) + '">' +
+            '</div>' +
+            '<div class="set-note">One notification a day for whatever is still outstanding -- not one per job. Android only: there is nothing to post it on the web or iOS, the same as the home-screen widgets.</div>' +
+            (hasAndroidNotify ?
+              '<button class="btn btn-ghost" data-set="testnotify" style="margin-top:10px;">Send test notification</button>' : '') +
+            (hasAndroidNotify && !batteryOK ?
+              '<div class="set-note" style="margin-top:10px;">Battery optimization on this phone can stop the reminder ' +
+              'from firing reliably in the background.<br>' +
+              '<button class="btn btn-ghost" data-set="battery" style="margin-top:6px;">Allow it to run in the background</button></div>'
+              : '') +
           '</div>' +
           '<div class="set-group">' +
             '<h4>Version</h4>' +
@@ -10115,12 +10339,36 @@
     bg.addEventListener('click', function(e){
       if(e.target === bg || e.target.closest('[data-set="close"]')){ bg.remove(); return; }
       var t = e.target.closest('[data-theme-set]');
-      if(!t) return;
-      lsSet(THEME_KEY, t.dataset.themeSet);
-      applyTheme();
-      bg.querySelectorAll('[data-theme-set]').forEach(function(b){
-        b.classList.toggle('on', b === t);
-      });
+      if(t){
+        lsSet(THEME_KEY, t.dataset.themeSet);
+        applyTheme();
+        bg.querySelectorAll('[data-theme-set]').forEach(function(b){
+          b.classList.toggle('on', b === t);
+        });
+        return;
+      }
+      var n = e.target.closest('[data-notify-set]');
+      if(n){
+        var cur = getNotifySettings();
+        setNotifySettings({ enabled: n.dataset.notifySet === 'on', time: cur.time });
+        bg.querySelectorAll('[data-notify-set]').forEach(function(b){
+          b.classList.toggle('on', b === n);
+        });
+        return;
+      }
+      if(e.target.closest('[data-set="testnotify"]')){
+        try{ AndroidBridge.sendTestNotification(); }catch(e2){}
+        return;
+      }
+      if(e.target.closest('[data-set="battery"]')){
+        try{ AndroidBridge.requestIgnoreBatteryOptimizations(); }catch(e2){}
+        return;
+      }
+    });
+    bg.querySelector('#setNotifyTime').addEventListener('change', function(e){
+      var cur = getNotifySettings();
+      if(!e.target.value){ e.target.value = cur.time; return; }
+      setNotifySettings({ enabled: cur.enabled, time: e.target.value });
     });
   }
 
@@ -10385,6 +10633,10 @@
 
   document.getElementById('filterStatus').addEventListener('change', render);
   document.getElementById('filterPriority').addEventListener('change', render);
+  document.getElementById('jobSearch').addEventListener('input', function(e){
+    jobFilter = e.target.value;
+    render();
+  });
 
   // Day/Week/Month live on their own tab now, away from Add Job and Port
   // Call, so there is no longer anything to put away when picking one.
@@ -10418,6 +10670,7 @@
     if(mq.addEventListener) mq.addEventListener('change', applyTheme);
   } catch(e){}
   document.getElementById('exportBtn').addEventListener('click', exportCSV);
+  document.getElementById('exportIcsBtn').addEventListener('click', exportICS);
   document.getElementById('blankCsvBtn').addEventListener('click', exportBlankCSV);
   document.getElementById('exportAd19Btn').addEventListener('click', exportAd19CSV);
   document.getElementById('exportWrBtn').addEventListener('click', exportWrCSV);
@@ -10490,11 +10743,16 @@
     window.scrollTo({top:0, behavior:'smooth'});
   });
   document.getElementById('clearDoneBtn').addEventListener('click', function(){
-    if(!tasks.some(function(t){return t.done;})){ return; }
-    if(!confirm('Remove all completed jobs from the list? This cannot be undone.')) return;
+    var removed = tasks.filter(function(t){ return t.done; });
+    if(!removed.length) return;
     tasks = tasks.filter(function(t){ return !t.done; });
-    saveTasks();
+    if(!saveTasks()){ render(); return; }
     render();
+    showUndoToast(removed.length + (removed.length===1 ? ' job' : ' jobs') + ' cleared.', function(){
+      tasks = tasks.concat(removed);
+      saveTasks();
+      render();
+    });
   });
 
   // Port call is filled in occasionally, not every visit -- collapsed by
@@ -11134,9 +11392,16 @@
       return;
     }
     if(act === 'del-proc'){
-      if(!confirm('Delete this procedure and all its steps?')) return;
+      var removedProc = x.procedures.filter(function(v){ return v.id === btn.dataset.proc; })[0];
+      if(!removedProc) return;
       x.procedures = x.procedures.filter(function(v){ return v.id !== btn.dataset.proc; });
-      saveInstruments(); renderInstrDetail();
+      if(!saveInstruments()){ renderInstrDetail(); return; }
+      renderInstrDetail();
+      showUndoToast('Procedure deleted.', function(){
+        x.procedures.push(removedProc);
+        saveInstruments();
+        renderInstrDetail();
+      });
       return;
     }
     if(act === 'add-step'){
@@ -11176,9 +11441,16 @@
       return;
     }
     if(act === 'del-part'){
-      if(!confirm('Remove this spare from the list?')) return;
+      var removedPart = x.parts.filter(function(v){ return v.id === btn.dataset.id; })[0];
+      if(!removedPart) return;
       x.parts = x.parts.filter(function(v){ return v.id !== btn.dataset.id; });
-      saveInstruments(); renderInstrDetail();
+      if(!saveInstruments()){ renderInstrDetail(); return; }
+      renderInstrDetail();
+      showUndoToast('Spare removed.', function(){
+        x.parts.push(removedPart);
+        saveInstruments();
+        renderInstrDetail();
+      });
       return;
     }
   });
