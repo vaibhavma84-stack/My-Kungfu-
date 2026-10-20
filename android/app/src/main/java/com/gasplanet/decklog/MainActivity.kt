@@ -376,6 +376,22 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun sendTestNotification() = runOnUiThread { NotificationHelper.sendTest(applicationContext) }
+
+        /** This app has no INTERNET permission of its own (see
+            AndroidManifest.xml) -- "everything runs from local assets" is
+            enforced at the OS level, not just by convention. Settings'
+            "Download latest version" and World Map's link-out both need a
+            connection, so both hand off to whatever browser the phone
+            already has one for, the same way a plain window.open() would
+            in an ordinary browser tab. */
+        @JavascriptInterface
+        fun openExternalUrl(url: String) = runOnUiThread {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            } catch (e: Exception) {
+                toast("Could not open a browser for that link.")
+            }
+        }
     }
 
     companion object {

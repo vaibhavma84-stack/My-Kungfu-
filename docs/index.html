@@ -759,6 +759,14 @@
   .bd-row .bd-when{font-variant-numeric:tabular-nums; opacity:.75; font-size:12px; min-width:56px;}
   .bd-row .bd-name{font-weight:600;}
   .bd-row .spacer{flex:1;}
+  .gf-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+          padding:9px 0; border-top:1px solid var(--line);}
+  .gf-row .gf-num{font-weight:700; font-family:ui-monospace,monospace; font-size:12px;
+                   min-width:58px; color:var(--ink-soft);}
+  .gf-row .gf-main{flex:1; min-width:140px;}
+  .gf-row .gf-title{font-weight:600;}
+  .gf-row .gf-date{font-size:11.5px; color:var(--ink-soft);}
+  .gf-row .gf-actions{display:flex; gap:6px;}
   .map-search{display:flex; gap:8px; align-items:center; padding:4px 0 8px;}
   .map-search input{flex:1; min-width:0;}
   .map-wrap{position:relative; border:1px solid var(--line); border-radius:10px; overflow:hidden;
@@ -2043,6 +2051,22 @@
     <div class="conv-hint">Tap a line to copy it. The selected speed is highlighted.</div>
   </div>
 
+  <div id="toolForms" style="display:none;">
+    <div class="tool-head">
+      <button class="btn btn-ghost" id="formsBackBtn">&lsaquo; Tools</button>
+      <div class="tool-title">GAS Forms</div>
+    </div>
+    <div class="ship-note">
+      ISGOTT and cargo-ops checklists and letters, kept as Excel files --
+      download one to fill and print. Replace swaps in a newer version when
+      the office issues one, without touching the others.
+    </div>
+    <div id="gasFormsListWrap"></div>
+    <input type="file" id="gasFormReplaceInput"
+           accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+           style="display:none">
+  </div>
+
   <div id="toolGuide" style="display:none;">
     <div class="tool-head">
       <button class="btn btn-ghost" id="guideBackBtn">&lsaquo; Tools</button>
@@ -2208,6 +2232,18 @@
 <div id="reportView"></div>
 
 <footer><span id="buildStamp"></span>TO DO LIST · NOTES · CREW LIST · CARGO LOG · DATA STORED LOCALLY ON THIS DEVICE ONLY</footer>
+
+<!-- GAS forms (ISGOTT / cargo-ops checklists and letters), vendored the same way
+     as pdf.js below: held as inert text, decoded only when a form is actually
+     downloaded or seeded into the file store on first run. GAS_FORMS_SEED (in the
+     main script) is the catalog -- number, title, date -- that points at these by id.
+     GAS-02 and GAS-05 arrived as Word documents and were converted to .xlsx, since
+     every other one already was and the ask was to keep them all as Excel. -->
+
+<!-- GAS forms, second batch (GAS-04, GAS-19..24, GAS-29..34) -- same
+     vendoring as the first batch above. GAS-04, GAS-29, GAS-32 and GAS-34
+     arrived as Word documents (.docx/.doc) and were converted to .xlsx,
+     since every other one already was. -->
 
 <!-- pdf.js 3.11.174, Mozilla, Apache License 2.0 -- https://mozilla.github.io/pdf.js/
      Vendored, not linked: this app has to open a PDF with the ship out of
@@ -3256,6 +3292,7 @@
     if(!fileDB) return;
     var used = {};
     notes.forEach(function(n){ if(isFileRef(n.pdf)) used[n.pdf] = 1; });
+    gasForms.forEach(function(g){ if(isFileRef(g.fileRef)) used[g.fileRef] = 1; });
     archiveIndex.forEach(function(a){
       (a.files || []).forEach(function(v){ used[v] = 1; });
     });
@@ -3276,6 +3313,165 @@
     var out = [];
     notes.forEach(function(n){ if(isFileRef(n.pdf)) out.push(n.pdf); });
     return out;
+  }
+
+  // ---------- GAS forms ----------
+  // The ISGOTT and cargo-ops checklists/letters a GAS carrier runs on. Stored
+  // like a PDF note's file -- bytes in the file DB, referenced by "f:" id --
+  // except the catalog entry (number, title, date) lives in its own key, not
+  // mixed into notes, since these are not notes and nothing about them
+  // changes with what is written or marked on a note.
+  //
+  // GAS_FORMS_SEED points at the vendored copies at the foot of the page --
+  // the same technique as pdf.js, decoded only once, the first time the app
+  // runs, into the real file store. From then on this device's own copy
+  // (seeded or Replaced) is what is used; the vendored text is never read
+  // again.
+  var GASFORMS_KEY = 'gasplanet_gasforms_v1';
+  var gasForms = [];
+  var GAS_FORMS_SEED = [
+    { number:'GAS-01', title:'Ship/Shore Safety Checklist (ISGOTT)', date:'30-Jan-2026', elementId:'gf01',  filename:'GAS-01 Ship-Shore Safety Checklist.xlsx' },
+    { number:'GAS-02', title:'Pre-Operations / Arrival Checks - Cargo', date:'30-Jan-2026', elementId:'gf02',  filename:'GAS-02 Pre-Operations-Arrival Checks - Cargo.xlsx' },
+    { number:'GAS-03', title:'Ship To Ship Transfer Checklist', date:'01-Mar-2025', elementId:'gf03',  filename:'GAS-03 Ship To Ship Transfer Checklist.xlsx' },
+    { number:'GAS-04', title:'Familiarization With Cargo Equipment And Procedures', date:'30-Jan-2026', elementId:'gf04', filename:'GAS-04 Familiarization With Cargo Equipment And Procedures.xlsx' },
+    { number:'GAS-05', title:'Post Cargo Operation Checks', date:'01-Mar-2025', elementId:'gf05',  filename:'GAS-05 Post Cargo Operation Checks.xlsx' },
+    { number:'GAS-06', title:'Notice Of Readiness', date:'01-Mar-2025', elementId:'gf06',  filename:'GAS-06 Notice Of Readiness.xls' },
+    { number:'GAS-07', title:'Cargo Handling Plan', date:'01-Mar-2025', elementId:'gf07',  filename:'GAS-07 Cargo Handling Plan.xls' },
+    { number:'GAS-08', title:'Tank Cleaning Record', date:'01-Mar-2025', elementId:'gf08',  filename:'GAS-08 Tank Cleaning Record.xls' },
+    { number:'GAS-09', title:'Purging Info', date:'01-Mar-2025', elementId:'gf09',  filename:'GAS-09 Purging Info.xls' },
+    { number:'GAS-10', title:'Cargo Manifest', date:'01-Mar-2025', elementId:'gf10',  filename:'GAS-10 Cargo Manifest.xls' },
+    { number:'GAS-11', title:'Cargo Receipt', date:'01-Mar-2025', elementId:'gf11',  filename:'GAS-11 Cargo Receipt.xls' },
+    { number:'GAS-12', title:'Off Hire Statement', date:'01-Mar-2025', elementId:'gf12',  filename:'GAS-12 Off Hire Statement.xls' },
+    { number:'GAS-13', title:'Certificate Of Delivery', date:'01-Mar-2025', elementId:'gf13',  filename:'GAS-13 Certificate Of Delivery.xls' },
+    { number:'GAS-15A', title:'Letter Of Protest - General', date:'01-Mar-2025', elementId:'gf15a', filename:'GAS-15A Letter Of Protest - General.xlsx' },
+    { number:'GAS-15B', title:'Letter Of Protest - Quantity', date:'01-Mar-2025', elementId:'gf15b', filename:'GAS-15B Letter Of Protest - Quantity.xlsx' },
+    { number:'GAS-15C', title:'Letter Of Protest - Slow Loading Rate', date:'01-Mar-2025', elementId:'gf15c', filename:'GAS-15C Letter Of Protest - Slow Loading Rate.xlsx' },
+    { number:'GAS-15D', title:'Letter Of Protest - Loading Temperature', date:'01-Mar-2025', elementId:'gf15d', filename:'GAS-15D Letter Of Protest - Loading Temperature.xlsx' },
+    { number:'GAS-15E', title:'Letter Of Protest - Discharging', date:'01-Mar-2025', elementId:'gf15e', filename:'GAS-15E Letter Of Protest - Discharging.xlsx' },
+    { number:'GAS-16', title:'Letter Of Undertaking For Shore Vapour Return', date:'01-Mar-2025', elementId:'gf16',  filename:'GAS-16 Letter Of Undertaking For Shore Vapour Return.xlsx' },
+    { number:'GAS-17', title:'Deadfreight Statement', date:'01-Mar-2025', elementId:'gf17',  filename:'GAS-17 Deadfreight Statement.xlsx' },
+    { number:'GAS-18', title:'Daily Cargo Log', date:'01-Mar-2025', elementId:'gf18',  filename:'GAS-18 Daily Cargo Log.xlsx' },
+    { number:'GAS-19', title:'Cargo Loading Log', date:'01-Mar-2025', elementId:'gf19', filename:'GAS-19 Cargo Loading Log.xlsx' },
+    { number:'GAS-20', title:'Cargo Discharging Record', date:'01-Mar-2025', elementId:'gf20', filename:'GAS-20 Cargo Discharging Record.xlsx' },
+    { number:'GAS-21', title:'Booster Heater Log', date:'01-Mar-2025', elementId:'gf21', filename:'GAS-21 Booster Heater Log.xlsx' },
+    { number:'GAS-22', title:'Statement Of Facts', date:'01-Mar-2025', elementId:'gf22', filename:'GAS-22 Statement Of Facts.xlsx' },
+    { number:'GAS-23', title:'Flexible Cargo Hose Tests', date:'01-Mar-2025', elementId:'gf23', filename:'GAS-23 Flexible Cargo Hose Tests.xlsx' },
+    { number:'GAS-24', title:'Cargo And Ballast Valve Verification', date:'01-Mar-2025', elementId:'gf24', filename:'GAS-24 Cargo And Ballast Valve Verification.xlsx' },
+    { number:'GAS-29', title:'IGS Condition Checklist', date:'30-Jan-2026', elementId:'gf29', filename:'GAS-29 IGS Condition Checklist.xlsx' },
+    { number:'GAS-30', title:'Notice For Vapour Pushing', date:'01-Mar-2025', elementId:'gf30', filename:'GAS-30 Notice For Vapour Pushing.xlsx' },
+    { number:'GAS-31', title:'Cargo Plant Log', date:'01-Mar-2025', elementId:'gf31', filename:'GAS-31 Cargo Plant Log.xlsx' },
+    { number:'GAS-32', title:'Taking Over Deck Watch In Port', date:'01-Mar-2025', elementId:'gf32', filename:'GAS-32 Taking Over Deck Watch In Port.xlsx' },
+    { number:'GAS-33', title:'Details Of Portable Test Equipment For Deck Use', date:'01-Mar-2025', elementId:'gf33', filename:'GAS-33 Details Of Portable Test Equipment For Deck Use.xlsx' },
+    { number:'GAS-34', title:'Master’s Verification Of Records - Gas Carrier', date:'01-Mar-2025', elementId:'gf34', filename:'GAS-34 Masters Verification Of Records - Gas Carrier.xlsx' }
+  ];
+
+  function isXls(name){ return /\.xls$/i.test(name); }
+  function xlMime(name){
+    return isXls(name) ? 'application/vnd.ms-excel'
+                        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+  function base64ToBytes(b64){
+    var bin = atob(b64);
+    var out = new Uint8Array(bin.length);
+    for(var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function loadGasForms(){
+    try{
+      var raw = localStorage.getItem(GASFORMS_KEY);
+      gasForms = raw ? JSON.parse(raw) : [];
+      lastGood[GASFORMS_KEY] = JSON.stringify(gasForms);
+    }catch(e){ gasForms = []; }
+  }
+  function saveGasForms(){
+    return persist(GASFORMS_KEY, gasForms, 'GAS Forms', function(prev){ gasForms = prev; });
+  }
+
+  // Runs once: a fresh install (or one updated from before this feature
+  // existed) has no catalog yet, so every vendored form is decoded into the
+  // real file store and recorded. After that this device's own copies are
+  // authoritative -- re-running this would just overwrite a Replace with the
+  // vendored original, so it never runs again once the catalog is non-empty.
+  function ensureGasFormsSeeded(cb){
+    if(gasForms.length || !fileDB){ cb(); return; }
+    var left = GAS_FORMS_SEED.length;
+    var built = [];
+    GAS_FORMS_SEED.forEach(function(seed){
+      var el = document.getElementById(seed.elementId);
+      var bytes = el ? base64ToBytes(el.textContent) : new Uint8Array(0);
+      filePut(seed.filename, xlMime(seed.filename), bytes.buffer, function(ref){
+        built.push({ id: uid(), number: seed.number, title: seed.title,
+                     date: seed.date, filename: seed.filename, fileRef: ref });
+        if(--left === 0){
+          // GAS-01..GAS-18 order, not whatever order the async puts settled in
+          var order = {}; GAS_FORMS_SEED.forEach(function(s, i){ order[s.filename] = i; });
+          built.sort(function(a, b){ return order[a.filename] - order[b.filename]; });
+          gasForms = built;
+          saveGasForms();
+          cb();
+        }
+      });
+    });
+  }
+
+  function renderGasForms(){
+    var wrap = document.getElementById('gasFormsListWrap');
+    if(!wrap) return;
+    if(!fileDB){
+      wrap.innerHTML = '<div class="empty">This browser has no file storage, so forms cannot be kept here.</div>';
+      return;
+    }
+    ensureGasFormsSeeded(function(){
+      wrap.innerHTML = gasForms.map(function(g){
+        return '<div class="gf-row" data-id="' + g.id + '">' +
+                 '<span class="gf-num">' + escapeHtml(g.number) + '</span>' +
+                 '<div class="gf-main">' +
+                   '<div class="gf-title">' + escapeHtml(g.title) + '</div>' +
+                   '<div class="gf-date">Updated ' + escapeHtml(g.date) + '</div>' +
+                 '</div>' +
+                 '<div class="gf-actions">' +
+                   '<button class="btn btn-ghost" data-gf-action="download">Download</button>' +
+                   '<button class="btn btn-ghost" data-gf-action="replace">Replace</button>' +
+                 '</div>' +
+               '</div>';
+      }).join('');
+    });
+  }
+
+  function downloadGasForm(id){
+    var g = gasForms.find(function(x){ return x.id === id; });
+    if(!g) return;
+    fileGet(g.fileRef, function(rec){
+      if(!rec){ alert('Could not read this file -- it may need to be Replaced.'); return; }
+      downloadBlob(g.filename, new Blob([rec.buf], { type: rec.type || xlMime(g.filename) }));
+    });
+  }
+
+  var gasFormReplaceTargetId = null;
+  function startReplaceGasForm(id){
+    gasFormReplaceTargetId = id;
+    document.getElementById('gasFormReplaceInput').click();
+  }
+  function finishReplaceGasForm(file){
+    var g = gasForms.find(function(x){ return x.id === gasFormReplaceTargetId; });
+    gasFormReplaceTargetId = null;
+    if(!g || !file) return;
+    var reader = new FileReader();
+    reader.onload = function(e){
+      filePut(file.name, file.type || xlMime(file.name), e.target.result, function(ref){
+        if(!ref){ alert('Could not store that file.'); return; }
+        var date = prompt('Version / update date for ' + g.number +
+                           ' (as shown in the new file’s own footer):', g.date);
+        if(date === null) return;          // the old file stays in place
+        g.fileRef = ref;
+        g.filename = file.name;
+        if(date.trim()) g.date = date.trim();
+        if(!saveGasForms()) return;
+        renderGasForms();
+      });
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   // ---------- the list ----------
@@ -5803,6 +5999,21 @@
   function dataUrlExt(url){
     var m = /^data:image\/(\w+)/.exec(url || '');
     return m ? (m[1] === 'jpeg' ? 'jpg' : m[1]) : 'bin';
+  }
+
+  // The Android app has no INTERNET permission of its own -- "everything runs
+  // from local assets" (AndroidManifest.xml) is an OS-level fact there, not
+  // just a convention -- so a plain window.open()/location.href to an https
+  // link does nothing inside it: no window-opening is wired up, and the
+  // WebView could not fetch it even if it tried. Anywhere a link needs a
+  // connection (the World Map tile, Settings' "Download latest version"),
+  // this hands off to AndroidBridge.openExternalUrl, which starts the
+  // device's own browser instead -- that app has its own INTERNET permission
+  // and does the actual fetching. On the web or iOS, where window.open works
+  // normally in an ordinary tab, that is exactly what this falls back to.
+  function openExternal(url){
+    if(window.AndroidBridge && AndroidBridge.openExternalUrl) AndroidBridge.openExternalUrl(url);
+    else window.open(url, '_blank');
   }
 
   function downloadBlob(filename, blob){
@@ -8915,7 +9126,8 @@
 
   var TOOL_TITLES = { convert:'Converter', guide:'Information', eta:'ETA',
                       instr:'Instruments', moll:'Mollier', map:'World map',
-                      calc:'Calculator', formulas:'Formulas', stars:'Stars' };
+                      calc:'Calculator', formulas:'Formulas', stars:'Stars',
+                      forms:'GAS Forms' };
 
   function showTool(name){
     document.getElementById('toolsHome').style.display   = name ? 'none' : '';
@@ -8928,6 +9140,7 @@
     document.getElementById('toolCalc').style.display    = name === 'calc' ? '' : 'none';
     document.getElementById('toolFormulas').style.display= name === 'formulas' ? '' : 'none';
     document.getElementById('toolStars').style.display   = name === 'stars' ? '' : 'none';
+    document.getElementById('toolForms').style.display   = name === 'forms' ? '' : 'none';
     document.getElementById('pageTitle').textContent = TOOL_TITLES[name] || 'Tools';
     if(name === 'guide') renderGuide();
     if(name === 'eta')   renderEta();
@@ -8936,6 +9149,7 @@
     if(name === 'calc')  renderCalc();
     if(name === 'formulas'){ renderFormulaCats(); renderFormulas(); }
     if(name === 'stars') renderStars();
+    if(name === 'forms') renderGasForms();
     if(name === 'map')   renderMap();
     else if(mapWatch !== null){          // do not hold the GPS open off-screen
       navigator.geolocation.clearWatch(mapWatch); mapWatch = null;
@@ -10219,7 +10433,11 @@
   // Theme is applied to <html> as data-theme. "Auto" stores nothing and follows
   // whatever the phone is set to, re-evaluated whenever the system flips.
   var THEME_KEY = 'gasplanet_theme';
-  var APP_BUILD = 'v61';
+  var APP_BUILD = 'v62';
+  // Both read from Settings (the "Download latest version" button) and from
+  // the World Map tile, so defined once here rather than at each call site.
+  var UPDATE_APK_URL = 'https://github.com/vaibhavma84-stack/My-Kungfu-/releases/latest/download/DeckLog.apk';
+  var WORLD_MAP_URL = 'https://vaibhavma84-stack.github.io/World-Map.-/';
 
   // The daily "jobs due today" reminder is posted by the Android wrapper, not
   // this page -- there is no equivalent on the web or iOS, the same way the
@@ -10299,6 +10517,10 @@
           '<div class="set-group">' +
             '<h4>Version</h4>' +
             '<div class="set-note">Build ' + APP_BUILD + '</div>' +
+            (hasAndroidNotify ?
+              '<button class="btn btn-ghost" data-set="update" style="margin-top:10px;">Download latest version</button>' +
+              '<div class="set-note" style="margin-top:6px;">Opens a browser to the newest release. Once it downloads, open it to install over this one -- every build installs straight over the old one, nothing is lost.</div>'
+              : '') +
           '</div>' +
           '<div class="set-group">' +
             '<h4>This device</h4>' +
@@ -10362,6 +10584,10 @@
       }
       if(e.target.closest('[data-set="battery"]')){
         try{ AndroidBridge.requestIgnoreBatteryOptimizations(); }catch(e2){}
+        return;
+      }
+      if(e.target.closest('[data-set="update"]')){
+        openExternal(UPDATE_APK_URL);
         return;
       }
     });
@@ -10865,6 +11091,7 @@
   loadShip();
   loadExtras();
   loadNotes();
+  loadGasForms();
   setDateLine();
   updateStoragePill();
   render();
@@ -11019,9 +11246,22 @@
     if(del) deleteExtra(del.dataset.id);
   });
 
+  // World Map now points outward: a separate, far more detailed offline
+  // chart app (12,700+ ports, live weather/tides/TSS) lives at WORLD_MAP_URL,
+  // built and released on its own. The coastline/places renderer below is
+  // left in place rather than torn out -- MAP_DATA.places still feeds
+  // fillPortDatalist()'s port fields regardless of whether this tile is ever
+  // opened, and build-site.py's own map-only build (data-app="map") still
+  // synthetically clicks this very tile to open straight onto its in-app
+  // chart, which must keep working exactly as before -- only a real tap in
+  // the full app redirects.
   document.querySelector('#toolsHome .tool-grid').addEventListener('click', function(e){
     var tile = e.target.closest('[data-tool]');
-    if(tile) showTool(tile.dataset.tool);
+    if(!tile) return;
+    if(tile.dataset.tool === 'map' && document.body.dataset.app !== 'map'){
+      openExternal(WORLD_MAP_URL); return;
+    }
+    showTool(tile.dataset.tool);
   });
   document.getElementById('toolBackBtn').addEventListener('click', function(){ showTool(null); });
   document.getElementById('calcBackBtn').addEventListener('click', function(){ showTool(null); });
@@ -11466,6 +11706,20 @@
     if(!copyText(row.dataset.copy)) return;
     row.classList.add('copied');
     setTimeout(function(){ row.classList.remove('copied'); }, 700);
+  });
+  document.getElementById('formsBackBtn').addEventListener('click', function(){ showTool(null); });
+  document.getElementById('gasFormsListWrap').addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-gf-action]');
+    if(!btn) return;
+    var row = btn.closest('.gf-row');
+    if(!row) return;
+    if(btn.dataset.gfAction === 'download') downloadGasForm(row.dataset.id);
+    else if(btn.dataset.gfAction === 'replace') startReplaceGasForm(row.dataset.id);
+  });
+  document.getElementById('gasFormReplaceInput').addEventListener('change', function(e){
+    var file = e.target.files[0];
+    e.target.value = '';
+    if(file) finishReplaceGasForm(file);
   });
   document.getElementById('guideCats').addEventListener('click', function(e){
     var btn = e.target.closest('button[data-gcat]');
