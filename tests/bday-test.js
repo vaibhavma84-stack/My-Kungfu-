@@ -53,7 +53,10 @@ function ok(name, cond, got){
     localStorage.setItem('gasplanet_crew_v1', '[]');
     location.reload();
   });
-  await p.waitForTimeout(700);
+  // a fixed wait here raced the page's own load time, which grows with every
+  // vendored form GAS Forms adds -- wait for the reload to actually finish
+  // instead of guessing how long that takes.
+  await p.waitForFunction(() => typeof window.__bdaysOn === 'function', null, { timeout: 15000 });
   ok('the crew list is empty', (await crew()).length === 0);
   r = await reg();
   ok('but the birthday is still in the register', r.length === 1, JSON.stringify(r));
@@ -173,7 +176,7 @@ function ok(name, cond, got){
 
   // --- and it all survives a restart ---------------------------------------
   await p.reload();
-  await p.waitForTimeout(700);
+  await p.waitForFunction(() => typeof window.__bdaysOn === 'function', null, { timeout: 15000 });
   ok('the register survives a restart', (await reg()).length === 3);
   ok('and is still on the calendar',
      (await onDay('2026-08-12')).indexOf('Capt. Karan Vir Bhatia (Gas Planet)') >= 0,
