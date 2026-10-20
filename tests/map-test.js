@@ -14,6 +14,13 @@ function ok(name, cond, got){
   const ctx = await b.newContext({ viewport:{width:900,height:1000} });
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
+  // window.open's target is checked directly rather than by letting a popup
+  // actually navigate there -- this sandbox has no general internet access,
+  // the same limit hit earlier fetching anything at *.github.io.
+  await p.addInitScript(() => {
+    window.__openedUrls = [];
+    window.open = (url) => { window.__openedUrls.push(url); return null; };
+  });
   await p.goto('file://' + process.env.APP_HTML);
   await p.waitForTimeout(600);
 
@@ -22,6 +29,23 @@ function ok(name, cond, got){
   ok('ten live tools on the launcher',
      await p.locator('.tool-tile[data-tool]').count() === 10,
      await p.locator('.tool-tile[data-tool]').count());
+
+  // --- in the real app, the tile now points outward -------------------------
+  // World-Map.-, a separate and far more detailed offline chart app, is built
+  // and released on its own; this tile is the Deck Log's only link to it.
+  await p.click('[data-tool="map"]');
+  const opened = await p.evaluate(() => window.__openedUrls);
+  ok('tapping it opens the separate, more detailed World Map app',
+     opened.length === 1 && opened[0] === 'https://vaibhavma84-stack.github.io/World-Map.-/', opened);
+  ok('and does not open the in-app chart any more', !(await p.locator('#toolMap').isVisible()));
+
+  // --- but build-site.py's own map-only build still depends on this exact
+  // tile to open straight onto the in-app chart (a synthetic click on page
+  // load, see MAP_ONLY_JS) -- that path, marked by data-app="map" on <body>,
+  // must keep working exactly as it did, since site/map/ is built from this
+  // same source and still ships that in-app renderer. Everything below drives
+  // it the same way that build does, to prove this change left it alone.
+  await p.evaluate(() => { document.body.dataset.app = 'map'; });
   await p.click('[data-tool="map"]');
   await p.waitForTimeout(900);
   ok('it opens', await p.locator('#toolMap').isVisible());
@@ -239,6 +263,9 @@ function ok(name, cond, got){
   await p.waitForTimeout(300);
   await p.reload();
   await p.waitForTimeout(700);
+  // a reload starts from the raw page again, so the map-only build's marker
+  // has to be set again too, the same as build-site.py bakes it in for real
+  await p.evaluate(() => { document.body.dataset.app = 'map'; });
   await p.click('#topTabs button[data-tab="tools"]');
   await p.click('[data-tool="map"]');
   await p.waitForTimeout(600);
